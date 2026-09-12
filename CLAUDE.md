@@ -1,10 +1,19 @@
 # ollama-mcp-server
 
-MCP server exposing one tool, `run_ollama_task`, that sends a prompt to a
-local Ollama model and returns the text. Single file: src/index.ts. No build
-step — `npm start` runs it via tsx over stdio. See [README.md](README.md) for
-the full picture, known gaps, and what's missing to make delegation reliable
-(model mismatch, no cloud routing, no timeout, no model discovery).
+MCP server exposing tools (`run_ollama_task`, `list_ollama_models`) that talk
+to a local Ollama instance. No build step — `npm start` runs it via tsx over
+stdio.
+
+- `src/index.ts` — wiring only: creates the server, registers tools. Keep it
+  lean as more tools are added.
+- `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`)
+  and host/timeout config.
+- `src/tools/*.ts` — one file per MCP tool.
+- `docs/cloud-strategy.md` — plan for Ollama cloud model routing.
+
+See [README.md](README.md) for the full picture, known gaps, and what's
+missing to make delegation reliable (model mismatch, no cloud routing, no
+model discovery).
 
 ## Why this project exists
 
