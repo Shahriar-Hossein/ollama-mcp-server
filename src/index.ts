@@ -3,6 +3,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import axios from "axios";
 import { z } from "zod";
 
+const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
+const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_000;
+
 // Initialize the MCP Server
 const server = new McpServer({
   name: "ollama-subagent-bridge",
@@ -16,17 +19,20 @@ server.tool(
   {
     prompt: z.string().describe("The specific task or prompt to send to the Ollama model."),
     system_prompt: z.string().optional().describe("Optional instructions framing the model's role."),
-    model: z.string().default("qwen2.5-coder:latest").describe("The Ollama model tag to invoke."),
+    model: z.string().default("qwen2.5-coder:3b").describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
   },
   async ({ prompt, system_prompt, model }) => {
     try {
-      // Call Ollama local API endpoint
-      const response = await axios.post("http://localhost:11434/api/generate", {
-        model: model,
-        prompt: prompt,
-        system: system_prompt || "You are a specialized sub-agent assistant.",
-        stream: false, // Wait for full output before returning to Claude
-      });
+      const response = await axios.post(
+        `${OLLAMA_HOST}/api/generate`,
+        {
+          model: model,
+          prompt: prompt,
+          system: system_prompt || "You are a specialized sub-agent assistant.",
+          stream: false, // Wait for full output before returning to Claude
+        },
+        { timeout: REQUEST_TIMEOUT_MS }
+      );
 
       return {
         content: [
@@ -37,12 +43,37 @@ server.tool(
         ],
       };
     } catch (error: any) {
+      const message =
+        error.code === "ECONNABORTED"
+          ? `Ollama request timed out after ${REQUEST_TIMEOUT_MS}ms (model: ${model}).`
+          : `Failed to reach Ollama at ${OLLAMA_HOST}: ${error.message}. Make sure 'ollama serve' is running.`;
+      return {
+        isError: true,
+        content: [{ type: "text", text: message }],
+      };
+    }
+  }
+);
+
+// Lets Claude check what's actually pulled before picking a model to delegate to
+server.tool(
+  "list_ollama_models",
+  "Lists Ollama models currently available (pulled locally, or signed-in cloud models) so a suitable one can be picked for run_ollama_task.",
+  {},
+  async () => {
+    try {
+      const response = await axios.get(`${OLLAMA_HOST}/api/tags`, { timeout: REQUEST_TIMEOUT_MS });
+      const models = (response.data.models || []).map((m: any) => m.name);
+      return {
+        content: [{ type: "text", text: models.length ? models.join("\n") : "No models found." }],
+      };
+    } catch (error: any) {
       return {
         isError: true,
         content: [
           {
             type: "text",
-            text: `Failed to reach Ollama: ${error.message}. Make sure 'ollama serve' is running.`,
+            text: `Failed to list Ollama models at ${OLLAMA_HOST}: ${error.message}. Make sure 'ollama serve' is running.`,
           },
         ],
       };
