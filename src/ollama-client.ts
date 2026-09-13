@@ -6,7 +6,7 @@ export const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_0
 export async function generate(model: string, prompt: string, system: string) {
   const response = await axios.post(
     `${OLLAMA_HOST}/api/generate`,
-    { model, prompt, system, stream: false },
+    { model, prompt, system, stream: false, think: false },
     { timeout: REQUEST_TIMEOUT_MS }
   );
   return response.data.response as string;
