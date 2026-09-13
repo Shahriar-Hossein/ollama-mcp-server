@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerRunOllamaTask } from "./tools/run-ollama-task.js";
 import { registerListOllamaModels } from "./tools/list-ollama-models.js";
+import { registerSummarizeOutput } from "./tools/summarize-output.js";
 
 const server = new McpServer({
   name: "ollama-subagent-bridge",
@@ -10,6 +11,7 @@ const server = new McpServer({
 
 registerRunOllamaTask(server);
 registerListOllamaModels(server);
+registerSummarizeOutput(server);
 
 async function run() {
   const transport = new StdioServerTransport();
