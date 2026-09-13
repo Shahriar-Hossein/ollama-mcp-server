@@ -8,17 +8,39 @@ spent only on the work that actually needs Claude-level reasoning.
 
 ## What it does today
 
-- Single file: [src/index.ts](src/index.ts).
-- Exposes one MCP tool, `run_ollama_task`, which:
-  - Takes `prompt`, an optional `system_prompt`, and `model` (default
-    `qwen2.5-coder:latest`).
-  - POSTs to `http://localhost:11434/api/generate` (non-streaming) and returns
-    the full response text to Claude.
-- Runs via `npm start` → `tsx src/index.ts`, communicating over stdio (the
-  standard way Claude Code talks to local MCP servers).
+Runs via `npm start` → `tsx src/index.ts`, communicating over stdio (the
+standard way Claude Code and other clients talk to local MCP servers). No
+build step, no config file.
 
-That's it — no build step, no config file, no model listing, no cloud routing
-logic yet. It's a minimal working bridge, not a finished tool.
+**Always on:**
+- `run_ollama_task` — one-shot prompt/system_prompt to a local (or, later,
+  cloud) Ollama model via `/api/generate`.
+- `summarize_output` — condenses large text through a local model so it never
+  enters the caller's own context.
+- `list_ollama_models` — lists what's pulled/signed in, so a caller can pick
+  a model instead of guessing.
+
+**Opt-in (autonomous shell execution — off by default):**
+- `run_local_worker_task` (set `LOCAL_WORKER_ENABLED=1`) — a hand-rolled tool
+  loop against Ollama's `/api/chat` with one `bash` tool, restricted to
+  `git status/diff/log/add/commit/show`. No harness, no confirmation prompts.
+  ~10s for a real commit in testing.
+- `run_cloud_claude_task` (set `CLOUD_CLAUDE_ENABLED=1`) — runs the full
+  `ollama launch claude` binary (real Claude Code harness, no stripped-down
+  flags) against a free **Ollama cloud** model, same allowlist plus
+  Read/Glob/Grep. Local models were tried here first and ruled out — the
+  harness needs a large context window (Ollama recommends >=64k) to carry
+  CLAUDE.md/skills/system-prompt overhead, and this machine's GPU can't give
+  a local model that much context. Cloud models can.
+
+Both opt-in tools accept an optional `cwd` so one running server instance can
+be pointed at whatever repo you're working in, rather than being pinned to
+wherever it was launched from.
+
+See [docs/local-claude-worker-experiment-2026-09-14.md](docs/local-claude-worker-experiment-2026-09-14.md)
+for how these two were benchmarked and why local-worker is the recommended
+default. **Always verify what either one did via `git log`/`git status`** —
+neither should be trusted on its own report.
 
 ## Current state / things worth fixing
 

@@ -1,15 +1,42 @@
 # ollama-mcp-server
 
-MCP server exposing tools (`run_ollama_task`, `list_ollama_models`) that talk
-to a local Ollama instance. No build step — `npm start` runs it via tsx over
-stdio.
+MCP server exposing tools (`run_ollama_task`, `list_ollama_models`,
+`summarize_output`, and two opt-in autonomous tools) that talk to a local
+Ollama instance. No build step — `npm start` runs it via tsx over stdio.
 
 - `src/index.ts` — wiring only: creates the server, registers tools. Keep it
-  lean as more tools are added.
+  lean as more tools are added. `run_local_worker_task`/`run_cloud_claude_task`
+  are only registered when `LOCAL_WORKER_ENABLED=1`/`CLOUD_CLAUDE_ENABLED=1`
+  are set — don't remove that gate, they execute shell commands autonomously.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`)
   and host/timeout config.
+- `src/shell-allowlist.ts` — the command allowlist and system prompts shared
+  by both autonomous tools. Both must stay in sync with this file, not drift
+  into separate allowlists. `parseAllowedGitCommand` tokenizes and rejects
+  shell metacharacters rather than regex-prefix-matching the raw string — a
+  plain `/^git commit(\s|$)/` test still matches `"git commit -m x && rm -rf
+  /"`, which is a real injection hole, not a theoretical one. Callers must
+  exec the returned argv directly (no shell), never re-pass the original
+  command string to something shell-interpreted.
+- `scripts/validate-cloud-bash.cjs` — PreToolUse hook for
+  `run_cloud_claude_task`'s harness subprocess, wired in via `--settings`.
+  `--allowedTools` alone is documented by Claude Code as not a security
+  boundary (it splits `&&`/`;`/`|` but not `bash -c '...'` wrapping or `git -c
+  core.editor=...` flag injection) — this hook re-validates independently.
+  Keep its allowlist in sync with `shell-allowlist.ts` by hand; it's a
+  standalone `.cjs` file (no build step) so it can't import the TS module.
 - `src/tools/*.ts` — one file per MCP tool.
 - `docs/cloud-strategy.md` — plan for Ollama cloud model routing.
+- `docs/local-claude-worker-experiment-2026-09-14.md` — benchmark data behind
+  `run_local_worker_task` and why the full-harness `ollama launch claude`
+  approach moved to cloud models only: it needs a large context window
+  (Ollama recommends >=64k) to carry CLAUDE.md/skills/system-prompt overhead,
+  and local models on this GPU can't provide that much context. Local-model
+  full-harness runs were also 5-7.5min and once hallucinated a commit it
+  never ran; `run_local_worker_task`'s hand-rolled loop stays the fast path
+  (~10s) for mechanical git tasks, and `run_cloud_claude_task` is for
+  anything that benefits from the real harness (Read/Glob/Grep, skills) at
+  cloud-model context sizes.
 
 See [README.md](README.md) for the full picture, known gaps, and what's
 missing to make delegation reliable (model mismatch, no cloud routing, no
@@ -43,6 +70,18 @@ a sub-task is:
   verbose command output into a short summary you then use.
 - **Draft-then-review work**: a first-pass draft (of text, code, or a plan)
   that you'll review and refine afterward — let Ollama produce the draft.
+
+If `run_local_worker_task` or `run_cloud_claude_task` are available (they're
+opt-in — check the tool list, don't assume), they can take a mechanical git
+task (stage + commit, read a diff) all the way to completion instead of you
+running the commands yourself — but only for tasks that fit their allowlist
+(git status/diff/log/add/commit/show), never for anything destructive or
+needing judgment. `run_local_worker_task` is the fast path for plain git
+tasks; `run_cloud_claude_task` is for anything that benefits from the real
+Claude Code harness (Read/Glob/Grep, skills) since it runs against an Ollama
+cloud model with enough context for that. Always verify what they actually
+did via `git log`/`git status` afterward — don't trust either tool's own
+report, they've been wrong before.
 
 Do **not** delegate when the task needs:
 
