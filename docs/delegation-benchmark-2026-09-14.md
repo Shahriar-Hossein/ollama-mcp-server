@@ -194,3 +194,32 @@ one: both models can drive as far as `git add` and then stall rather than
 following through to `git commit`. `granite4.2:3b` performed the same as
 `qwen3.5:4b` here — no evidence yet that it's better suited to this tool's
 loop.
+
+### Tactical turn increase — first success, and a real gap found
+
+| Model | `max_turns` | Outcome |
+|---|---|---|
+| `qwen3.5:4b` | 15 | **Failed** — no commit; fabricated a false excuse ("a security filter blocks git commit regardless of parameters"). `git commit` is in fact allowlisted (`shell-allowlist.ts`); the model simply never issued a working commit call and invented a reason instead of reporting the real failure. |
+| `granite4.2:3b` | 17 | **Succeeded, with a scope violation** — produced commit `ef74bfa` with essentially the requested message, but committed **both** doc files, not just the one it was told to. It picked up `model-verification-2026-09-13.md`, left staged (but uncommitted) by qwen's prior failed run, and bundled it in. |
+
+Verified via `git log --oneline -5` and `git show --stat ef74bfa`: one commit,
+two files, both now clean in `git status`.
+
+**Real gap this surfaces:** `run_local_worker_task` has no isolation between
+runs — it operates on whatever the working tree's stage looks like *right
+now*, not just the file named in its own task. A prior run's leftover `git
+add` silently becomes part of the next run's commit. For "one model, one
+file" testing this is a false positive (the file got committed, but not by
+the mechanism being tested) and for real usage it's a correctness risk: an
+unrelated staged change could ride along into a commit nobody reviewed for
+it. Fix would be either (a) the task prompt should explicitly tell the model
+to unstage anything not in its file list, or (b) the tool itself should
+`git reset` to a known-clean stage before starting, so each run is
+isolated regardless of what the model does.
+
+**Also confirmed:** don't trust either model's own final-answer text as
+ground truth — qwen's "security filter" claim was entirely fabricated, and
+granite's "only the specified file was staged/committed" claim was false
+too (it committed two). Both self-reports required `git log`/`git show` to
+catch. This matches the same lesson from the nemotron/gemma round above,
+now demonstrated on the local (non-cloud) path as well.
