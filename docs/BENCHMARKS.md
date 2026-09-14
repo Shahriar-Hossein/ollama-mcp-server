@@ -30,6 +30,13 @@ smaller.
 large enough (16K); at the old 512-4096 budgets it makes every previously
 passing result fail.
 
+`ministral-3:3b` (`think:false` only, no thinking support) is worth watching:
+it's the only model in the whole `think:false` series to solve `fix` 6/6, at
+2.33s. It doesn't unseat `granite4.2:3b` + `think:true` yet — its summary ran
+107 words against the 90-word cap — but for fix-shaped tasks it may beat the
+21-63s `think:true` route outright. **Confirmed on rerun**: identical output
+and `eval_count` (124/149/173) on all three tasks — not seed luck.
+
 ## The fixture
 
 Three tasks, unchanged across every run since 2026-09-14, which is what makes
@@ -60,6 +67,7 @@ The 6 fix cases test one generated function, not six independent tasks.
 
 | Model | Extract | Fix | Summary (words) | Wall: extract / fix / summary |
 |---|---|---:|---|---:|
+| **ministral-3:3b** | PASS (fenced) | **6/6** | 107 FAIL | 8.15s / 2.33s / 2.76s |
 | qwen3.5:4b | PASS | 4/6 | 73 PASS | 7.98s / 3.35s / 2.93s |
 | qwen2.5-coder:7b | PASS | **5/6** | 86 PASS | 13.87s / 2.19s / 5.05s |
 | granite4.2:3b | PASS | 3/6 | 179 FAIL | 7.43s / 1.81s / 3.58s |
@@ -72,6 +80,7 @@ Per-case fix breakdown:
 
 | Model | empty | last-occ-order | distinct-order | special-ids | int-like-ids | repeated-one |
 |---|---|---|---|---|---|---|
+| ministral-3:3b | P | P | P | P | P | P |
 | qwen2.5-coder:7b | P | P | **F** | P | P | P |
 | qwen3.5:4b | P | **F** | P | **F** | P | P |
 | qwen2.5-coder:3b | P | **F** | P | **F** | P | P |
@@ -80,12 +89,19 @@ Per-case fix breakdown:
 | granite4.2:3b | P | **F** | **F** | **F** | P | P |
 | granite4.2:8b | P | **F** | **F** | **F** | P | P |
 
-**No model from 2B to 8B solved `fix` cleanly with `think:false`.** The
-recurring bug: build a `Map` keyed by ID, then emit `map.values()` — that is
-*first-insertion* order, not last-occurrence order. It's a variant of the
-exact bug the task asks them to fix. qwen2.5-coder:7b's 5/6 comes from a
-`.reverse()` trick that satisfies two cases by coincidence while breaking
-`distinct-order`, not from correct reasoning.
+**`ministral-3:3b` is the first model at any size to solve `fix` 6/6 with
+`think:false`.** It tracks a last-seen index per ID in a second `Map` and
+sorts on that at the end — genuine correct reasoning, not the `.reverse()`
+coincidence that gave qwen2.5-coder:7b its 5/6. Every other model from 2B to
+8B still has the recurring bug: build a `Map` keyed by ID, then emit
+`map.values()`, which is *first-insertion* order, not last-occurrence order —
+a variant of the exact bug the task asks them to fix.
+
+It did wrap both `extract` and `fix` in a markdown fence despite both prompts
+explicitly saying not to (`extract` grades on parsed content after stripping
+the fence, so it still passes; see the format-contract trap below). Its
+summary also ran long — 107 words against a 90-word cap — while correctly
+keeping the rollback-failure caveat and rejecting the unsupported 70% claim.
 
 Extract failure modes: qwen3.5:2b and phi4-mini both copy the decoy message
 substring into `request_id` instead of `null`; granite4.2:8b returns `line`
@@ -132,6 +148,7 @@ GTX 1660 Super, 6,144 MiB total, idle before each run (~480-525 MiB).
 
 | Model | Peak VRAM (think:false) | Peak VRAM (think:true) |
 |---|---:|---:|
+| ministral-3:3b | 4,469 MiB | — |
 | granite4.2:3b | 3,333 MiB | 3,722 MiB |
 | qwen3.5:2b | 3,678 MiB | 3,909 MiB |
 | phi4-mini:3.8b | 4,144 MiB | — |
@@ -142,6 +159,34 @@ GTX 1660 Super, 6,144 MiB total, idle before each run (~480-525 MiB).
 
 No spillover at 16K for any model. `ollama ps` reported 100% GPU / no CPU
 offload throughout. A 16K KV cache plus a 4B model fits 6 GB comfortably.
+
+## 8K context / 16K output — qwen2.5-coder:7b only
+
+Requested because `think:true` isn't an option for this tag (see Traps) — this
+checks whether a smaller context budget changes anything for the
+`think:false`-only coder model. Same fixture, `temperature 0`, `seed 42`,
+`keep_alive:2m`, cold start (nothing resident before the run).
+
+| Extract | Fix | Summary (words) | Wall: extract / fix / summary | Peak VRAM |
+|---|---:|---|---:|---:|
+| PASS | 5/6 (distinct-order F) | 82 words, **rollback-failure caveat missing → FAIL** | 14.38s / 2.17s / 4.73s | 4,619 MiB |
+
+Generation speed: ~29 tok/s output, ~120-155 tok/s prompt processing, all
+three tasks. Extract's 14.38s wall time is mostly model load (8.64s cold
+start, not resident from a prior run) — fix and summary ran warm and finished
+in 2-5s.
+
+Same as the 16K run on this model (PASS / 5/6 / 86 words) except the summary:
+at 16K it stayed under 90 words *and* kept the rollback-failure caveat; at 8K
+it's shorter (82 words) but drops the caveat, which is the one thing the task
+explicitly said to preserve. One data point — could be seed-sensitivity to
+the shorter context window rather than a real 8K-vs-16K effect. Peak VRAM is
+identical to the 16K run (4,658 MiB then vs 4,619 MiB now) — this model was
+never context-bound on VRAM in the first place, so shrinking `num_ctx` bought
+nothing here.
+
+Fix output was still markdown-fenced, same as every other run of this model —
+confirms it isn't a context-size artifact.
 
 ## 32K context / 512 output — the earlier series
 
@@ -254,7 +299,7 @@ qwen3.5:4b reports 4.7B. Read metadata, don't infer fit from the tag.
   the last `</think>`. A naive grader concludes it produced nothing.
 - **Probe `think:true` with a one-line curl before setting up a run.** Ollama
   returns `{"error": "\"<model>\" does not support thinking"}` for
-  qwen2.5-coder tags and phi4-mini.
+  qwen2.5-coder tags, phi4-mini, and ministral-3:3b.
 - **A behavior score doesn't waive the format contract.** qwen2.5-coder:7b
   scored 5/6 while wrapping its answer in a markdown fence it was told not to
   use.
