@@ -26,6 +26,12 @@ Ollama instance. No build step — `npm start` runs it via tsx over stdio.
   Keep its allowlist in sync with `shell-allowlist.ts` by hand; it's a
   standalone `.cjs` file (no build step) so it can't import the TS module.
 - `src/tools/*.ts` — one file per MCP tool.
+- `docs/BENCHMARKS.md` — master benchmark record: every measured number, the
+  current model/config routing recommendation, and the traps. **Any new
+  benchmark result goes in there as a table row, not in a new directory.**
+  Generated artifacts (raw responses, jsonl logs, VRAM samples, grader
+  scripts) go in the gitignored `benchmark-data/` — see `docs/README.md` for
+  the split rule before running a benchmark.
 - `docs/cloud-strategy.md` — plan for Ollama cloud model routing.
 - `docs/local-claude-worker-experiment-2026-09-14.md` — benchmark data behind
   `run_local_worker_task` and why the full-harness `ollama launch claude`

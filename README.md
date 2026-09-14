@@ -42,6 +42,14 @@ for how these two were benchmarked and why local-worker is the recommended
 default. **Always verify what either one did via `git log`/`git status`** —
 neither should be trusted on its own report.
 
+## Benchmarks
+
+Model and config measurements live in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md) — one master record, not a directory
+per run. [docs/README.md](docs/README.md) has the rule for adding to it:
+numbers go in git, generated artifacts go in the gitignored
+`benchmark-data/`.
+
 ## Current state / things worth fixing
 
 These are observations, not changes I've made (you asked for no code edits):

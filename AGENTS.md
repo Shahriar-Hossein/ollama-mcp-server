@@ -20,6 +20,9 @@ framework.
 - `src/tools/*.ts` — one file per MCP tool.
 - `scripts/validate-cloud-bash.cjs` — independent PreToolUse validation for
   the cloud Claude harness subprocess.
+- `docs/BENCHMARKS.md` — master benchmark record and current routing
+  recommendation. New results go in as table rows; generated artifacts go in
+  the gitignored `benchmark-data/`. See `docs/README.md` for the rule.
 - `docs/cloud-strategy.md` — cloud model routing plan.
 - `docs/local-claude-worker-experiment-2026-09-14.md` — benchmark evidence and
   rationale for the current local/cloud split.
