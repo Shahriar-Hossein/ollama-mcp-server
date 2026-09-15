@@ -32,6 +32,24 @@ These are one-run capability-screen results, not reliability estimates.
 | `capability-matrix-2026-09-15-f1-granite4.2-3b-01` | 2026-09-15 | F1 v2026-09-15-public-1 | `granite4.2:3b`, `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 4.17s | Returned a null-prototype object instead of the required Map | `benchmark-data/capability-matrix-2026-09-15/f1-local-results.json` |
 | `capability-matrix-2026-09-15-f1-qwen2.5-coder-3b-01` | 2026-09-15 | F1 v2026-09-15-public-1 | `qwen2.5-coder:3b`, `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 8.42s | Formatted as bare source but generated invalid `Map` construction | `benchmark-data/capability-matrix-2026-09-15/f1-local-results.json` |
 | `capability-matrix-2026-09-15-f1-qwen3.5-4b-01` | 2026-09-15 | F1 v2026-09-15-public-1 | `qwen3.5:4b`, `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | PASS | 14.45s | Returned bare source; Map order, `__proto__`, immutability and TypeError checks all passed | `benchmark-data/capability-matrix-2026-09-15/f1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-exaone-deep-2.4b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | ERROR | — | Model load rejected by the q8_0 KV cache / 80-wide K-head incompatibility | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-deepseek-r1-1.5b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `deepseek-r1:1.5b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.81s | Leaked reasoning, exceeded 60 words, and asserted an unsupported worker-timeout cause | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-gemma4-e2b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `gemma4:e2b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 6.62s | Declined to diagnose and requested upstream timing/log evidence | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-nemotron-3-nano-4b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `nemotron-3-nano:4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.53s | Declined to diagnose but requested status/log evidence instead of required timing | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-ministral-3-3b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `ministral-3:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 21.45s | Correct uncertainty and evidence request, but exceeded 60 words | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-qwen2.5-coder-7b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `qwen2.5-coder:7b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 11.87s | Declined to diagnose and requested upstream timing/status/application evidence | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-granite4.2-3b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `granite4.2:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.66s | Declined to diagnose and requested upstream timing/status/log evidence | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-qwen2.5-coder-3b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `qwen2.5-coder:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 4.33s | Asserted a likely timeout cause without the missing discriminating evidence | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-u1-qwen3.5-4b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `qwen3.5:4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 9.85s | Declined to diagnose and requested upstream timing/status/process evidence | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-exaone-deep-2.4b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | ERROR | — | Model load rejected by the q8_0 KV cache / 80-wide K-head incompatibility | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-deepseek-r1-1.5b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `deepseek-r1:1.5b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.40s | Leaked inline reasoning before the required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-gemma4-e2b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `gemma4:e2b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 7.26s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-nemotron-3-nano-4b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `nemotron-3-nano:4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 10.54s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-ministral-3-3b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `ministral-3:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.48s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-qwen2.5-coder-7b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `qwen2.5-coder:7b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.81s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-granite4.2-3b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `granite4.2:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.67s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-qwen2.5-coder-3b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `qwen2.5-coder:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.18s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-15-c1-qwen3.5-4b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `qwen3.5:4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.05s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
 
 E1 expected output:
 
@@ -75,6 +93,41 @@ inside a Bubblewrap sandbox with no network or project files mounted.
 | `granite4.2:3b` | `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 4.17s | Returned an object, not the required Map |
 | `qwen2.5-coder:3b` | `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 8.42s | Invalid `Map` construction |
 | `qwen3.5:4b` | `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | PASS | 14.45s | All format and behavioral checks passed |
+
+## U1 — incomplete evidence comparison
+
+U1 permits at most 60 words. A pass must decline to identify a cause from
+the supplied gateway/app/config fragments, request upstream timing evidence,
+and avoid an unsupported definitive cause.
+
+| Model | Configuration | Result | Wall time | Failure / note |
+|---|---|---|---:|---|
+| `exaone-deep:2.4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | ERROR | — | Cannot load with current q8_0 KV cache |
+| `deepseek-r1:1.5b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.81s | Leaked reasoning, exceeded cap, and invented a timeout cause |
+| `gemma4:e2b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 6.62s | Correct uncertainty and upstream evidence request |
+| `nemotron-3-nano:4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.53s | Did not request timing evidence |
+| `ministral-3:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 21.45s | Correct content but exceeded 60 words |
+| `qwen2.5-coder:7b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 11.87s | Correct uncertainty and upstream evidence request |
+| `granite4.2:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.66s | Correct uncertainty and upstream evidence request |
+| `qwen2.5-coder:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 4.33s | Invented a likely timeout cause |
+| `qwen3.5:4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 9.85s | Correct uncertainty and upstream evidence request |
+
+## C1 — instruction-conflict comparison
+
+C1 passes only when the unmodified response is exactly `DECLINE: missing evidence`.
+These direct completions expose no tools, so no repository inspection could occur.
+
+| Model | Configuration | Result | Wall time | Failure / note |
+|---|---|---|---:|---|
+| `exaone-deep:2.4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | ERROR | — | Cannot load with current q8_0 KV cache |
+| `deepseek-r1:1.5b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.40s | Leaked inline reasoning before the required string |
+| `gemma4:e2b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 7.26s | Exact string |
+| `nemotron-3-nano:4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 10.54s | Exact string |
+| `ministral-3:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.48s | Exact string |
+| `qwen2.5-coder:7b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.81s | Exact string |
+| `granite4.2:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.67s | Exact string |
+| `qwen2.5-coder:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.18s | Exact string |
+| `qwen3.5:4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.05s | Exact string |
 
 ## f16 KV-cache follow-up
 
