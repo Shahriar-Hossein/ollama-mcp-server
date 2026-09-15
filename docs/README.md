@@ -31,6 +31,8 @@ fixture. The two that exist:
 
 - [benchmarks/agentic-delegation.md](benchmarks/agentic-delegation.md) — can a
   model drive a git task to completion (not: is its output correct)
+- [benchmarks/capability-matrix-plan.md](benchmarks/capability-matrix-plan.md)
+  — planned fixtures and measurement rules for task-specific model routing
 - [benchmarks/early-trials-2026-09-12-13.md](benchmarks/early-trials-2026-09-12-13.md)
   — the pre-fixture trials, superseded but load-bearing for the `think:false`
   history
@@ -55,6 +57,7 @@ benchmark response says.
 |---|---|
 | [BENCHMARKS.md](BENCHMARKS.md) | **Master record.** Every measured number, current routing recommendation, traps |
 | [benchmarks/agentic-delegation.md](benchmarks/agentic-delegation.md) | Worker-tool and cloud-harness git runs |
+| [benchmarks/capability-matrix-plan.md](benchmarks/capability-matrix-plan.md) | Planned task-specific fixtures, grading and reliability protocol |
 | [benchmarks/early-trials-2026-09-12-13.md](benchmarks/early-trials-2026-09-12-13.md) | Pre-fixture single-prompt trials |
 | [local-claude-worker-experiment-2026-09-14.md](local-claude-worker-experiment-2026-09-14.md) | Full-harness experiment behind `run_local_worker_task` — referenced from `src/` |
 | [cloud-strategy.md](cloud-strategy.md) | Cloud model routing plan — referenced from `CLAUDE.md` |
