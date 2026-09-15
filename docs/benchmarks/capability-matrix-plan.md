@@ -1,5 +1,11 @@
 # Capability-matrix benchmark plan
 
+**Status (2026-09-16):** Phases 1-4 are complete for both tracks. The
+combined per-category routing recommendation lives in
+[BENCHMARKS.md](../BENCHMARKS.md#capability-matrix--combined-routing-recommendation-2026-09-16).
+Only open item: cloud candidates stay `ON HOLD` pending an explicit
+cost/privacy/budget decision — see "Candidate models and cloud hold" below.
+
 ## Purpose
 
 Extend the current three-task fixture into a routing map: which model and

@@ -286,3 +286,35 @@ model failures), is in
 This closes the same generalization gate already applied to Track B. Track A
 is now eligible for routing, per-category above; cloud routes stay `ON
 HOLD`.
+
+`ministral-3:3b` (F1) and `gemma4:e2b` (U1) both passed Phase 1 and all 5
+Phase 3 public-fixture runs, then failed on first exposure to the held-out
+fixture — a genuine behavior miss (F1) and a scope miss (U1), not a format
+bug. Per the plan, Phase 2 (change-one-factor diagnosis) runs against
+near-misses found *before* the held-out stage, using variants of the public
+fixture; there is no second held-out fixture to diagnose against without
+spending the one held-out draw the routing decision already relied on. No
+Phase 2 follow-up is planned for these two — they stay excluded from F1 and
+U1 routing as recorded above.
+
+## Capability matrix — combined routing recommendation (2026-09-16)
+
+One per-category table across both tracks, per the plan's decision rule
+("a per-category routing table, not a single best model label"). Rows below
+restate the Track A and Track B tables above; see those sections for
+evidence chains.
+
+| Category | Recommended route(s) | Excluded (tested, failed) |
+|---|---|---|
+| Strict extraction (E1) | `nemotron-3-nano:4b`, `granite4.2:3b`, `qwen3.5:4b` | — |
+| Spec-sensitive code fix (F1) | `nemotron-3-nano:4b`, `qwen2.5-coder:7b`, `qwen3.5:4b`, `granite4.2:3b` (`think:true`) | `ministral-3:3b` (held-out runtime error) |
+| Bug investigation (I1) | `qwen3.5:4b` | — (only finalist tested) |
+| Long-context retrieval (R1) | `gemma4:e2b`, `nemotron-3-nano:4b`, `ministral-3:3b`, `granite4.2:3b`, `qwen3.5:4b` | — |
+| Summary fidelity (S1) | `nemotron-3-nano:4b`, `granite4.2:3b`, `qwen3.5:4b` | — |
+| Incomplete evidence (U1) | `qwen2.5-coder:7b`, `granite4.2:3b`, `qwen3.5:4b` | `gemma4:e2b` (held-out asked for generic evidence, not specifically timing data) |
+| Instruction conflict (C1) | `gemma4:e2b`, `nemotron-3-nano:4b`, `ministral-3:3b`, `qwen2.5-coder:7b`, `granite4.2:3b`, `qwen2.5-coder:3b`, `qwen3.5:4b` | — |
+| Tool use (T1) | `qwen3.5:4b` with the final-report reminder | all other candidates (screen FAIL) |
+| Scoped repository edit (G1) | `qwen3.5:4b`, `nemotron-3-nano:4b` | `ministral-3:3b` (Markdown-fenced final JSON, 4/5 public) |
+
+Cloud routes (`gemma4:31b-cloud`, `nemotron-3-super:cloud`) remain `ON HOLD`
+pending an explicit decision on the cloud route, cost/privacy constraints,
