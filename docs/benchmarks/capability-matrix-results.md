@@ -182,6 +182,24 @@ The raw artifact is `benchmark-data/capability-matrix-2026-09-15/i1-r1-s1-local-
 | `qwen2.5-coder:3b` | FAIL | 5.33s | Omitted the failed rollback |
 | `qwen3.5:4b` | PASS | 10.47s | Retained rollback, uncertainty and next action within cap |
 
+## Track B — public-2 diagnosis and confirmation
+
+All runs below used fixture `2026-09-15-public-2`, `think:false`, temperature
+0, seed 42, `num_ctx:16384`, `num_predict:1024`, and at most six turns. Each
+attempt used a fresh disposable Git repository. The T1 diagnostic changed only
+the final-report wording; its artifacts preserve the exact system prompt.
+
+| Route/config | Attempts | Result | Wall time | Key evidence | Raw artifacts |
+|---|---:|---|---|---|---|
+| T1 `qwen3.5:4b`, final-report reminder | 5 | PASS 5/5 | median 6.42s; 6.37–13.02s | Every run read a file, passed the focused and independent tests, left no changes, and returned exact JSON with `timeout_ms:65000` | `benchmark-data/capability-matrix-2026-09-15-public-2/t1-final-report-reminder*-qwen3-5-4b-results.json` |
+| G1 `qwen3.5:4b` | 5 | PASS 5/5 | median 7.72s; 7.61–7.99s | Only `src/parse-port.js` changed; visible and independent tests and JSON reports passed | `benchmark-data/capability-matrix-2026-09-15-public-2/g1-*-qwen3-5-4b-results.json` |
+| G1 `nemotron-3-nano:4b` | 5 | PASS 5/5 | median 7.16s; 6.89–21.04s | Only `src/parse-port.js` changed; visible and independent tests and JSON reports passed | `benchmark-data/capability-matrix-2026-09-15-public-2/g1-*-nemotron-3-nano-4b-results.json` |
+| G1 `ministral-3:3b` | 5 | FAIL 4/5 | median 4.26s; 4.09–14.59s | Run 03 made the correct scoped edit and passed both tests but fenced the final JSON, violating the contract | `benchmark-data/capability-matrix-2026-09-15-public-2/g1-*-ministral-3-3b-results.json` |
+
+The T1 and two 5/5 G1 routes need held-out confirmation before promotion to a
+routing recommendation. Do not retry or average away Ministral's format
+failure.
+
 ## f16 KV-cache follow-up
 
 Rerun the already-completed model/configuration pairs on the isolated `f16`

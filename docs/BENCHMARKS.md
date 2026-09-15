@@ -184,3 +184,27 @@ This is an initial capability screen, not a routing recommendation. The G1
 passes (`qwen3.5:4b`, `nemotron-3-nano:4b`, and `ministral-3:3b`) need the
 plan's repeated public-fixture and held-out confirmation runs. No candidate
 passed T1 under this exact contract.
+
+## Capability matrix Track B — public-2 diagnosis and confirmation (2026-09-16)
+
+The closest T1 near-miss, `qwen3.5:4b`, had completed the required behavior
+but omitted `timeout_ms:65000` from its final JSON. The diagnostic changed
+only the final-report wording: it required the exact object and explicitly
+said not to omit the numeric timeout. Under the otherwise unchanged T1
+fixture/configuration, it passed 5/5: every run read a fixture file, ran the
+focused test successfully, preserved the read-only repository, and returned
+the exact required report. Median wall time was 6.42s (range 6.37–13.02s).
+
+The three G1 screen passers were also completed to five serial public-fixture
+attempts, each from a fresh disposable repository. `qwen3.5:4b` passed 5/5
+(median 7.72s, range 7.61–7.99s), and `nemotron-3-nano:4b` passed 5/5 (median
+7.16s, range 6.89–21.04s). `ministral-3:3b` passed 4/5 (median 4.26s, range
+4.09–14.59s); its sole failure made the correct edit and passed both visible
+and independent tests, but wrapped the final JSON in a Markdown fence. This
+is a contract failure, so it is not reliable for G1 under this configuration.
+
+Raw artifacts use the `t1-final-report-reminder-*` and `g1-0[2-5]-*` names in
+the existing gitignored `benchmark-data/capability-matrix-2026-09-15-public-2/`
+directory. T1's prompt variant and full system prompt are stored in each T1
+artifact. Held-out T1 and G1 fixtures remain required before any routing
+recommendation.
