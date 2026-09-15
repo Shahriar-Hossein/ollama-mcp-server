@@ -27,7 +27,7 @@ the same thing, with the actual conclusion split across all of them.
 
 A new supporting file under `benchmarks/` is justified only when the run
 answers a *different question* — not when it's another pass at the same
-fixture. The two that exist:
+fixture. The ones that exist:
 
 - [benchmarks/agentic-delegation.md](benchmarks/agentic-delegation.md) — can a
   model drive a git task to completion (not: is its output correct)
@@ -36,6 +36,9 @@ fixture. The two that exist:
 - [benchmarks/early-trials-2026-09-12-13.md](benchmarks/early-trials-2026-09-12-13.md)
   — the pre-fixture trials, superseded but load-bearing for the `think:false`
   history
+- [benchmarks/local-explorer-2026-09-16.md](benchmarks/local-explorer-2026-09-16.md)
+  — can a local model absorb repo-discovery tool calls ahead of Haiku/Sonnet
+  (not: is its single-completion output correct)
 
 Another pass at the extract/fix/summary fixture is a row in BENCHMARKS.md, not
 a new file.

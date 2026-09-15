@@ -51,6 +51,20 @@ These are one-run capability-screen results, not reliability estimates.
 | `capability-matrix-2026-09-15-c1-granite4.2-3b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `granite4.2:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.67s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
 | `capability-matrix-2026-09-15-c1-qwen2.5-coder-3b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `qwen2.5-coder:3b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.18s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
 | `capability-matrix-2026-09-15-c1-qwen3.5-4b-01` | 2026-09-15 | C1 v2026-09-15-public-1 | `qwen3.5:4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.05s | Exact required string | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-deepseek-r1-1.5b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `deepseek-r1:1.5b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 8.16s | 653/16384 tokens, `done_reason:stop`; still misses both citations | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-gemma4-e2b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `gemma4:e2b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 15.76s | 822/16384 tokens, `done_reason:stop`; still misses both citations | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-nemotron-3-nano-4b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `nemotron-3-nano:4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 17.09s | 686/16384 tokens, `done_reason:stop`; still misses both citations | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-ministral-3-3b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `ministral-3:3b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 13.94s | 319/16384 tokens, `done_reason:stop`; misses both citations and the ECONNRESET explanation | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-qwen2.5-coder-7b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `qwen2.5-coder:7b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 39.52s | 450/16384 tokens, `done_reason:stop`; misses both citations and the ECONNRESET explanation | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-granite4.2-3b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `granite4.2:3b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 156.44s | 8854/16384 tokens, `done_reason:stop` (stopped itself, not truncated); still misses both citations | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-i1-predict16k-qwen2.5-coder-3b-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `qwen2.5-coder:3b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42 | FAIL | 5.22s | 104/16384 tokens, `done_reason:stop`; still misses both citations | `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-e1-01` | 2026-09-16 | E1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | FAIL | 81.3s | 6945/16384 tokens, `done_reason:stop`; closed `</thought>` cleanly but fenced the JSON answer | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-f1-01` | 2026-09-16 | F1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | FAIL | 25.1s | 2272/16384 tokens, `done_reason:stop`; closed `</thought>` cleanly but fenced the source | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-i1-01` | 2026-09-16 | I1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | FAIL | 239.5s | 16384/16384 tokens, `done_reason:length`; genuinely truncated mid-reasoning | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-r1-01` | 2026-09-16 | R1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | PASS | 9.9s | 686/16384 tokens, `done_reason:stop`; clean answer, no reasoning leak | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-s1-01` | 2026-09-16 | S1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | FAIL | 235.8s | 16384/16384 tokens, `done_reason:length`; genuinely truncated before a compliant summary | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-u1-01` | 2026-09-16 | U1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | FAIL | 7.9s | 558/16384 tokens, `done_reason:stop`; asserted an unsupported cause and exceeded the word cap | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
+| `capability-matrix-2026-09-16-exaone-f16-c1-01` | 2026-09-16 | C1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 16384, temp 0, seed 42, isolated `f16` KV cache | FAIL | 5.8s | 359/16384 tokens, `done_reason:stop`; did not return the exact required string | `benchmark-data/capability-matrix-2026-09-16-exaone-f16/results.json` |
 
 E1 expected output:
 
@@ -376,6 +390,21 @@ The isolated `f16` Ollama-server configuration is already prepared and was
 used for `exaone-deep:2.4b` above. Keep its results separate from the normal
 service, which remains on `q8_0`; the temporary `f16` server was stopped after
 the E1 run.
+
+**Resolved 2026-09-16:** reran `exaone-deep:2.4b` on all 7 fixtures under
+f16 + `num_predict:16384` (rows above, `capability-matrix-2026-09-16-exaone-f16-*`).
+One genuine recovery (R1, previously `ERROR` under `q8_0`), no change on the
+rest — E1/F1 reason correctly but habitually fence the final answer
+regardless of budget or cache type; I1/S1 are genuinely too verbose for even
+a 16K budget (`done_reason:length`); U1/C1 fail on content. Full analysis in
+[BENCHMARKS.md](../BENCHMARKS.md#follow-up-probe-does-a-bigger-output-budget-change-anything-2026-09-16).
+`exaone-deep:2.4b` is a plausible additional R1 candidate but not yet
+promoted — needs Phase 3/4 confirmation first. The same session also reran
+the 7 I1 Phase-1 losers at `num_predict:16384` on the normal `q8_0` service
+(rows above, `capability-matrix-2026-09-16-i1-predict16k-*`): no recovery,
+and every attempt finished with `done_reason:stop` well under the cap,
+confirming the I1 screen's small `predict:512` budget was never the
+constraint.
 
 ## Comparison rules
 

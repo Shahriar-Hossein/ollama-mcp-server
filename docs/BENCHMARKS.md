@@ -149,6 +149,9 @@ the number itself.
 
 ## Related
 
+- [model-classification.md](model-classification.md) — models grouped by
+  what they're good at (extraction, code fix, tool use, agentic driving,
+  etc.), synthesized from this doc and the `benchmarks/` series.
 - [local-claude-worker-experiment-2026-09-14.md](local-claude-worker-experiment-2026-09-14.md)
   — full-harness experiment behind `run_local_worker_task`.
 - [improvements-backlog.md](improvements-backlog.md) — proposed changes,
@@ -365,3 +368,29 @@ regardless of budget or cache type. Net: raising `num_predict` and moving to
 `f16` recovers exactly the failures that were actually truncation-shaped,
 and does not fix the ones that weren't — the diagnostic worked as intended
 even though most of the individual bets did not pay off.
+
+## Local-explorer pilot — a different question (2026-09-16)
+
+Not "is a model's output correct" but "can a local model with only
+Glob/Grep/Read absorb repo-discovery tool calls ahead of Haiku/Sonnet."
+Full writeup: [benchmarks/local-explorer-2026-09-16.md](benchmarks/local-explorer-2026-09-16.md).
+
+Five real exploration questions about this repo's own source, run through a
+throwaway tool-calling harness:
+
+| Model | Correct | Tool calls (5 tasks) | Wall time | Verdict |
+|---|---|---|---|---|
+| `qwen3.5:4b` | 4/5 | 27 | 88.4s | 1 hallucination, but self-flagged `Confidence: low` — a confidence-gated router would have escalated it |
+| `qwen2.5-coder:7b` | 0/1 tested | 0 (no real `tool_calls`) | 15.9s | disqualified — fabricates files (invented `.py` files in a 100% TS repo) at `Confidence: high` |
+| `granite4.2:3b` | 1/1 tested | 9 (full budget) | 30.7s | correct but wasteful path-guessing before it grepped |
+| Haiku (`Explore` subagent) | 5/5 | 9 | 26.9s | beat the local tier on accuracy, tool-call count, *and* wall time |
+
+**Not yet worth wiring in as a default tier.** On a repo this small, Haiku's
+own exploration is already cheap — the local tier's savings would only
+appear on much larger repos/tasks where Haiku's own tool-call cost is what's
+being optimized away, which this pilot didn't test. `qwen2.5-coder:7b`
+should not be used for this tier at all (overrides the original suggestion
+to start with it); `qwen3.5:4b` is the only viable local candidate, and only
+paired with a confidence gate that escalates low-confidence answers to
+Haiku rather than trusting them. Screen-only evidence (5 tasks, one repo,
+one run each) — needs the ~20-task scale before any routing default changes.

@@ -1,13 +1,17 @@
 # ollama-mcp-server
 
 MCP server exposing tools (`run_ollama_task`, `list_ollama_models`,
-`summarize_output`, and two opt-in autonomous tools) that talk to a local
-Ollama instance. No build step — `npm start` runs it via tsx over stdio.
+`summarize_output`, `local_explorer_task`, and two opt-in autonomous tools)
+that talk to a local Ollama instance. No build step — `npm start` runs it via
+tsx over stdio.
 
 - `src/index.ts` — wiring only: creates the server, registers tools. Keep it
   lean as more tools are added. `run_local_worker_task`/`run_cloud_claude_task`
   are only registered when `LOCAL_WORKER_ENABLED=1`/`CLOUD_CLAUDE_ENABLED=1`
   are set — don't remove that gate, they execute shell commands autonomously.
+  `local_explorer_task` is registered unconditionally: it's read-only
+  (Glob/Grep/Read only, no shell command ever runs), so it doesn't need the
+  same opt-in gate.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`)
   and host/timeout config.
 - `src/shell-allowlist.ts` — the command allowlist and system prompts shared
@@ -26,6 +30,17 @@ Ollama instance. No build step — `npm start` runs it via tsx over stdio.
   Keep its allowlist in sync with `shell-allowlist.ts` by hand; it's a
   standalone `.cjs` file (no build step) so it can't import the TS module.
 - `src/tools/*.ts` — one file per MCP tool.
+- `src/tools/local-explorer-task.ts` — read-only repo-discovery worker
+  (glob/grep/read tool loop against a local Ollama model), promoted from the
+  pilot in `docs/benchmarks/local-explorer-2026-09-16.md`. Default model is
+  `qwen3.5:4b` — it's the only local model confirmed to reliably emit real
+  `tool_calls` in this loop; `qwen2.5-coder:7b` fabricates confidently
+  instead of calling tools at all, don't route it here. Every `read`/`grep`
+  path is checked against the repo root before touching disk (see
+  `resolveWithinRoot`) since the path comes from model output, not the
+  caller. Treat a `Confidence: low` final answer as "redo this yourself or
+  escalate," never as a result to act on directly — that's the one signal
+  the pilot showed actually tracked correctness.
 - `docs/BENCHMARKS.md` — master benchmark record: every measured number, the
   current model/config routing recommendation, and the traps. **Any new
   benchmark result goes in there as a table row, not in a new directory.**
@@ -76,6 +91,23 @@ a sub-task is:
   verbose command output into a short summary you then use.
 - **Draft-then-review work**: a first-pass draft (of text, code, or a plan)
   that you'll review and refine afterward — let Ollama produce the draft.
+
+For repo-discovery sub-tasks specifically (find files, grep symbols, read
+code, trace how something works — nothing needing judgment or synthesis),
+try `local_explorer_task` first, on the routing idea validated in
+`docs/benchmarks/local-explorer-2026-09-16.md`:
+
+- If it returns `Confidence: high` or `medium` with real file:line citations,
+  use it as-is.
+- If it returns `Confidence: low`, gave up without confirming an answer, or
+  its citations don't check out, redo the search yourself (or delegate it to
+  a `general-purpose`/`Explore` subagent) — don't pass a low-confidence
+  answer through to harder reasoning downstream.
+- That pilot only tested a small repo (~10 files) where a Haiku `Explore`
+  subagent already beat it on accuracy, tool-call count, and wall time — the
+  win case is a much larger repo where the exploration itself is expensive.
+  Spot-check a handful of questions on any new, larger repo before trusting
+  it there by default.
 
 If `run_local_worker_task` or `run_cloud_claude_task` are available (they're
 opt-in — check the tool list, don't assume), they can take a mechanical git
