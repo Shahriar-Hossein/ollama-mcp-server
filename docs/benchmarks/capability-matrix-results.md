@@ -129,6 +129,57 @@ These direct completions expose no tools, so no repository inspection could occu
 | `qwen2.5-coder:3b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 4.18s | Exact string |
 | `qwen3.5:4b` | `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 8.05s | Exact string |
 
+## I1 — bug investigation comparison
+
+All rows use `think:false`, ctx 16K, predict 512, temperature 0 and seed 42.
+The raw artifact is `benchmark-data/capability-matrix-2026-09-15/i1-r1-s1-local-results.json`.
+
+| Model | Result | Wall time | Key evidence |
+|---|---|---:|---|
+| `exaone-deep:2.4b` | ERROR | — | q8_0 KV-cache block size is incompatible with its 80-wide K head |
+| `deepseek-r1:1.5b` | FAIL | 6.90s | Did not cite either required source line |
+| `gemma4:e2b` | FAIL | 12.79s | Did not cite either required source line |
+| `nemotron-3-nano:4b` | FAIL | 14.91s | Did not cite either required source line |
+| `ministral-3:3b` | FAIL | 15.84s | Did not cite either line or explain the ECONNRESET-derived flag |
+| `qwen2.5-coder:7b` | FAIL | 31.74s | Did not cite either line or explain the ECONNRESET-derived flag |
+| `granite4.2:3b` | FAIL | 27.13s | Did not cite either required source line |
+| `qwen2.5-coder:3b` | FAIL | 11.34s | Did not cite either required source line |
+| `qwen3.5:4b` | PASS | 12.53s | Cited both required lines and identified the retryability path |
+
+## R1 — long-context retrieval comparison
+
+All rows use `think:false`, ctx 16K, predict 512, temperature 0 and seed 42.
+The raw artifact is `benchmark-data/capability-matrix-2026-09-15/i1-r1-s1-local-results.json`.
+
+| Model | Result | Wall time | Key evidence |
+|---|---|---:|---|
+| `exaone-deep:2.4b` | ERROR | — | q8_0 KV-cache block size is incompatible with its 80-wide K head |
+| `deepseek-r1:1.5b` | FAIL | 6.54s | Returned the value but omitted the authoritative source line |
+| `gemma4:e2b` | PASS | 10.43s | Selected 65000 and cited `runtime/worker.ts:18` |
+| `nemotron-3-nano:4b` | PASS | 7.33s | Selected 65000 and cited `runtime/worker.ts:18` |
+| `ministral-3:3b` | PASS | 9.60s | Selected 65000 and cited `runtime/worker.ts:18` |
+| `qwen2.5-coder:7b` | FAIL | 13.87s | Returned the value but omitted the authoritative source line |
+| `granite4.2:3b` | PASS | 5.58s | Selected 65000 and cited `runtime/worker.ts:18` |
+| `qwen2.5-coder:3b` | FAIL | 5.68s | Returned the value but omitted the authoritative source line |
+| `qwen3.5:4b` | PASS | 12.96s | Selected 65000 and cited `runtime/worker.ts:18` |
+
+## S1 — summary fidelity comparison
+
+All rows use `think:false`, ctx 16K, predict 512, temperature 0 and seed 42.
+The raw artifact is `benchmark-data/capability-matrix-2026-09-15/i1-r1-s1-local-results.json`.
+
+| Model | Result | Wall time | Key evidence |
+|---|---|---:|---|
+| `exaone-deep:2.4b` | ERROR | — | q8_0 KV-cache block size is incompatible with its 80-wide K head |
+| `deepseek-r1:1.5b` | FAIL | 7.45s | Exceeded 90 words and claimed an unsupported cause |
+| `gemma4:e2b` | FAIL | 8.45s | Claimed an unsupported cause |
+| `nemotron-3-nano:4b` | PASS | 8.16s | Retained rollback, uncertainty and next action within cap |
+| `ministral-3:3b` | FAIL | 22.74s | Omitted uncertainty and next action, and claimed a cause |
+| `qwen2.5-coder:7b` | FAIL | 14.08s | Claimed an unsupported cause |
+| `granite4.2:3b` | PASS | 5.40s | Retained rollback, uncertainty and next action within cap |
+| `qwen2.5-coder:3b` | FAIL | 5.33s | Omitted the failed rollback |
+| `qwen3.5:4b` | PASS | 10.47s | Retained rollback, uncertainty and next action within cap |
+
 ## f16 KV-cache follow-up
 
 Rerun the already-completed model/configuration pairs on the isolated `f16`
