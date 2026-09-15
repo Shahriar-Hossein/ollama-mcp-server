@@ -1,0 +1,90 @@
+# 32K context / 512 output — the earlier series
+
+Superseded by the [16K runs](16k-context-series.md), kept because it's where
+the `think:false` fix and the phi4-mini anomaly come from. Same
+[fixture](../BENCHMARKS.md#the-fixture) as everywhere else in this record.
+
+## `think:false`, first run and rerun
+
+| Model | Extract (1st → rerun) | Fix (1st → rerun) | Summary words | Wall (rerun): E / C / S |
+|---|---|---:|---:|---:|
+| qwen3.5:4b | Pass → Pass | 4/6 → 3/6 | 73 | 10.62s / 3.44s / 2.96s |
+| granite4.2:3b | Pass → Pass | 2/6 → 2/6 | 179 | 6.37s / 2.01s / 3.99s |
+| qwen2.5-coder:3b | Fail → Fail | 3/6 → 4/6 | 100 (fenced) | 7.74s / 1.00s / 2.12s |
+| qwen2.5-coder:1.5b | Fail → — | — | — | 5.81s / — / — |
+| qwen3.5:0.8b | Fail → — | — | — | 5.55s / — / — |
+| qwen3.5:2b | — → Fail | — → 3/6 | 88 | 8.13s / 2.48s / 1.88s |
+| qwen2.5-coder:7b | — → Fail* | — → **5/6** | 86 (fenced) | 19.22s / 2.82s / 6.96s |
+| granite4.2:8b | — → Fail* | — → 2/6 | 146 | 32.76s / 14.95s / 19.13s |
+| phi4-mini:3.8b | — → Fail | — → **6/6** | 103 | 17.17s / 2.16s / 3.64s |
+| gemma4:31b-cloud | Pass | **6/6** | 76 | 1.83s / 0.90s / 1.56s |
+| nemotron-3-super:cloud | Pass | 4/6 | 100 | 1.87s / 1.65s / 3.99s |
+
+\* Correct records and order, but `line` encoded as a JSON string.
+
+**Run-to-run variance is real even at temperature 0 / seed 42** —
+qwen2.5-coder:3b went 3/6 → 4/6 and qwen3.5:4b went 4/6 → 3/6 on identical
+inputs. Treat any single-point difference under ~1 case as noise.
+
+**phi4-mini's 6/6 did not reproduce.** At 16K/16K it scores 4/6 with the
+standard Map-insertion-order bug. Same seed, same temperature — so this is
+genuine budget sensitivity, not noise. Output budget, not model choice, is
+the deciding factor for this task.
+
+Gemma4-31B-cloud is the only model to pass `fix` 6/6 with `think:false`
+anywhere in the series (it tracks last indexes and sorts on them).
+
+## `think:true` at 512 output — total failure
+
+| Model | think:false E / C / S | think:true E / C / S | Failure mode |
+|---|---|---|---|
+| qwen3.5:4b | Pass / 3/6 / 73 | Fail / 0/6 / — | thinking field ate all 512 tokens |
+| qwen3.5:2b | Fail / 3/6 / 88 | Fail / 0/6 / — | same |
+| gemma4:31b-cloud | Pass / 6/6 / 76 | Fail / 0/6 / — | same |
+| granite4.2:3b | Pass / 2/6 / 179 | Fail / 0/6 / 364 | reasoning emitted inline in `response` |
+| granite4.2:8b | Fail* / 2/6 / 146 | Fail / 0/6 / 383 | same |
+| nemotron-3-super:cloud | Pass / 4/6 / 100 | Fail / **6/6** / — | only thinking code pass; other two lacked a final answer |
+
+Context size does not fix this. Context is input/KV capacity; `num_predict`
+is the completion budget, and thinking shares it with the final answer.
+
+## Thinking-budget threshold sweep (32K ctx, `num_predict` 512 → 4096)
+
+Smallest `num_predict` that produced a contract-valid result:
+
+| Model | Extract | Code | Summary |
+|---|---:|---:|---:|
+| qwen3.5:4b | **2,048** (35.13s) | none by 4,096 | none by 4,096 |
+| qwen3.5:2b | **4,096** (36.37s) | none by 4,096 | none by 4,096 |
+| granite4.2:3b | none by 4,096 † | none by 4,096 † | none by 4,096 † |
+| granite4.2:8b | none (61.5 / 105.2 / 166.1 / 167.0s) | none (52.8 / 106.2 / 225.8 / 300.8s) | sweep stopped |
+
+† **Probably a grading error, not a model failure.** Granite emits reasoning
+inline as `<think>…</think>answer` rather than in Ollama's separate
+`thinking` field. The sweep graded the whole `response` field, so it scored
+granite as "never reached a final output" when an answer may well have sat
+after `</think>`. The 16K rerun, which strips to the last `</think>`, gets
+6/6 from the same model. Not distinguishable from the retained data which it
+was — re-grade before citing the sweep's granite rows.
+
+The granite4.2:8b sweep was stopped by the user mid-run. Its partial rows are
+not a valid comparison and must not guide routing.
+
+## GPU residency at 32K
+
+| Model | Allocated | VRAM | Residency |
+|---|---:|---:|---|
+| qwen2.5-coder:1.5b | 1.56 GiB | 1.56 | Full |
+| qwen3.5:2b | 2.48 GiB | 2.48 | Full |
+| qwen2.5-coder:3b | 2.60 GiB | 2.60 | Full |
+| granite4.2:3b | 3.39 GiB | 3.39 | Full |
+| qwen3.5:4b | 3.46 GiB | 3.46 | Full |
+| phi4-mini:3.8b | 4.77 GiB | 3.97 | **Partial** |
+| qwen2.5-coder:7b | 5.56 GiB | 3.92 | **Partial** |
+| granite4.2:8b | 7.98 GiB | 3.99 | **Partial** |
+
+Halving to 16K did not buy full residency for the 7B/8B models (5.05 and 6.49
+GiB allocated). Anything above ~4B spills on this GPU regardless of context.
+
+Model labels understate parameter counts — granite4.2:3b reports 3.7B,
+qwen3.5:4b reports 4.7B. Read metadata, don't infer fit from the tag.

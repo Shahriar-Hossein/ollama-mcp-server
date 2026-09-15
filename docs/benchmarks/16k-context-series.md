@@ -1,0 +1,122 @@
+# 16K context / 16K output — the current series
+
+`num_ctx:16384`, `num_predict:16384`, temperature 0, seed 42,
+`keep_alive:2m`, strictly serial, one model resident at a time. See
+[the fixture](../BENCHMARKS.md#the-fixture) for what extract/fix/summary mean.
+
+## `think:false`
+
+| Model | Extract | Fix | Summary (words) | Wall: extract / fix / summary |
+|---|---|---:|---|---:|
+| **ministral-3:3b** | PASS (fenced) | **6/6** | 107 FAIL | 8.15s / 2.33s / 2.76s |
+| qwen3.5:4b | PASS | 4/6 | 73 PASS | 7.98s / 3.35s / 2.93s |
+| qwen2.5-coder:7b | PASS | **5/6** | 86 PASS | 13.87s / 2.19s / 5.05s |
+| granite4.2:3b | PASS | 3/6 | 179 FAIL | 7.43s / 1.81s / 3.58s |
+| qwen3.5:2b | FAIL | 4/6 | 88 PASS | 7.93s / 2.27s / 1.78s |
+| qwen2.5-coder:3b | FAIL | 4/6 | 100 FAIL | 6.99s / 0.91s / 1.93s |
+| phi4-mini:3.8b | FAIL | 4/6 | 110 FAIL | 8.90s / 1.14s / 2.35s |
+| granite4.2:8b | FAIL | 3/6 | 146 FAIL | 18.22s / 10.50s / 14.78s |
+
+Per-case fix breakdown:
+
+| Model | empty | last-occ-order | distinct-order | special-ids | int-like-ids | repeated-one |
+|---|---|---|---|---|---|---|
+| ministral-3:3b | P | P | P | P | P | P |
+| qwen2.5-coder:7b | P | P | **F** | P | P | P |
+| qwen3.5:4b | P | **F** | P | **F** | P | P |
+| qwen2.5-coder:3b | P | **F** | P | **F** | P | P |
+| phi4-mini:3.8b | P | **F** | P | **F** | P | P |
+| qwen3.5:2b | P | **F** | **F** | P | P | P |
+| granite4.2:3b | P | **F** | **F** | **F** | P | P |
+| granite4.2:8b | P | **F** | **F** | **F** | P | P |
+
+**`ministral-3:3b` is the first model at any size to solve `fix` 6/6 with
+`think:false`.** It tracks a last-seen index per ID in a second `Map` and
+sorts on that at the end — genuine correct reasoning, not the `.reverse()`
+coincidence that gave qwen2.5-coder:7b its 5/6. Every other model from 2B to
+8B still has the recurring bug: build a `Map` keyed by ID, then emit
+`map.values()`, which is *first-insertion* order, not last-occurrence order —
+a variant of the exact bug the task asks them to fix.
+
+It did wrap both `extract` and `fix` in a markdown fence despite both prompts
+explicitly saying not to (`extract` grades on parsed content after stripping
+the fence, so it still passes; see the format-contract trap in the master
+doc). Its summary also ran long — 107 words against a 90-word cap — while
+correctly keeping the rollback-failure caveat and rejecting the unsupported
+70% claim.
+
+Extract failure modes: qwen3.5:2b and phi4-mini both copy the decoy message
+substring into `request_id` instead of `null`; granite4.2:8b returns `line`
+as a string; qwen2.5-coder:3b drops a record outright.
+
+Summary length control is weak — only qwen3.5:2b, qwen2.5-coder:7b and
+qwen3.5:4b stayed under 90 words. granite4.2:3b overran by 2x.
+
+## `think:true`
+
+Only 4 local tags accept the flag. `qwen2.5-coder:3b`, `qwen2.5-coder:7b` and
+`phi4-mini:3.8b` return HTTP 400 `"<model>" does not support thinking`.
+
+| Model | Extract | Fix | Summary | Wall: extract / fix / summary |
+|---|---|---|---|---:|
+| **granite4.2:3b** | **PASS** | **6/6** | **85 words PASS** | 21.4s / 63.4s / 53.8s |
+| qwen3.5:4b | PASS | **6/6** | 84 words PASS | 42.9s / 92.7s / 109.2s |
+| qwen3.5:2b | PASS | EMPTY (`done_reason:length`) | EMPTY (`length`) | 38.6s / 202.8s / 215.8s |
+
+qwen3.5:4b's `eval_count` was 2,107 / 5,245 / 6,145 with thinking fields of
+6,655 / 18,339 / 18,187 characters — comfortably inside the 16K budget. This
+was the first `think:true` run in the series where any model finished
+thinking *and* answered.
+
+qwen3.5:2b burns the entire 16,384-token budget on reasoning for fix and
+summary without ever emitting an answer — the same failure it showed at 512
+through 4,096. Raising the budget further will not help. It does reliably
+solve `extract`.
+
+## `think:false` vs `think:true`, matched budgets (qwen3.5:4b)
+
+| Task | false | true | Speedup | false result | true result |
+|---|---:|---:|---:|---|---|
+| Extract | 7.98s | 42.87s | 5.4x | PASS | PASS |
+| Fix | 3.35s | 92.66s | 27.6x | **FAIL 4/6** | PASS 6/6 |
+| Summary | 2.93s | 109.22s | 37.3x | PASS | PASS |
+
+`think:false` is 5-37x faster and only loses on `fix`. That single loss is
+the whole argument for keeping a `think:true` route.
+
+## GPU, 16K
+
+GTX 1660 Super, 6,144 MiB total, idle before each run (~480-525 MiB).
+
+| Model | Peak VRAM (think:false) | Peak VRAM (think:true) |
+|---|---:|---:|
+| ministral-3:3b | 4,469 MiB | — |
+| granite4.2:3b | 3,333 MiB | 3,722 MiB |
+| qwen3.5:2b | 3,678 MiB | 3,909 MiB |
+| phi4-mini:3.8b | 4,144 MiB | — |
+| qwen3.5:4b | ~4,500 MiB | ~4,586 MiB |
+| qwen2.5-coder:3b | 4,597 MiB | — |
+| qwen2.5-coder:7b | 4,658 MiB | — |
+| granite4.2:8b | 4,658 MiB | — |
+
+No spillover at 16K for any model. `ollama ps` reported 100% GPU / no CPU
+offload throughout. A 16K KV cache plus a 4B model fits 6 GB comfortably.
+
+## `ministral-3:3b` budget sensitivity
+
+Worth watching: it's the only model in the whole `think:false` series to
+solve `fix` 6/6, at 2.33s. It doesn't unseat `granite4.2:3b` + `think:true`
+yet — its summary ran 107 words against the 90-word cap — but for fix-shaped
+tasks it may beat the 21-63s `think:true` route outright. **Confirmed on
+rerun**: identical output and `eval_count` (124/149/173) on all three tasks —
+not seed luck.
+
+Budget makes little difference for this model. At 32K ctx / 512 output (the
+older series' budget) it's slower — 14.15s/3.38s/4.78s vs 8.15s/2.33s/2.76s
+at 16K/16K, plus higher peak VRAM (4,643 MiB vs 4,469 MiB) from the larger KV
+cache — but extract and fix still pass identically (same `eval_count` on
+extract, 124; fix stays 6/6 with a slightly shorter solution, `eval_count`
+115 vs 149). Summary shortened slightly (102 vs 107 words) but still exceeds
+the 90-word cap. Unlike qwen3.5:2b or granite at small `num_predict`
+budgets, it never ran out of output budget or emitted an empty response —
+512 tokens was already enough for all three tasks.
