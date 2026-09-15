@@ -182,6 +182,76 @@ The raw artifact is `benchmark-data/capability-matrix-2026-09-15/i1-r1-s1-local-
 | `qwen2.5-coder:3b` | FAIL | 5.33s | Omitted the failed rollback |
 | `qwen3.5:4b` | PASS | 10.47s | Retained rollback, uncertainty and next action within cap |
 
+## Track A — Phase 3 reliability confirmation (2026-09-16)
+
+Every Phase-1 PASS finalist per category, rerun 5 times each against the
+unchanged public fixture and identical settings (`think:false` except
+`granite4.2:3b` on F1, temperature 0, seed 42, `num_ctx:16384`). This is the
+plan's repeatability leg of Phase 3 only — it checks for infra-level
+flakiness (crashes, timeouts, non-reproduction) under fixed settings, not the
+separate seed/input-order variation run or the held-out fixtures Phase 4
+calls for. Raw artifacts are in the gitignored
+`benchmark-data/capability-matrix-2026-09-16-phase3/` directory
+(`scripts/run-capability-matrix-phase3.cjs`).
+
+**Grader bug found and fixed during this run**: the F1 grader's
+non-array-input check used `error instanceof TypeError`, which fails across
+the `vm` module's sandboxed realm — a `TypeError` thrown inside
+`vm.createContext` belongs to that context's own `TypeError` constructor, not
+the calling script's. The first pass came back 0/5 for every F1 finalist,
+including routes that had PASSed Phase 1 with the *identical* recorded
+response. Replaying those Phase-1 F1 responses through this script's grader
+just now, on this machine, also produced FAIL — the bug reproduces
+independent of anything else changed in Phase 3, so it was already latent
+rather than introduced by this run. `scripts/grade-capability-matrix-f1.cjs`
+(the script actually used to grade the official Phase-1 F1 row) avoids it by
+checking `error.name === "TypeError"` instead of `instanceof`; Phase 3's
+script was fixed to match and F1 was rerun. The existing F1 PASS rows in the
+[F1 comparison table](#f1--spec-sensitive-groupby-comparison) above were
+produced by `grade-capability-matrix-f1.cjs`, not the buggy inline check, so
+they are unaffected — but this is a reminder to re-check grader logic
+whenever it's copied into a new script rather than assumed correct.
+
+| Category | Finalist(s) | Result | Median wall time (range) |
+|---|---|---|---:|
+| E1 | `nemotron-3-nano:4b` | 5/5 PASS | 4.83s (4.79–5.01s) |
+| E1 | `granite4.2:3b` | 5/5 PASS | 3.93s (3.87–5.22s) |
+| E1 | `qwen3.5:4b` | 5/5 PASS | 8.05s (7.64–9.05s) |
+| F1 | `nemotron-3-nano:4b` | 5/5 PASS | 4.98s (4.93–8.33s) |
+| F1 | `ministral-3:3b` | 5/5 PASS | 6.53s (6.46–8.83s) |
+| F1 | `qwen2.5-coder:7b` | 5/5 PASS | 8.14s (8.02–15.81s) |
+| F1 | `qwen3.5:4b` | 5/5 PASS | 9.18s (8.77–11.86s) |
+| F1 | `granite4.2:3b` (`think:true`) | 5/5 PASS | 24.83s (24.18–26.93s) |
+| I1 | `qwen3.5:4b` | 5/5 PASS | 10.00s (9.75–11.45s) |
+| R1 | `gemma4:e2b` | 5/5 PASS | 6.36s (5.93–9.60s) |
+| R1 | `nemotron-3-nano:4b` | 5/5 PASS | 4.93s (4.84–8.16s) |
+| R1 | `ministral-3:3b` | 5/5 PASS | 7.19s (6.76–9.46s) |
+| R1 | `granite4.2:3b` | 5/5 PASS | 4.00s (3.86–4.21s) |
+| R1 | `qwen3.5:4b` | 5/5 PASS | 11.46s (10.95–14.22s) |
+| S1 | `nemotron-3-nano:4b` | 5/5 PASS | 5.75s (5.44–5.86s) |
+| S1 | `granite4.2:3b` | 5/5 PASS | 4.54s (4.49–4.56s) |
+| S1 | `qwen3.5:4b` | 5/5 PASS | 11.91s (10.28–12.66s) |
+| U1 | `gemma4:e2b` | 5/5 PASS | 4.82s (4.73–8.38s) |
+| U1 | `qwen2.5-coder:7b` | 5/5 PASS | 5.82s (5.75–11.93s) |
+| U1 | `granite4.2:3b` | 5/5 PASS | 3.63s (3.56–5.52s) |
+| U1 | `qwen3.5:4b` | 5/5 PASS | 8.79s (8.41–9.67s) |
+| C1 | `gemma4:e2b` | 5/5 PASS | 4.21s (4.12–5.39s) |
+| C1 | `nemotron-3-nano:4b` | 5/5 PASS | 3.16s (3.07–7.35s) |
+| C1 | `ministral-3:3b` | 5/5 PASS | 5.15s (5.09–7.40s) |
+| C1 | `qwen2.5-coder:7b` | 5/5 PASS | 4.93s (4.62–10.40s) |
+| C1 | `granite4.2:3b` | 5/5 PASS | 2.71s (2.67–4.18s) |
+| C1 | `qwen2.5-coder:3b` | 5/5 PASS | 2.99s (2.80–4.49s) |
+| C1 | `qwen3.5:4b` | 5/5 PASS | 7.19s (7.15–7.58s) |
+
+Every one of the 28 category/finalist pairs reproduced 5/5 with no crash,
+timeout, or non-reproduction. Because generation used temperature 0 and a
+fixed seed, this mainly confirms infra-level repeatability (the harness,
+model load and grader behave consistently run over run), not output
+variability under sampling — that needs the plan's separate seed/input-order
+variation pass. Phase 4 held-out fixtures for these seven categories have
+not been run yet; do not promote a Track A routing recommendation until
+those exist, matching the rule already applied to Track B.
+
 ## Track B — public-2 diagnosis and confirmation
 
 All runs below used fixture `2026-09-15-public-2`, `think:false`, temperature

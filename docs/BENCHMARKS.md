@@ -247,6 +247,21 @@ Per-category, not a single best model, per the plan's decision rule:
 All other categories (extraction, code fix, investigation, retrieval,
 summary, incomplete evidence, instruction conflict) remain screen-only
 results in [capability-matrix-results.md](benchmarks/capability-matrix-results.md)
-and are not yet promoted to a routing recommendation — Phase 3/4 repeated and
-held-out runs have not been done for those categories. Cloud routes stay
+and are not yet promoted to a routing recommendation. Cloud routes stay
 `ON HOLD`.
+
+## Track A — Phase 3 reliability confirmation (2026-09-16)
+
+Every category's Phase-1 finalist (28 model/category pairs across E1, F1,
+I1, R1, S1, U1, C1) was rerun 5 times against the unchanged public fixture
+and settings. All 28 reproduced 5/5 — no crash, timeout, or flip from PASS
+to FAIL. Full per-pair timing and the grader bug this run caught (F1's
+`instanceof TypeError` check failing across the `vm` sandbox realm, fixed to
+`error.name === "TypeError"`) are in
+[capability-matrix-results.md](benchmarks/capability-matrix-results.md#track-a--phase-3-reliability-confirmation-2026-09-16).
+
+This confirms infra-level repeatability under fixed temperature-0/seed-42
+settings, not sampling-level variability or generalization past the public
+fixture. Phase 4 held-out fixtures for these seven categories are still
+needed before any Track A routing recommendation, the same gate already
+applied to Track B.
