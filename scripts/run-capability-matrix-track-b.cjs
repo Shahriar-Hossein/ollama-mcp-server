@@ -14,6 +14,8 @@ const MAX_TURNS = 6;
 const MAX_TOOL_OUTPUT = 12_000;
 const REQUEST_TIMEOUT_MS = 120_000;
 const KEEP_ALIVE = "5m";
+const SYSTEM_PROMPT = "You are a benchmark coding agent. Use only the supplied tools. Work only on the stated task. Do not claim an observation you did not receive from a tool. When done, respond with JSON only. For T1 use {\"result\":\"PASS\",\"test\":\"PASS\",\"timeout_ms\":65000}; for G1 use {\"result\":\"PASS\",\"test\":\"PASS\"}. Set PASS only when your observed focused test passed.";
+const T1_FINAL_REPORT_REMINDER = "Your final response must be exactly {\"result\":\"PASS\",\"test\":\"PASS\",\"timeout_ms\":65000}. Include timeout_ms as the number 65000; do not omit it or add Markdown or prose.";
 
 const FIXTURES = {
   T1: {
@@ -185,14 +187,15 @@ function grade(fixtureId, root, calls, pre, post, finalResponse) {
   }
   return { result: notes.length ? "FAIL" : "PASS", changed_paths: changed, git_changed_paths: post.git_status, tool_call_count: calls.length, refused_tool_calls: refused, agent_test: observedTest, independent_final_test: finalTest, final_report: report, notes };
 }
-async function attempt(fixtureId, model, keepFixture, debug) {
+async function attempt(fixtureId, model, keepFixture, debug, finalReportReminder) {
   const fixture = FIXTURES[fixtureId];
   const root = createRepository(fixture);
   const pre = snapshot(root, fixture);
   if (!pre.clean || pre.git_status_error || !pre.head) throw new Error("fixture baseline verification failed");
   debug("fixture_created_and_baseline_verified", { fixture: fixtureId, root, head: pre.head, clean: pre.clean });
   const calls = [];
-  const messages = [{ role: "system", content: "You are a benchmark coding agent. Use only the supplied tools. Work only on the stated task. Do not claim an observation you did not receive from a tool. When done, respond with JSON only. For T1 use {\"result\":\"PASS\",\"test\":\"PASS\",\"timeout_ms\":65000}; for G1 use {\"result\":\"PASS\",\"test\":\"PASS\"}. Set PASS only when your observed focused test passed." }, { role: "user", content: fixture.prompt }];
+  const systemPrompt = finalReportReminder && fixtureId === "T1" ? `${SYSTEM_PROMPT} ${T1_FINAL_REPORT_REMINDER}` : SYSTEM_PROMPT;
+  const messages = [{ role: "system", content: systemPrompt }, { role: "user", content: fixture.prompt }];
   const turns = [];
   let finalResponse = "";
   let error;
@@ -222,7 +225,7 @@ async function attempt(fixtureId, model, keepFixture, debug) {
   } catch (caught) { error = caught.message; }
   const post = snapshot(root, fixture);
   const result = error ? { result: "ERROR", notes: [error] } : grade(fixtureId, root, calls, pre, post, finalResponse);
-  const artifact = { fixture: `${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, prompt: fixture.prompt, repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result };
+  const artifact = { fixture: `${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, prompt: fixture.prompt, system_prompt: systemPrompt, prompt_variant: finalReportReminder && fixtureId === "T1" ? "t1-final-report-reminder" : "baseline", repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result };
   if (!keepFixture) fs.rmSync(root, { recursive: true, force: true });
   return artifact;
 }
@@ -300,11 +303,14 @@ async function main() {
     return;
   }
   const fixtureId = (process.argv[process.argv.indexOf("--fixture") + 1] || "").toUpperCase();
-  if (!FIXTURES[fixtureId]) throw new Error("Usage: run-capability-matrix-track-b.cjs --fixture T1|G1 [--model tag] [--keep-fixture] [--debug], or --probe [--model tag] [--debug]");
-  const output = artifactPath(fixtureId.toLowerCase(), model);
+  const finalReportReminder = process.argv.includes("--t1-final-report-reminder");
+  const runIdIndex = process.argv.indexOf("--run-id");
+  const runId = runIdIndex >= 0 ? process.argv[runIdIndex + 1] : "";
+  if (!FIXTURES[fixtureId] || (finalReportReminder && fixtureId !== "T1") || (runIdIndex >= 0 && !runId)) throw new Error("Usage: run-capability-matrix-track-b.cjs --fixture T1|G1 [--model tag] [--keep-fixture] [--debug] [--t1-final-report-reminder] [--run-id id], or --probe [--model tag] [--debug]");
+  const output = artifactPath(`${fixtureId.toLowerCase()}${finalReportReminder ? "-final-report-reminder" : ""}${runId ? `-${runId.replace(/[^a-z0-9]+/gi, "-")}` : ""}`, model);
   const debug = createDebugLogger(debugEnabled, output);
   debug("artifact_write_path", { output });
-  const artifact = await attempt(fixtureId, model, process.argv.includes("--keep-fixture"), debug);
+  const artifact = await attempt(fixtureId, model, process.argv.includes("--keep-fixture"), debug, finalReportReminder);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify(artifact, null, 2)}\n`);
   debug("artifact_written", { output });
