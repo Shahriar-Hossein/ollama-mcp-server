@@ -318,3 +318,50 @@ evidence chains.
 
 Cloud routes (`gemma4:31b-cloud`, `nemotron-3-super:cloud`) remain `ON HOLD`
 pending an explicit decision on the cloud route, cost/privacy constraints,
+and evaluation budget — no category above includes a cloud recommendation.
+
+## Follow-up probe: does a bigger output budget change anything? (2026-09-16)
+
+Two Phase-1 screens ran at a small `num_predict` (I1 at 512; `exaone-deep:2.4b`
+mostly blocked entirely by a `q8_0` KV-cache incompatibility, with one f16
+attempt at 1024 that exhausted its budget mid-reasoning). Both looked like
+plausible truncation artifacts rather than genuine capability gaps, following
+the same pattern that made `granite4.2:3b` + `think:true` + 16K predict the
+best result in the series. Reran both at `num_predict:16384` to check.
+Raw artifacts: `benchmark-data/capability-matrix-2026-09-16-i1-predict16k/`
+and `benchmark-data/capability-matrix-2026-09-16-exaone-f16/`.
+
+**I1 losers at 16K predict: no recovery, budget was never the constraint.**
+All 7 non-winning Phase-1 models (`deepseek-r1:1.5b`, `gemma4:e2b`,
+`nemotron-3-nano:4b`, `ministral-3:3b`, `qwen2.5-coder:7b`, `granite4.2:3b`,
+`qwen2.5-coder:3b`) still FAILed on the same "does not cite the required
+line" check. Every attempt finished with `done_reason:"stop"`, well under
+the cap — `granite4.2:3b` used 8,854 of 16,384 tokens and still stopped on
+its own. This was a genuine citation-accuracy gap, not truncation; no change
+to the I1 routing recommendation.
+
+**`exaone-deep:2.4b` on an isolated f16 KV-cache server at 16K predict:
+one new pass (R1), rest still fail for real reasons.**
+
+| Fixture | Result | Tokens/cap | `done_reason` | Why |
+|---|---|---|---|---|
+| E1 | FAIL | 6,945/16,384 | `stop` | Finished, closed `</thought>` cleanly, but wrapped the JSON answer in a ```` ```json ```` fence — a format-contract violation, not truncation |
+| F1 | FAIL | 2,272/16,384 | `stop` | Same pattern: closed `</thought>` cleanly, correct-looking code, but fenced in ```` ```javascript ```` |
+| I1 | FAIL | 16,384/16,384 | `length` | Genuinely truncated mid-reasoning; still didn't cite the required lines even before the cutoff |
+| R1 | **PASS** | 686/16,384 | `stop` | Clean answer, no reasoning leak; previously `ERROR` (couldn't load under `q8_0`) |
+| S1 | FAIL | 16,384/16,384 | `length` | Genuinely truncated; never reached a compliant summary |
+| U1 | FAIL | 558/16,384 | `stop` | Finished, but asserted an unsupported cause and exceeded the word cap — a content gap |
+| C1 | FAIL | 359/16,384 | `stop` | Finished, but did not return the exact required string — a content gap |
+
+f16 does fix the loading error, and R1 is a genuine, budget-independent
+recovery — `exaone-deep:2.4b` is now a plausible additional R1 candidate,
+though it needs the plan's Phase 3/5-repeat and held-out confirmation before
+joining the R1 routing recommendation above; it is not yet promoted. E1/F1
+show the model reasons correctly but has a standing habit of fencing its
+final answer regardless of output budget — a prompt-format problem, not a
+budget or KV-cache one. I1/S1 show this model is genuinely too verbose a
+reasoner for even a 16K budget on those two tasks. U1/C1 fail on content
+regardless of budget or cache type. Net: raising `num_predict` and moving to
+`f16` recovers exactly the failures that were actually truncation-shaped,
+and does not fix the ones that weren't — the diagnostic worked as intended
+even though most of the individual bets did not pay off.
