@@ -153,3 +153,34 @@ the number itself.
   — full-harness experiment behind `run_local_worker_task`.
 - [improvements-backlog.md](improvements-backlog.md) — proposed changes,
   including unresolved git-option-injection findings.
+
+## Capability matrix Track B — public-2 screen (2026-09-15)
+
+One serial run per local candidate using fixture `2026-09-15-public-2`.
+Configuration: `think:false`, temperature 0, seed 42, `num_ctx:16384`,
+`num_predict:1024`, maximum 6 turns, and a fixed structured-tool schema. Each
+attempt used a fresh disposable Git repository. Raw artifacts are in the
+gitignored `benchmark-data/capability-matrix-2026-09-15-public-2/` directory.
+
+The probe is a one-turn request to call `read_file`. `NO TOOL CALL` means the
+model replied without making a structured tool invocation. T1 requires a
+read-only lookup, a passing focused test, and exact JSON including
+`timeout_ms:65000`. G1 requires an edit only to `src/parse-port.js`, a passing
+focused test, and independent hidden boundary checks.
+
+| Model | Tool-call probe | T1 result | T1 wall time | G1 result | G1 wall time |
+|---|---|---|---:|---|---:|
+| `exaone-deep:2.4b` | ERROR — tools unsupported | ERROR — tools unsupported | — | ERROR — tools unsupported | — |
+| `deepseek-r1:1.5b` | NO TOOL CALL | ERROR — exhausted six turns without a final answer | 11.96s | FAIL — no effective tool use or edit; hidden check failed | 8.66s |
+| `gemma4:e2b` | OK | FAIL — refused call and Markdown-wrapped final JSON | 14.40s | FAIL — Markdown-wrapped final JSON | 16.96s |
+| `nemotron-3-nano:4b` | OK | FAIL — did not read a fixture file | 31.10s | PASS — scope, visible test, hidden checks, and final JSON passed | 21.04s |
+| `ministral-3:3b` | OK | FAIL — did not read a file and reported the wrong timeout | 13.86s | PASS — scope, visible test, hidden checks, and final JSON passed | 11.85s |
+| `qwen2.5-coder:7b` | NO TOOL CALL | FAIL — emitted pseudo-tool JSON; no calls ran | 11.70s | FAIL — emitted pseudo-tool JSON; no edit | 18.43s |
+| `granite4.2:3b` | OK | ERROR — exhausted six turns without a final answer | 14.16s | ERROR — exhausted six turns without a final answer | 16.00s |
+| `qwen2.5-coder:3b` | NO TOOL CALL | FAIL — emitted pseudo-tool JSON; no calls ran | 9.75s | FAIL — emitted pseudo-tool JSON; no edit | 8.26s |
+| `qwen3.5:4b` | OK | FAIL — omitted required `timeout_ms:65000` | 6.08s | PASS — scope, visible test, hidden checks, and final JSON passed | 7.99s |
+
+This is an initial capability screen, not a routing recommendation. The G1
+passes (`qwen3.5:4b`, `nemotron-3-nano:4b`, and `ministral-3:3b`) need the
+plan's repeated public-fixture and held-out confirmation runs. No candidate
+passed T1 under this exact contract.
