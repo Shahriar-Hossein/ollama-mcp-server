@@ -12,6 +12,11 @@ This is a plan, not a result. Measured rows still belong in
 [BENCHMARKS.md](../BENCHMARKS.md); raw requests, responses, grader output and
 hardware samples remain in gitignored `benchmark-data/`.
 
+During this large comparison, append individual attempts to the dedicated
+[capability-matrix results tracker](capability-matrix-results.md). Promote
+only settled, decision-relevant summaries from that tracker into
+`BENCHMARKS.md`.
+
 ## Questions and fixtures
 
 Use two to four small fixtures per category. Keep one hidden/held-out fixture
