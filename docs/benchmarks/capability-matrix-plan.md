@@ -201,6 +201,25 @@ like the winner.
 5. Run the Phase 1 screen, then repeat only category finalists as specified
    above.
 
+### Track-B runner
+
+`scripts/run-capability-matrix-track-b.cjs` implements the T1/G1 fixture
+harness. It is deliberately not part of the MCP server and does not use its
+autonomous-worker allowlist. Each attempt creates and commits a fresh fixture
+repository under the system temporary directory, exposes only structured
+fixture-scoped tools, and writes a raw artifact with every tool call and
+pre/post Git and file-hash evidence. Its only test operation is a fixed
+`node --test` argv chosen by the fixture; no model-provided shell command is
+executed.
+
+Run `node scripts/run-capability-matrix-track-b.cjs --self-test` before a
+screen. Then run `--fixture T1` or `--fixture G1` (optionally `--model tag`).
+Use `--keep-fixture` only while debugging a failed harness/model interaction;
+the normal runner removes the disposable repository after preserving evidence.
+Use `--debug` to synchronously append lifecycle events to an artifact-adjacent
+`.debug.log`; use `--probe` for a one-turn T1-schema tool-call check before
+interpreting a fixture failure as a model result.
+
 ## Decision rule
 
 The final recommendation should be a per-category routing table, not a
