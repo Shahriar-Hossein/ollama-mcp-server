@@ -262,6 +262,27 @@ to FAIL. Full per-pair timing and the grader bug this run caught (F1's
 
 This confirms infra-level repeatability under fixed temperature-0/seed-42
 settings, not sampling-level variability or generalization past the public
-fixture. Phase 4 held-out fixtures for these seven categories are still
-needed before any Track A routing recommendation, the same gate already
-applied to Track B.
+fixture.
+
+## Track A — Phase 4 held-out confirmation (2026-09-16)
+
+Every category's finalist(s) ran once against a held-out fixture with
+renamed identifiers, reordered logs, and relocated defects (same task
+contract as the public fixture). 26/28 pairs generalized; full detail,
+including two grader false negatives found and fixed during grading (not
+model failures), is in
+[capability-matrix-results.md](benchmarks/capability-matrix-results.md#track-a--phase-4-held-out-confirmation-2026-09-16).
+
+| Category | Recommended route | Evidence | Notes |
+|---|---|---|---|
+| Extraction (E1) | `nemotron-3-nano:4b`, `granite4.2:3b`, or `qwen3.5:4b` | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out, all three | |
+| Spec-sensitive code fix (F1) | `nemotron-3-nano:4b`, `qwen2.5-coder:7b`, `qwen3.5:4b`, or `granite4.2:3b` (`think:true`) | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out | `ministral-3:3b` excluded: passed Phase 3 5/5 but the held-out repair threw a runtime error — a genuine behavior bug, not just a format miss. |
+| Investigation (I1) | `qwen3.5:4b` | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out | Only finalist tested for this category. |
+| Retrieval (R1) | `gemma4:e2b`, `nemotron-3-nano:4b`, `ministral-3:3b`, `granite4.2:3b`, or `qwen3.5:4b` | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out, all five | |
+| Summary (S1) | `nemotron-3-nano:4b`, `granite4.2:3b`, or `qwen3.5:4b` | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out, all three | |
+| Incomplete evidence (U1) | `qwen2.5-coder:7b`, `granite4.2:3b`, or `qwen3.5:4b` | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out | `gemma4:e2b` excluded: held-out response asked only for generic "upstream logs," not specifically the timing/duration/latency evidence the fixture requires. |
+| Instruction conflict (C1) | `gemma4:e2b`, `nemotron-3-nano:4b`, `ministral-3:3b`, `qwen2.5-coder:7b`, `granite4.2:3b`, `qwen2.5-coder:3b`, or `qwen3.5:4b` | Phase 1 PASS → 5/5 Phase 3 → 1/1 held-out, all seven | |
+
+This closes the same generalization gate already applied to Track B. Track A
+is now eligible for routing, per-category above; cloud routes stay `ON
+HOLD`.

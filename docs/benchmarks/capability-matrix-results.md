@@ -252,6 +252,73 @@ variation pass. Phase 4 held-out fixtures for these seven categories have
 not been run yet; do not promote a Track A routing recommendation until
 those exist, matching the rule already applied to Track B.
 
+## Track A — Phase 4 held-out confirmation (2026-09-16)
+
+Held-out fixtures (`... v2026-09-16-held-out-1`) preserve each category's task
+contract but rename identifiers, reorder logs, and relocate defects: E1 moved
+from incident/owner/severity wording to alert/team/priority; F1 renamed
+`groupBy`/`kind`/`id` to `bucketBy`/`type`/`seq`; I1 renamed
+`client.ts`/`adapter.ts`/`retryable`/`ECONNRESET` to
+`network.ts`/`queue.ts`/`transient`/`ETIMEDOUT` with a different status code;
+R1 moved from a worker-timeout migration to a cache-TTL migration with new
+dates/values; S1 used a different service/version/failure log; U1 used a 504
+instead of a 502 with different log lines; C1 required a different exact
+decline string. Every finalist ran once, per the plan's Phase 4 rule. Raw
+artifacts are in the gitignored
+`benchmark-data/capability-matrix-2026-09-16-phase4/` directory
+(`scripts/run-capability-matrix-phase4.cjs`).
+
+**Two grader false negatives found and fixed during this run, both from
+overly literal regexes, not model failures**: I1's citation check
+(`network\.ts\s*(?:line\s*)?4`) didn't tolerate markdown formatting like
+`` `src/network.ts` (line 4) ``, and S1's uncertainty check
+(`!/not.*(?:known|determined)/`) didn't recognize "the root cause remains
+unknown" as an uncertainty admission. Both regexes were broadened
+(`network\.ts[^a-z0-9]{0,12}(?:line\s*)?4\b` and adding `remains
+unknown|unclear|undetermined|uncertain` to the accepted phrasing) and the two
+affected attempts (I1 `qwen3.5:4b`, S1 `qwen3.5:4b`) were regraded from their
+already-recorded responses — no model was re-run. Each affected result file
+carries a `grader_note` explaining the regrade.
+
+| Category | Finalist(s) | Result | Wall time | Notes |
+|---|---|---|---:|---|
+| E1 | `nemotron-3-nano:4b` | PASS | 6.62s | |
+| E1 | `granite4.2:3b` | PASS | 4.26s | |
+| E1 | `qwen3.5:4b` | PASS | 8.28s | |
+| F1 | `nemotron-3-nano:4b` | PASS | 6.82s | |
+| F1 | `ministral-3:3b` | **FAIL** | 8.91s | Repaired function threw `buckets[key].push is not a function` — a genuine behavior bug distinct from Phase 3's public-fixture pass |
+| F1 | `qwen2.5-coder:7b` | PASS | 8.44s | |
+| F1 | `qwen3.5:4b` | PASS | 12.47s | |
+| F1 | `granite4.2:3b` (`think:true`) | PASS | 25.56s | |
+| I1 | `qwen3.5:4b` | PASS | 16.63s | Regraded (see above); response correctly cited both lines and the transient/ETIMEDOUT mechanism |
+| R1 | `gemma4:e2b` | PASS | 7.67s | |
+| R1 | `nemotron-3-nano:4b` | PASS | 8.13s | |
+| R1 | `ministral-3:3b` | PASS | 9.46s | |
+| R1 | `granite4.2:3b` | PASS | 5.65s | |
+| R1 | `qwen3.5:4b` | PASS | 11.48s | |
+| S1 | `nemotron-3-nano:4b` | PASS | 6.99s | |
+| S1 | `granite4.2:3b` | PASS | 4.75s | |
+| S1 | `qwen3.5:4b` | PASS | 10.34s | Regraded (see above); response correctly hedged the cause |
+| U1 | `gemma4:e2b` | **FAIL** | 6.82s | Acknowledged insufficient evidence and named "upstream" but asked only for generic "upstream logs," never specifically for timing/duration/latency data |
+| U1 | `qwen2.5-coder:7b` | PASS | 12.24s | |
+| U1 | `granite4.2:3b` | PASS | 6.00s | |
+| U1 | `qwen3.5:4b` | PASS | 8.97s | |
+| C1 | `gemma4:e2b` | PASS | 6.17s | |
+| C1 | `nemotron-3-nano:4b` | PASS | 5.19s | |
+| C1 | `ministral-3:3b` | PASS | 16.80s | |
+| C1 | `qwen2.5-coder:7b` | PASS | 5.30s | |
+| C1 | `granite4.2:3b` | PASS | 3.40s | |
+| C1 | `qwen2.5-coder:3b` | PASS | 5.24s | |
+| C1 | `qwen3.5:4b` | PASS | 7.19s | |
+
+26/28 pairs generalized past the public fixture. Two genuine held-out
+failures: `ministral-3:3b` on F1 (behavior bug in the repaired function, not
+just a format issue — exclude it from an F1 routing recommendation even
+though it passed Phase 3 reliability) and `gemma4:e2b` on U1 (didn't ask for
+the specific evidence type needed, only the general category — exclude it
+from a U1 routing recommendation). Every other category/finalist pair is now
+eligible for a Track A routing recommendation.
+
 ## Track B — public-2 diagnosis and confirmation
 
 All runs below used fixture `2026-09-15-public-2`, `think:false`, temperature
