@@ -208,3 +208,45 @@ the existing gitignored `benchmark-data/capability-matrix-2026-09-15-public-2/`
 directory. T1's prompt variant and full system prompt are stored in each T1
 artifact. Held-out T1 and G1 fixtures remain required before any routing
 recommendation.
+
+## Capability matrix Track B — held-out confirmation (2026-09-16)
+
+One attempt per finalist route against fixture `2026-09-16-held-out-1`, which
+renames every identifier the public fixture used (T1:
+`src/runtime.js`/`defaultTimeoutMs` → `src/worker-settings.js`/
+`requestTimeoutMs`; G1: `src/parse-port.js`/`parsePort` →
+`src/port-validator.js`/`validatePort`, with its two test assertions
+reordered) while keeping the same prompts, tool schema, grading contract, and
+generation settings. This checks that the public-2 passes reflected task
+capability, not memorized identifiers.
+
+| Route/config | Result | Wall time |
+|---|---|---:|
+| T1 `qwen3.5:4b`, final-report reminder | PASS | 16.60s |
+| G1 `qwen3.5:4b` | PASS | 6.96s |
+| G1 `nemotron-3-nano:4b` | PASS | 13.10s |
+
+All three passed: each performed genuine search/read/write/test tool calls
+against the renamed files and returned a contract-valid final report. Raw
+artifacts are in the gitignored
+`benchmark-data/capability-matrix-2026-09-16-held-out-1/` directory; full
+detail is in [capability-matrix-results.md](benchmarks/capability-matrix-results.md).
+`ministral-3:3b` was not re-run held-out — its public-2 confirmation already
+showed a hard G1 format failure (1/5) and is excluded below.
+
+## Capability matrix Track B — routing recommendation (2026-09-16)
+
+Per-category, not a single best model, per the plan's decision rule:
+
+| Category | Recommended route | Evidence | Notes |
+|---|---|---|---|
+| Tool use (T1: read-only lookup + focused test + exact report) | `qwen3.5:4b` with the final-report reminder | Screen FAIL (missing field) → diagnostic 5/5 public → 1/1 held-out | The reminder is load-bearing: plain baseline T1 phrasing failed the screen. No other local candidate passed T1 under any variant tested. |
+| Scoped repository edit (G1: single-file edit + visible/hidden tests + exact report) | `qwen3.5:4b` or `nemotron-3-nano:4b` | Screen PASS → 5/5 public confirmation → 1/1 held-out, both models | Either is reliable for this fixture family; `nemotron-3-nano:4b` had wider per-run latency variance (6.89–21.04s public) than `qwen3.5:4b` (7.61–7.99s public). |
+| Scoped repository edit — excluded | `ministral-3:3b` | Screen PASS → public confirmation 4/5 (Markdown-fenced final JSON) | Hard contract failure under this configuration; not re-run held-out. Do not route G1 traffic here without a prompt change that specifically targets bare-JSON output. |
+
+All other categories (extraction, code fix, investigation, retrieval,
+summary, incomplete evidence, instruction conflict) remain screen-only
+results in [capability-matrix-results.md](benchmarks/capability-matrix-results.md)
+and are not yet promoted to a routing recommendation — Phase 3/4 repeated and
+held-out runs have not been done for those categories. Cloud routes stay
+`ON HOLD`.

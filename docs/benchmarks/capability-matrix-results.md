@@ -200,6 +200,30 @@ The T1 and two 5/5 G1 routes need held-out confirmation before promotion to a
 routing recommendation. Do not retry or average away Ministral's format
 failure.
 
+## Track B — held-out confirmation (Phase 4)
+
+Fixture `2026-09-16-held-out-1` renames every identifier a route could have
+pattern-matched from `2026-09-15-public-2`: T1's timeout constant/file/test
+moved from `src/runtime.js`/`defaultTimeoutMs` to
+`src/worker-settings.js`/`requestTimeoutMs`; G1's function/file/test moved
+from `src/parse-port.js`/`parsePort` to `src/port-validator.js`/`validatePort`,
+with its two test assertions reordered. Same prompts, tool set, grading
+contract, `think:false`, temperature 0, seed 42, `num_ctx:16384`,
+`num_predict:1024`, and six-turn cap as the public-2 runs. One attempt per
+route, per the plan's Phase 4 (held-out prompts run once, not repeated).
+
+| Route/config | Result | Wall time | Key evidence | Raw artifact |
+|---|---|---|---|---|
+| T1 `qwen3.5:4b`, final-report reminder | PASS | 16.60s | Searched, read the renamed source and test files, ran the renamed focused test, returned exact JSON with `timeout_ms:65000`; no edits | `benchmark-data/capability-matrix-2026-09-16-held-out-1/t1-final-report-reminder-qwen3-5-4b-results.json` |
+| G1 `qwen3.5:4b` | PASS | 6.96s | Read then wrote only `src/port-validator.js`; visible and independent (reordered) hidden tests passed; exact JSON report | `benchmark-data/capability-matrix-2026-09-16-held-out-1/g1-qwen3-5-4b-results.json` |
+| G1 `nemotron-3-nano:4b` | PASS | 13.10s | Read then wrote only `src/port-validator.js`; visible and independent (reordered) hidden tests passed; valid JSON report | `benchmark-data/capability-matrix-2026-09-16-held-out-1/g1-nemotron-3-nano-4b-results.json` |
+
+All three routes generalized past the public fixture's exact names, so the
+public-2 5/5 confirmation results are not attributable to identifier
+memorization. These three routes are now eligible for the Track B routing
+recommendation; `ministral-3:3b` G1 is not (public-2 confirmation already
+showed a hard format failure and was not re-run held-out).
+
 ## f16 KV-cache follow-up
 
 Rerun the already-completed model/configuration pairs on the isolated `f16`

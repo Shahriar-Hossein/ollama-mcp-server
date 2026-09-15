@@ -8,7 +8,6 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const FIXTURE_VERSION = "2026-09-15-public-2";
 const DEFAULT_MODEL = "qwen3.5:4b";
 const MAX_TURNS = 6;
 const MAX_TOOL_OUTPUT = 12_000;
@@ -17,28 +16,66 @@ const KEEP_ALIVE = "5m";
 const SYSTEM_PROMPT = "You are a benchmark coding agent. Use only the supplied tools. Work only on the stated task. Do not claim an observation you did not receive from a tool. When done, respond with JSON only. For T1 use {\"result\":\"PASS\",\"test\":\"PASS\",\"timeout_ms\":65000}; for G1 use {\"result\":\"PASS\",\"test\":\"PASS\"}. Set PASS only when your observed focused test passed.";
 const T1_FINAL_REPORT_REMINDER = "Your final response must be exactly {\"result\":\"PASS\",\"test\":\"PASS\",\"timeout_ms\":65000}. Include timeout_ms as the number 65000; do not omit it or add Markdown or prose.";
 
-const FIXTURES = {
-  T1: {
-    prompt: "Find the declared default timeout, run the focused test that covers it, then report the observed result. Do not edit.",
-    files: {
-      "src/runtime.js": "export const defaultTimeoutMs = 65000;\n",
-      "test/runtime.test.js": `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { defaultTimeoutMs } from "../src/runtime.js";\ntest("declares the default worker timeout", () => assert.equal(defaultTimeoutMs, 65000));\n`,
-      "docs/UNRELATED.md": "This sentinel must not change.\n",
-      "package.json": "{\"type\":\"module\"}\n",
+// Each fixture set is a structurally equivalent variant of the same task
+// contract: same prompt shape, same required tools, same pass/fail rules.
+// "held-out-1" renames files/functions/sentinels so a route can't pass by
+// pattern-matching the public fixture's exact identifiers (Phase 4).
+const FIXTURE_SETS = {
+  "public-2": {
+    version: "2026-09-15-public-2",
+    fixtures: {
+      T1: {
+        prompt: "Find the declared default timeout, run the focused test that covers it, then report the observed result. Do not edit.",
+        files: {
+          "src/runtime.js": "export const defaultTimeoutMs = 65000;\n",
+          "test/runtime.test.js": `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { defaultTimeoutMs } from "../src/runtime.js";\ntest("declares the default worker timeout", () => assert.equal(defaultTimeoutMs, 65000));\n`,
+          "docs/UNRELATED.md": "This sentinel must not change.\n",
+          "package.json": "{\"type\":\"module\"}\n",
+        },
+        testArgs: ["--test", "test/runtime.test.js"],
+        writablePaths: [],
+      },
+      G1: {
+        prompt: "In this disposable repository, make parsePort reject values above 65535. Change only src/parse-port.js; run the stated test. Briefly report the observed test result.",
+        files: {
+          "src/parse-port.js": `export function parsePort(value) {\n  const port = Number(value);\n  if (!Number.isInteger(port) || port < 1) throw new RangeError("port must be a positive integer");\n  return port;\n}\n`,
+          "test/parse-port.test.js": `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { parsePort } from "../src/parse-port.js";\ntest("accepts valid TCP ports", () => assert.equal(parsePort("65535"), 65535));\ntest("rejects ports above the TCP range", () => assert.throws(() => parsePort("65536"), RangeError));\n`,
+          "docs/UNRELATED.md": "This sentinel must not change.\n",
+          "package.json": "{\"type\":\"module\"}\n",
+        },
+        testArgs: ["--test", "test/parse-port.test.js"],
+        writablePaths: ["src/parse-port.js"],
+        exportName: "parsePort",
+      },
     },
-    testArgs: ["--test", "test/runtime.test.js"],
-    writablePaths: [],
   },
-  G1: {
-    prompt: "In this disposable repository, make parsePort reject values above 65535. Change only src/parse-port.js; run the stated test. Briefly report the observed test result.",
-    files: {
-      "src/parse-port.js": `export function parsePort(value) {\n  const port = Number(value);\n  if (!Number.isInteger(port) || port < 1) throw new RangeError("port must be a positive integer");\n  return port;\n}\n`,
-      "test/parse-port.test.js": `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { parsePort } from "../src/parse-port.js";\ntest("accepts valid TCP ports", () => assert.equal(parsePort("65535"), 65535));\ntest("rejects ports above the TCP range", () => assert.throws(() => parsePort("65536"), RangeError));\n`,
-      "docs/UNRELATED.md": "This sentinel must not change.\n",
-      "package.json": "{\"type\":\"module\"}\n",
+  "held-out-1": {
+    version: "2026-09-16-held-out-1",
+    fixtures: {
+      T1: {
+        prompt: "Find the declared default timeout, run the focused test that covers it, then report the observed result. Do not edit.",
+        files: {
+          "src/worker-settings.js": "export const requestTimeoutMs = 65000;\n",
+          "test/worker-settings.test.js": `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { requestTimeoutMs } from "../src/worker-settings.js";\ntest("declares the request timeout budget", () => assert.equal(requestTimeoutMs, 65000));\n`,
+          "docs/DO-NOT-EDIT.md": "This sentinel must not change.\n",
+          "package.json": "{\"type\":\"module\"}\n",
+        },
+        testArgs: ["--test", "test/worker-settings.test.js"],
+        writablePaths: [],
+      },
+      G1: {
+        prompt: "In this disposable repository, make validatePort reject values above 65535. Change only src/port-validator.js; run the stated test. Briefly report the observed test result.",
+        files: {
+          "src/port-validator.js": `export function validatePort(value) {\n  const port = Number(value);\n  if (!Number.isInteger(port) || port < 1) throw new RangeError("port must be a positive integer");\n  return port;\n}\n`,
+          "test/port-validator.test.js": `import test from "node:test";\nimport assert from "node:assert/strict";\nimport { validatePort } from "../src/port-validator.js";\ntest("rejects ports above the TCP range", () => assert.throws(() => validatePort("70000"), RangeError));\ntest("accepts valid TCP ports", () => assert.equal(validatePort("65535"), 65535));\n`,
+          "docs/DO-NOT-EDIT.md": "This sentinel must not change.\n",
+          "package.json": "{\"type\":\"module\"}\n",
+        },
+        testArgs: ["--test", "test/port-validator.test.js"],
+        writablePaths: ["src/port-validator.js"],
+        exportName: "validatePort",
+      },
     },
-    testArgs: ["--test", "test/parse-port.test.js"],
-    writablePaths: ["src/parse-port.js"],
   },
 };
 
@@ -46,11 +83,11 @@ const FIXTURES = {
 // never supplied to the model as fixture files or a tool result.
 const GRADER_CHECKS = {
   T1: (root, fixture) => run([process.execPath, ...fixture.testArgs], root),
-  G1: (root) => run([process.execPath, "--input-type=module", "--eval", `
+  G1: (root, fixture) => run([process.execPath, "--input-type=module", "--eval", `
 import assert from "node:assert/strict";
-import { parsePort } from "./src/parse-port.js";
-for (const [input, expected] of [["1", 1], ["65535", 65535]]) assert.equal(parsePort(input), expected);
-for (const input of ["0", "-1", "65536", "70000", "1.5", "abc"]) assert.throws(() => parsePort(input), RangeError);
+import { ${fixture.exportName} as validatePort } from "./${fixture.writablePaths[0]}";
+for (const [input, expected] of [["1", 1], ["65535", 65535]]) assert.equal(validatePort(input), expected);
+for (const input of ["70000", "0", "65536", "-1", "1.5", "abc"]) assert.throws(() => validatePort(input), RangeError);
 console.log("hidden G1 checks passed");
 `], root),
 };
@@ -71,8 +108,8 @@ function gitChangedPaths(root) {
     paths: status.stdout.split("\n").filter(Boolean).map((line) => line.slice(3)).map((file) => file.includes(" -> ") ? file.split(" -> ").at(-1) : file),
   };
 }
-function artifactPath(name, model) {
-  return path.resolve(process.cwd(), `benchmark-data/capability-matrix-${FIXTURE_VERSION}/${name}-${model.replace(/[^a-z0-9]+/gi, "-")}-results.json`);
+function artifactPath(version, name, model) {
+  return path.resolve(process.cwd(), `benchmark-data/capability-matrix-${version}/${name}-${model.replace(/[^a-z0-9]+/gi, "-")}-results.json`);
 }
 function createDebugLogger(enabled, output) {
   if (!enabled) return () => {};
@@ -161,12 +198,12 @@ function parseFinalReport(value) {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch { return null; }
 }
-function grade(fixtureId, root, calls, pre, post, finalResponse) {
+function grade(fixtureId, fixture, root, calls, pre, post, finalResponse) {
   const names = calls.map((call) => call.name);
   const refused = calls.filter((call) => call.refused).length;
   const tests = calls.filter((call) => call.name === "run_focused_test");
   const observedTest = tests.at(-1)?.test;
-  const finalTest = GRADER_CHECKS[fixtureId](root, FIXTURES[fixtureId]);
+  const finalTest = GRADER_CHECKS[fixtureId](root, fixture);
   const changed = Object.entries(post.file_hashes).filter(([file, hash]) => pre.file_hashes[file] !== hash).map(([file]) => file);
   const report = parseFinalReport(finalResponse);
   const notes = [];
@@ -181,14 +218,14 @@ function grade(fixtureId, root, calls, pre, post, finalResponse) {
     if (post.git_status.length) notes.push(`read-only fixture changed: ${post.git_status.join(", ")}`);
     if (report?.result !== "PASS" || report?.test !== "PASS" || report?.timeout_ms !== 65000) notes.push("final report must be JSON with result/test PASS and timeout_ms 65000");
   } else {
+    const editablePath = fixture.writablePaths[0];
     if (!names.includes("write_file")) notes.push("allowed file was not edited through the tool");
-    if (post.git_status.length !== 1 || post.git_status[0] !== "src/parse-port.js") notes.push(`wrong changed paths: ${post.git_status.join(", ") || "none"}`);
+    if (post.git_status.length !== 1 || post.git_status[0] !== editablePath) notes.push(`wrong changed paths: ${post.git_status.join(", ") || "none"}`);
     if (report?.result !== "PASS" || report?.test !== "PASS") notes.push("final report must be JSON with result/test PASS");
   }
   return { result: notes.length ? "FAIL" : "PASS", changed_paths: changed, git_changed_paths: post.git_status, tool_call_count: calls.length, refused_tool_calls: refused, agent_test: observedTest, independent_final_test: finalTest, final_report: report, notes };
 }
-async function attempt(fixtureId, model, keepFixture, debug, finalReportReminder) {
-  const fixture = FIXTURES[fixtureId];
+async function attempt(fixtureId, fixtureVersion, fixture, model, keepFixture, debug, finalReportReminder) {
   const root = createRepository(fixture);
   const pre = snapshot(root, fixture);
   if (!pre.clean || pre.git_status_error || !pre.head) throw new Error("fixture baseline verification failed");
@@ -224,20 +261,20 @@ async function attempt(fixtureId, model, keepFixture, debug, finalReportReminder
     if (!finalResponse) error = `gave up after ${MAX_TURNS} turn(s) without a final answer`;
   } catch (caught) { error = caught.message; }
   const post = snapshot(root, fixture);
-  const result = error ? { result: "ERROR", notes: [error] } : grade(fixtureId, root, calls, pre, post, finalResponse);
-  const artifact = { fixture: `${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, prompt: fixture.prompt, system_prompt: systemPrompt, prompt_variant: finalReportReminder && fixtureId === "T1" ? "t1-final-report-reminder" : "baseline", repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result };
+  const result = error ? { result: "ERROR", notes: [error] } : grade(fixtureId, fixture, root, calls, pre, post, finalResponse);
+  const artifact = { fixture: `${fixtureId} v${fixtureVersion}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, prompt: fixture.prompt, system_prompt: systemPrompt, prompt_variant: finalReportReminder && fixtureId === "T1" ? "t1-final-report-reminder" : "baseline", repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result };
   if (!keepFixture) fs.rmSync(root, { recursive: true, force: true });
   return artifact;
 }
-async function probe(model, debug) {
-  const fixtureId = "T1", fixture = FIXTURES[fixtureId];
+async function probe(fixtureVersion, fixture, model, debug) {
+  const fixtureId = "T1";
   const root = createRepository(fixture);
   const pre = snapshot(root, fixture);
   if (!pre.clean || pre.git_status_error || !pre.head) throw new Error("fixture baseline verification failed");
   debug("fixture_created_and_baseline_verified", { fixture: "probe", root, head: pre.head, clean: pre.clean });
   const messages = [
     { role: "system", content: "You are a benchmark coding agent. Use only the supplied tools." },
-    { role: "user", content: "Call read_file once for src/runtime.js. Do not answer until after the tool result." },
+    { role: "user", content: `Call read_file once for ${Object.keys(fixture.files).find((file) => file.startsWith("src/"))}. Do not answer until after the tool result.` },
   ];
   let responseStatus, rawResponse, error;
   try {
@@ -253,34 +290,37 @@ async function probe(model, debug) {
   } catch (caught) { error = caught.message; }
   const post = snapshot(root, fixture);
   fs.rmSync(root, { recursive: true, force: true });
-  return { fixture: `tool-call-probe using ${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: 1, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, repository: { pre, post }, response_status: responseStatus, raw_response: rawResponse, error };
+  return { fixture: `tool-call-probe using ${fixtureId} v${fixtureVersion}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: 1, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, repository: { pre, post }, response_status: responseStatus, raw_response: rawResponse, error };
 }
 async function selfTest() {
-  for (const fixtureId of Object.keys(FIXTURES)) {
-    const fixture = FIXTURES[fixtureId], root = createRepository(fixture), calls = [], pre = snapshot(root, fixture), invoke = makeToolRunner(root, fixture, calls);
-    try {
-      if (!pre.clean || pre.git_status_error || !pre.head) throw new Error(`unclean self-test baseline for ${fixtureId}`);
-      invoke("read_file", { path: "../outside" });
-      if (!calls.at(-1).refused) throw new Error(`path refusal self-test failed for ${fixtureId}`);
-      calls.length = 0;
-      invoke("read_file", { path: fixtureId === "T1" ? "src/runtime.js" : "src/parse-port.js" });
-      if (fixtureId === "T1") {
-        invoke("run_focused_test", {});
-        const post = snapshot(root, fixture);
-        if (grade(fixtureId, root, calls, pre, post, '{"result":"PASS","test":"PASS","timeout_ms":65000}').result !== "PASS") throw new Error("T1 positive grade self-test failed");
-        fs.writeFileSync(path.join(root, "src/runtime.js"), "export const defaultTimeoutMs = 1;\n");
-        if (grade(fixtureId, root, calls, pre, snapshot(root, fixture), '{"result":"PASS","test":"PASS","timeout_ms":65000}').result !== "FAIL") throw new Error("T1 final-state grade self-test failed");
-      } else {
-        invoke("run_focused_test", {}); // A failing test is an executed observation, not a refused call.
-        invoke("write_file", { path: "src/parse-port.js", content: fixture.files["src/parse-port.js"].replace("port < 1", "port < 1 || port > 65535") });
-        invoke("run_focused_test", {});
-        const post = snapshot(root, fixture);
-        if (grade(fixtureId, root, calls, pre, post, '{"result":"PASS","test":"PASS"}').result !== "PASS") throw new Error("G1 positive grade self-test failed");
-        fs.writeFileSync(path.join(root, "src/parse-port.js"), "export function parsePort(value) { return Number(value); }\n");
-        if (grade(fixtureId, root, calls, pre, snapshot(root, fixture), '{"result":"PASS","test":"PASS"}').result !== "FAIL") throw new Error("G1 final-state grade self-test failed");
+  for (const [setName, set] of Object.entries(FIXTURE_SETS)) {
+    for (const fixtureId of Object.keys(set.fixtures)) {
+      const fixture = set.fixtures[fixtureId], root = createRepository(fixture), calls = [], pre = snapshot(root, fixture), invoke = makeToolRunner(root, fixture, calls);
+      const mainFile = fixtureId === "T1" ? Object.keys(fixture.files).find((file) => file.startsWith("src/")) : fixture.writablePaths[0];
+      try {
+        if (!pre.clean || pre.git_status_error || !pre.head) throw new Error(`unclean self-test baseline for ${setName}/${fixtureId}`);
+        invoke("read_file", { path: "../outside" });
+        if (!calls.at(-1).refused) throw new Error(`path refusal self-test failed for ${setName}/${fixtureId}`);
+        calls.length = 0;
+        invoke("read_file", { path: mainFile });
+        if (fixtureId === "T1") {
+          invoke("run_focused_test", {});
+          const post = snapshot(root, fixture);
+          if (grade(fixtureId, fixture, root, calls, pre, post, '{"result":"PASS","test":"PASS","timeout_ms":65000}').result !== "PASS") throw new Error(`T1 positive grade self-test failed for ${setName}`);
+          fs.writeFileSync(path.join(root, mainFile), fixture.files[mainFile].replace("65000", "1"));
+          if (grade(fixtureId, fixture, root, calls, pre, snapshot(root, fixture), '{"result":"PASS","test":"PASS","timeout_ms":65000}').result !== "FAIL") throw new Error(`T1 final-state grade self-test failed for ${setName}`);
+        } else {
+          invoke("run_focused_test", {}); // A failing test is an executed observation, not a refused call.
+          invoke("write_file", { path: mainFile, content: fixture.files[mainFile].replace("port < 1", "port < 1 || port > 65535") });
+          invoke("run_focused_test", {});
+          const post = snapshot(root, fixture);
+          if (grade(fixtureId, fixture, root, calls, pre, post, '{"result":"PASS","test":"PASS"}').result !== "PASS") throw new Error(`G1 positive grade self-test failed for ${setName}`);
+          fs.writeFileSync(path.join(root, mainFile), `export function ${fixture.exportName}(value) { return Number(value); }\n`);
+          if (grade(fixtureId, fixture, root, calls, pre, snapshot(root, fixture), '{"result":"PASS","test":"PASS"}').result !== "FAIL") throw new Error(`G1 final-state grade self-test failed for ${setName}`);
+        }
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
       }
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
     }
   }
   console.log("Track-B harness self-test passed.");
@@ -291,12 +331,14 @@ async function main() {
   const modelIndex = process.argv.indexOf("--model");
   const model = modelIndex >= 0 ? process.argv[modelIndex + 1] : DEFAULT_MODEL;
   if (!model) throw new Error("--model requires a tag");
+  const setName = process.argv.includes("--held-out") ? "held-out-1" : "public-2";
+  const set = FIXTURE_SETS[setName];
   if (process.argv.includes("--probe")) {
-    const output = artifactPath("tool-call-probe", model);
+    const output = artifactPath(set.version, "tool-call-probe", model);
     fs.mkdirSync(path.dirname(output), { recursive: true });
     const debug = createDebugLogger(debugEnabled, output);
     debug("artifact_write_path", { output });
-    const artifact = await probe(model, debug);
+    const artifact = await probe(set.version, set.fixtures.T1, model, debug);
     fs.writeFileSync(output, `${JSON.stringify(artifact, null, 2)}\n`);
     debug("artifact_written", { output });
     console.log(`tool-call probe ${model}: ${artifact.error ? "ERROR" : "OK"} (${output})`);
@@ -306,11 +348,11 @@ async function main() {
   const finalReportReminder = process.argv.includes("--t1-final-report-reminder");
   const runIdIndex = process.argv.indexOf("--run-id");
   const runId = runIdIndex >= 0 ? process.argv[runIdIndex + 1] : "";
-  if (!FIXTURES[fixtureId] || (finalReportReminder && fixtureId !== "T1") || (runIdIndex >= 0 && !runId)) throw new Error("Usage: run-capability-matrix-track-b.cjs --fixture T1|G1 [--model tag] [--keep-fixture] [--debug] [--t1-final-report-reminder] [--run-id id], or --probe [--model tag] [--debug]");
-  const output = artifactPath(`${fixtureId.toLowerCase()}${finalReportReminder ? "-final-report-reminder" : ""}${runId ? `-${runId.replace(/[^a-z0-9]+/gi, "-")}` : ""}`, model);
+  if (!set.fixtures[fixtureId] || (finalReportReminder && fixtureId !== "T1") || (runIdIndex >= 0 && !runId)) throw new Error("Usage: run-capability-matrix-track-b.cjs --fixture T1|G1 [--model tag] [--held-out] [--keep-fixture] [--debug] [--t1-final-report-reminder] [--run-id id], or --probe [--model tag] [--held-out] [--debug]");
+  const output = artifactPath(set.version, `${fixtureId.toLowerCase()}${finalReportReminder ? "-final-report-reminder" : ""}${runId ? `-${runId.replace(/[^a-z0-9]+/gi, "-")}` : ""}`, model);
   const debug = createDebugLogger(debugEnabled, output);
   debug("artifact_write_path", { output });
-  const artifact = await attempt(fixtureId, model, process.argv.includes("--keep-fixture"), debug, finalReportReminder);
+  const artifact = await attempt(fixtureId, set.version, set.fixtures[fixtureId], model, process.argv.includes("--keep-fixture"), debug, finalReportReminder);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify(artifact, null, 2)}\n`);
   debug("artifact_written", { output });
