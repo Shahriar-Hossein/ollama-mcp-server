@@ -89,19 +89,71 @@ good," it's purely "the local worker's tool calls don't cost Claude-side
 quota" — and that framing only pays off if the accuracy gap is tolerable
 and reliably self-flagged.
 
+## Luna versus local explorer: same ten questions, one small and one larger repo (2026-09-16)
+
+Follow-up to the five-question pilot. A Luna `Explore` subagent and the
+real `local_explorer_task` protocol using `qwen3.5:4b` received the same
+five questions on this repository and the same five on
+`/home/shahriar/projects/sharks-capital-inc`. Sharks was selected as the
+largest Git working tree in `projects/` at the time (~1.0 GB excluding
+`node_modules` and `.git`); it is asset-heavy, but has 58 TS/TSX/JS source
+files (4,188 lines) versus this repo's 9 (617 lines).
+
+The local run used the production system prompt, `glob`/`grep`/`read`
+implementations, `qwen3.5:4b`, 8-call/5-file/3,000-character budgets, and
+the same questions. The benchmark driver persisted the conversation
+between individual Ollama requests only because this environment interrupts
+long foreground local calls; it did not alter messages, tool results, or
+budgets. Do not compare wall time from this pass: that interruption made it
+dominated by harness scheduling. Tool-call counts remain meaningful.
+
+| Explorer | This repo (5) | Sharks (5) | Fully correct | Tool calls | Confidence signal |
+|---|---:|---:|---:|---:|---|
+| Luna `Explore` | 5/5 | 5/5 | 10/10 | 17 / 24 (self-reported shell/search calls) | all high; all correct |
+| `qwen3.5:4b` `local_explorer_task` | 1 correct, 1 partial, 3 wrong/no answer | 0 correct, 2 partial, 3 wrong | **1/10** | 42 / 46 | one low on a wrong result; two wrong results were medium/high or omitted confidence |
+
+The local model's sole fully correct result was the shell-injection question
+(5 calls). Its timeout/defaults answer found the shared Axios configuration
+but omitted the distinct autonomous-tool default, so it is partial. On the
+cloud-validator question it spent 11 calls guessing unrelated paths and
+then confidently described the local-worker allowlist instead of
+`scripts/validate-cloud-bash.cjs`; this is wrong at **high** confidence. It
+then exhausted the registration question with a **low**-confidence answer
+about an unrelated benchmark script, and produced no final answer for the
+worker-loop question after repeated `*.py` glob guesses.
+
+On Sharks, the failure shape got worse rather than better. The navigation
+answer fabricated menu entries and line ranges after nine calls; the contact
+answer invented `/api/contact` instead of the EmailJS submission; and the
+team-tab answer inspected the blog page. The gallery answer correctly named
+some child components but incorrectly made `GalleryCard` the state owner
+instead of `GalleryPage`. The hero answer found the two relevant files but
+did not establish `activeIndex`, the 4-second autoplay, or the 1,000-ms
+transition. `glob` brace patterns unsupported by this tool
+(`**/*.{ts,tsx,js,jsx}`) repeatedly returned no matches, and `grep` also
+searched generated `.next` files because the implementation currently
+excludes only `node_modules` and `.git` from grep results.
+
+This is not a fair wall-clock comparison: the local worker was deliberately
+run through a fragmented harness and Luna is a real Codex subagent with a
+different search interface. It *is* a fair answer-quality and path-finding
+comparison because the questions, roots, local model, and local explorer
+budget were held constant. It also tightens the confidence-gate conclusion:
+the gate caught one failure, but not the cloud-validator high-confidence
+hallucination or the navigation medium-confidence hallucination. Treat it
+as necessary but insufficient.
+
 ## What this means for the routing idea
 
-- **The concept is sound, but only with the confidence-gate step.**
-  `qwen3.5:4b`'s one wrong answer was also its one low-confidence answer.
-  If the router trusts high-confidence local answers and escalates
-  low-confidence ones to Haiku, this run's numbers say that gate would
-  have worked. Skipping the gate (trusting every local answer as-is) would
-  have shipped one fabricated answer straight to Sonnet.
+- **A confidence gate is necessary but not sufficient.** The original
+  five-question pilot's one wrong answer was low confidence, but the
+  ten-question follow-up found both high- and medium-confidence fabricated
+  answers. Escalating only `low` confidence would still have trusted wrong
+  output.
 - **`qwen2.5-coder:7b` should not be used for this tier at all** — it fails
-  silently and confidently, not just occasionally. This overrides the
-  original suggestion to start with it; start with `qwen3.5:4b` instead,
-  consistent with the T1/G1 rows already in
-  [BENCHMARKS.md](../BENCHMARKS.md).
+  silently and confidently, not just occasionally. `qwen3.5:4b` remains the
+  only series candidate confirmed to emit real tool calls, but that is not
+  enough to recommend it as an explorer after the follow-up result.
 - **Sample size is the real caveat.** Five tasks, one repo, one run each —
   this is a screen, not a reliability estimate (see BENCHMARKS.md's
   evidence-strength framing). Before adopting this as a default routing
@@ -109,8 +161,10 @@ and reliably self-flagged.
   specifically stress the failure mode seen here (symbol/path guessing
   before grepping) since it's the one that produced a confident-sounding
   wrong answer.
-- **Net recommendation: not yet worth wiring in as a default tier.** On a
-  repo this small, Haiku's own Glob/Grep/Read usage is already cheap (9
-  tool calls, <30s) — the local tier's savings would only show up on much
-  larger repos/tasks where Haiku's own exploration cost is the thing being
-  optimized away, which this pilot didn't test.
+- **Net recommendation: do not wire this in as a default tier yet.** The
+  follow-up tested a larger source tree and found substantially worse local
+  path-finding, including generated-output scans. Luna got all ten answers;
+  the local tool got one. A future local retry needs a stronger routing gate
+  than self-reported confidence and likely tool fixes (at least generated
+  directory exclusion and better glob guidance) before it can be trusted to
+  pre-filter real repos.
