@@ -8,10 +8,12 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const FIXTURE_VERSION = "2026-09-15-public-1";
+const FIXTURE_VERSION = "2026-09-15-public-2";
 const DEFAULT_MODEL = "qwen3.5:4b";
 const MAX_TURNS = 6;
 const MAX_TOOL_OUTPUT = 12_000;
+const REQUEST_TIMEOUT_MS = 120_000;
+const KEEP_ALIVE = "5m";
 
 const FIXTURES = {
   T1: {
@@ -38,6 +40,19 @@ const FIXTURES = {
   },
 };
 
+// These checks are intentionally separate from FIXTURES: their assertions are
+// never supplied to the model as fixture files or a tool result.
+const GRADER_CHECKS = {
+  T1: (root, fixture) => run([process.execPath, ...fixture.testArgs], root),
+  G1: (root) => run([process.execPath, "--input-type=module", "--eval", `
+import assert from "node:assert/strict";
+import { parsePort } from "./src/parse-port.js";
+for (const [input, expected] of [["1", 1], ["65535", 65535]]) assert.equal(parsePort(input), expected);
+for (const input of ["0", "-1", "65536", "70000", "1.5", "abc"]) assert.throws(() => parsePort(input), RangeError);
+console.log("hidden G1 checks passed");
+`], root),
+};
+
 function sha256(contents) { return crypto.createHash("sha256").update(contents).digest("hex"); }
 function clipped(value) {
   const text = String(value || "");
@@ -46,6 +61,13 @@ function clipped(value) {
 function run(argv, cwd) {
   const result = spawnSync(argv[0], argv.slice(1), { cwd, encoding: "utf8", timeout: 30_000 });
   return { argv, exit_code: result.status, signal: result.signal, error: result.error?.message, stdout: clipped(result.stdout), stderr: clipped(result.stderr) };
+}
+function gitChangedPaths(root) {
+  const status = run(["git", "status", "--porcelain=v1", "--untracked-files=all"], root);
+  if (status.exit_code !== 0) return { error: status.stderr || "git status failed", paths: [] };
+  return {
+    paths: status.stdout.split("\n").filter(Boolean).map((line) => line.slice(3)).map((file) => file.includes(" -> ") ? file.split(" -> ").at(-1) : file),
+  };
 }
 function artifactPath(name, model) {
   return path.resolve(process.cwd(), `benchmark-data/capability-matrix-${FIXTURE_VERSION}/${name}-${model.replace(/[^a-z0-9]+/gi, "-")}-results.json`);
@@ -69,10 +91,10 @@ function checked(relativePath) {
 function snapshot(root, fixture) {
   const sentinels = {};
   for (const [name, content] of Object.entries(fixture.files)) sentinels[name] = sha256(fs.readFileSync(path.join(root, name)));
-  const status = run(["git", "status", "--porcelain=v1"], root);
+  const status = gitChangedPaths(root);
   const head = run(["git", "rev-parse", "HEAD"], root);
   const diff = run(["git", "diff", "--no-ext-diff", "--"], root);
-  return { head: head.stdout.trim(), clean: !status.stdout.trim(), file_hashes: sentinels, git_status: status.stdout.trim(), git_diff: diff.stdout };
+  return { head: head.stdout.trim(), clean: !status.paths.length, file_hashes: sentinels, git_status: status.paths, git_status_error: status.error, git_diff: diff.stdout };
 }
 function createRepository(fixture) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ollama-track-b-"));
@@ -100,60 +122,77 @@ function makeToolRunner(root, fixture, calls) {
   function record(name, args, result) { calls.push({ at: new Date().toISOString(), name, arguments: args, ...result }); return result.output; }
   return (name, args = {}) => {
     if (name === "search") {
-      if (typeof args.query !== "string" || !args.query) return record(name, args, { ok: false, output: "Invalid query." });
+      if (typeof args.query !== "string" || !args.query) return record(name, args, { executed: false, refused: true, output: "Invalid query." });
       const matches = [];
       for (const file of Object.keys(fixture.files)) for (const [index, line] of fs.readFileSync(path.join(root, file), "utf8").split("\n").entries()) {
         if (line.includes(args.query)) matches.push(`${file}:${index + 1}:${line}`);
       }
-      return record(name, args, { ok: true, output: matches.length ? matches.join("\n") : "No matches." });
+      return record(name, args, { executed: true, refused: false, output: matches.length ? matches.join("\n") : "No matches." });
     }
     if (name === "read_file") {
       const file = checked(args.path);
-      if (!file || !Object.hasOwn(fixture.files, file)) return record(name, args, { ok: false, output: "Refused: path is outside this fixture." });
-      return record(name, args, { ok: true, output: clipped(fs.readFileSync(path.join(root, file), "utf8")) });
+      if (!file || !Object.hasOwn(fixture.files, file)) return record(name, args, { executed: false, refused: true, output: "Refused: path is outside this fixture." });
+      return record(name, args, { executed: true, refused: false, output: clipped(fs.readFileSync(path.join(root, file), "utf8")) });
     }
     if (name === "run_focused_test") {
       const result = run([process.execPath, ...fixture.testArgs], root);
-      return record(name, args, { ok: result.exit_code === 0, test: result, output: `${result.stdout}${result.stderr}`.trim() || "(no output)" });
+      return record(name, args, { executed: true, refused: false, test: result, output: `${result.stdout}${result.stderr}`.trim() || "(no output)" });
     }
     if (name === "write_file") {
       const file = checked(args.path);
-      if (!file || !fixture.writablePaths.includes(file) || typeof args.content !== "string") return record(name, args, { ok: false, output: "Refused: only the declared editable fixture path may be written." });
+      if (!file || !fixture.writablePaths.includes(file) || typeof args.content !== "string") return record(name, args, { executed: false, refused: true, output: "Refused: only the declared editable fixture path may be written." });
       fs.writeFileSync(path.join(root, file), args.content);
-      return record(name, args, { ok: true, output: `Wrote ${file}.` });
+      return record(name, args, { executed: true, refused: false, output: `Wrote ${file}.` });
     }
-    return record(name, args, { ok: false, output: "Refused: unknown tool." });
+    return record(name, args, { executed: false, refused: true, output: "Refused: unknown tool." });
   };
 }
-function callArguments(call) { return call?.function?.arguments && typeof call.function.arguments === "object" ? call.function.arguments : {}; }
-function grade(fixtureId, calls, pre, post, finalResponse) {
+function callArguments(call) {
+  const args = call?.function?.arguments;
+  if (args && typeof args === "object") return args;
+  if (typeof args !== "string") return {};
+  try { const parsed = JSON.parse(args); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
+}
+function parseFinalReport(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+}
+function grade(fixtureId, root, calls, pre, post, finalResponse) {
   const names = calls.map((call) => call.name);
-  const invalid = calls.filter((call) => !call.ok).length;
+  const refused = calls.filter((call) => call.refused).length;
   const tests = calls.filter((call) => call.name === "run_focused_test");
-  const lastTest = tests.at(-1)?.test;
+  const observedTest = tests.at(-1)?.test;
+  const finalTest = GRADER_CHECKS[fixtureId](root, FIXTURES[fixtureId]);
   const changed = Object.entries(post.file_hashes).filter(([file, hash]) => pre.file_hashes[file] !== hash).map(([file]) => file);
+  const report = parseFinalReport(finalResponse);
   const notes = [];
-  if (invalid) notes.push(`${invalid} invalid/refused tool call(s)`);
+  if (refused) notes.push(`${refused} refused tool call(s)`);
   if (!tests.length) notes.push("focused test was not run");
-  if (lastTest?.exit_code !== 0) notes.push("last focused test did not pass");
+  if (observedTest?.exit_code !== 0) notes.push("last agent-run focused test did not pass");
+  if (finalTest.exit_code !== 0) notes.push("independent final-state grader check did not pass");
   if (!post.head || post.head !== pre.head) notes.push("fixture HEAD changed");
+  if (post.git_status_error) notes.push(post.git_status_error);
   if (fixtureId === "T1") {
-    if (!names.includes("search") || !names.includes("read_file")) notes.push("did not perform both search and read");
-    if (changed.length) notes.push(`read-only fixture changed: ${changed.join(", ")}`);
+    if (!names.includes("read_file")) notes.push("did not read a fixture file");
+    if (post.git_status.length) notes.push(`read-only fixture changed: ${post.git_status.join(", ")}`);
+    if (report?.result !== "PASS" || report?.test !== "PASS" || report?.timeout_ms !== 65000) notes.push("final report must be JSON with result/test PASS and timeout_ms 65000");
   } else {
     if (!names.includes("write_file")) notes.push("allowed file was not edited through the tool");
-    if (changed.length !== 1 || changed[0] !== "src/parse-port.js") notes.push(`wrong changed paths: ${changed.join(", ") || "none"}`);
+    if (post.git_status.length !== 1 || post.git_status[0] !== "src/parse-port.js") notes.push(`wrong changed paths: ${post.git_status.join(", ") || "none"}`);
+    if (report?.result !== "PASS" || report?.test !== "PASS") notes.push("final report must be JSON with result/test PASS");
   }
-  if (!/\b(pass|passed|success)\b/i.test(finalResponse || "")) notes.push("final report does not state the observed passing test result");
-  return { result: notes.length ? "FAIL" : "PASS", changed_paths: changed, tool_call_count: calls.length, invalid_tool_calls: invalid, notes };
+  return { result: notes.length ? "FAIL" : "PASS", changed_paths: changed, git_changed_paths: post.git_status, tool_call_count: calls.length, refused_tool_calls: refused, agent_test: observedTest, independent_final_test: finalTest, final_report: report, notes };
 }
 async function attempt(fixtureId, model, keepFixture, debug) {
   const fixture = FIXTURES[fixtureId];
   const root = createRepository(fixture);
   const pre = snapshot(root, fixture);
+  if (!pre.clean || pre.git_status_error || !pre.head) throw new Error("fixture baseline verification failed");
   debug("fixture_created_and_baseline_verified", { fixture: fixtureId, root, head: pre.head, clean: pre.clean });
   const calls = [];
-  const messages = [{ role: "system", content: "You are a benchmark coding agent. Use only the supplied tools. Work only on the stated task. Do not claim an observation you did not receive from a tool. When done, give a concise plain-text report." }, { role: "user", content: fixture.prompt }];
+  const messages = [{ role: "system", content: "You are a benchmark coding agent. Use only the supplied tools. Work only on the stated task. Do not claim an observation you did not receive from a tool. When done, respond with JSON only. For T1 use {\"result\":\"PASS\",\"test\":\"PASS\",\"timeout_ms\":65000}; for G1 use {\"result\":\"PASS\",\"test\":\"PASS\"}. Set PASS only when your observed focused test passed." }, { role: "user", content: fixture.prompt }];
   const turns = [];
   let finalResponse = "";
   let error;
@@ -162,28 +201,28 @@ async function attempt(fixtureId, model, keepFixture, debug) {
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       const started = Date.now();
       debug("chat_request_started", { turn: turn + 1, endpoint: "/api/chat" });
-      const response = await fetch("http://127.0.0.1:11434/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: 0 }) });
+      const response = await fetch("http://127.0.0.1:11434/api/chat", { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: KEEP_ALIVE }) });
       debug("chat_response_status", { turn: turn + 1, status: response.status, ok: response.ok, wall_time_ms: Date.now() - started });
       const body = await response.text();
       let data;
       try { data = JSON.parse(body); } catch { throw new Error(`HTTP ${response.status}: response was not JSON: ${clipped(body)}`); }
       if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
       const message = data.message || {};
-      turns.push({ turn: turn + 1, wall_time_ms: Date.now() - started, done_reason: data.done_reason, total_duration_ns: data.total_duration, message: { content: message.content || "", tool_calls: message.tool_calls || [] } });
+      turns.push({ turn: turn + 1, wall_time_ms: Date.now() - started, done_reason: data.done_reason, total_duration_ns: data.total_duration, load_duration_ns: data.load_duration, prompt_eval_count: data.prompt_eval_count, prompt_eval_duration_ns: data.prompt_eval_duration, eval_count: data.eval_count, eval_duration_ns: data.eval_duration, message: { content: message.content || "", tool_calls: message.tool_calls || [] } });
       messages.push(message);
       if (!message.tool_calls?.length) { finalResponse = message.content || ""; break; }
       for (const call of message.tool_calls) {
         const name = call.function?.name;
         const args = callArguments(call);
         debug("parsed_tool_call", { turn: turn + 1, name, arguments: args, id: call.id });
-        messages.push({ role: "tool", content: invoke(name, args), tool_call_id: call.id });
+        messages.push({ role: "tool", content: invoke(name, args), tool_call_id: call.id, tool_name: name });
       }
     }
     if (!finalResponse) error = `gave up after ${MAX_TURNS} turn(s) without a final answer`;
   } catch (caught) { error = caught.message; }
   const post = snapshot(root, fixture);
-  const result = error ? { result: "ERROR", notes: [error] } : grade(fixtureId, calls, pre, post, finalResponse);
-  const artifact = { fixture: `${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS }, prompt: fixture.prompt, repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result };
+  const result = error ? { result: "ERROR", notes: [error] } : grade(fixtureId, root, calls, pre, post, finalResponse);
+  const artifact = { fixture: `${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, prompt: fixture.prompt, repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result };
   if (!keepFixture) fs.rmSync(root, { recursive: true, force: true });
   return artifact;
 }
@@ -191,6 +230,7 @@ async function probe(model, debug) {
   const fixtureId = "T1", fixture = FIXTURES[fixtureId];
   const root = createRepository(fixture);
   const pre = snapshot(root, fixture);
+  if (!pre.clean || pre.git_status_error || !pre.head) throw new Error("fixture baseline verification failed");
   debug("fixture_created_and_baseline_verified", { fixture: "probe", root, head: pre.head, clean: pre.clean });
   const messages = [
     { role: "system", content: "You are a benchmark coding agent. Use only the supplied tools." },
@@ -200,7 +240,7 @@ async function probe(model, debug) {
   try {
     const started = Date.now();
     debug("chat_request_started", { turn: 1, endpoint: "/api/chat" });
-    const response = await fetch("http://127.0.0.1:11434/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: 0 }) });
+    const response = await fetch("http://127.0.0.1:11434/api/chat", { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: KEEP_ALIVE }) });
     responseStatus = { status: response.status, ok: response.ok, wall_time_ms: Date.now() - started };
     debug("chat_response_status", { turn: 1, ...responseStatus });
     const body = await response.text();
@@ -210,17 +250,35 @@ async function probe(model, debug) {
   } catch (caught) { error = caught.message; }
   const post = snapshot(root, fixture);
   fs.rmSync(root, { recursive: true, force: true });
-  return { fixture: `tool-call-probe using ${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: 1 }, repository: { pre, post }, response_status: responseStatus, raw_response: rawResponse, error };
+  return { fixture: `tool-call-probe using ${fixtureId} v${FIXTURE_VERSION}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: 1, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, repository: { pre, post }, response_status: responseStatus, raw_response: rawResponse, error };
 }
 async function selfTest() {
   for (const fixtureId of Object.keys(FIXTURES)) {
     const fixture = FIXTURES[fixtureId], root = createRepository(fixture), calls = [], pre = snapshot(root, fixture), invoke = makeToolRunner(root, fixture, calls);
-    invoke("read_file", { path: "../outside" });
-    invoke("run_focused_test", {});
-    if (fixtureId === "G1") { invoke("write_file", { path: "docs/UNRELATED.md", content: "bad" }); invoke("write_file", { path: "src/parse-port.js", content: fixture.files["src/parse-port.js"].replace("port < 1", "port < 1 || port > 65535") }); invoke("run_focused_test", {}); }
-    const post = snapshot(root, fixture);
-    if (!calls.some((call) => !call.ok) || (fixtureId === "G1" && (pre.file_hashes["docs/UNRELATED.md"] !== post.file_hashes["docs/UNRELATED.md"] || post.file_hashes["src/parse-port.js"] === pre.file_hashes["src/parse-port.js"]))) throw new Error(`self-test failed for ${fixtureId}`);
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      if (!pre.clean || pre.git_status_error || !pre.head) throw new Error(`unclean self-test baseline for ${fixtureId}`);
+      invoke("read_file", { path: "../outside" });
+      if (!calls.at(-1).refused) throw new Error(`path refusal self-test failed for ${fixtureId}`);
+      calls.length = 0;
+      invoke("read_file", { path: fixtureId === "T1" ? "src/runtime.js" : "src/parse-port.js" });
+      if (fixtureId === "T1") {
+        invoke("run_focused_test", {});
+        const post = snapshot(root, fixture);
+        if (grade(fixtureId, root, calls, pre, post, '{"result":"PASS","test":"PASS","timeout_ms":65000}').result !== "PASS") throw new Error("T1 positive grade self-test failed");
+        fs.writeFileSync(path.join(root, "src/runtime.js"), "export const defaultTimeoutMs = 1;\n");
+        if (grade(fixtureId, root, calls, pre, snapshot(root, fixture), '{"result":"PASS","test":"PASS","timeout_ms":65000}').result !== "FAIL") throw new Error("T1 final-state grade self-test failed");
+      } else {
+        invoke("run_focused_test", {}); // A failing test is an executed observation, not a refused call.
+        invoke("write_file", { path: "src/parse-port.js", content: fixture.files["src/parse-port.js"].replace("port < 1", "port < 1 || port > 65535") });
+        invoke("run_focused_test", {});
+        const post = snapshot(root, fixture);
+        if (grade(fixtureId, root, calls, pre, post, '{"result":"PASS","test":"PASS"}').result !== "PASS") throw new Error("G1 positive grade self-test failed");
+        fs.writeFileSync(path.join(root, "src/parse-port.js"), "export function parsePort(value) { return Number(value); }\n");
+        if (grade(fixtureId, root, calls, pre, snapshot(root, fixture), '{"result":"PASS","test":"PASS"}').result !== "FAIL") throw new Error("G1 final-state grade self-test failed");
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   }
   console.log("Track-B harness self-test passed.");
 }
@@ -232,6 +290,7 @@ async function main() {
   if (!model) throw new Error("--model requires a tag");
   if (process.argv.includes("--probe")) {
     const output = artifactPath("tool-call-probe", model);
+    fs.mkdirSync(path.dirname(output), { recursive: true });
     const debug = createDebugLogger(debugEnabled, output);
     debug("artifact_write_path", { output });
     const artifact = await probe(model, debug);

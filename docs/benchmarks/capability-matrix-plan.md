@@ -210,7 +210,11 @@ repository under the system temporary directory, exposes only structured
 fixture-scoped tools, and writes a raw artifact with every tool call and
 pre/post Git and file-hash evidence. Its only test operation is a fixed
 `node --test` argv chosen by the fixture; no model-provided shell command is
-executed.
+executed. The evaluator independently runs a final-state check after the
+agent stops. G1 also has evaluator-only boundary checks that are not exposed
+in its fixture. A PASS requires the final Git scope, independent evaluator
+check, and the required JSON final report to agree; an agent's own test call
+is retained as verification-behavior evidence, not as the source of truth.
 
 Run `node scripts/run-capability-matrix-track-b.cjs --self-test` before a
 screen. Then run `--fixture T1` or `--fixture G1` (optionally `--model tag`).
