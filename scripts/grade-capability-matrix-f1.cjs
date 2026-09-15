@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const resultPath = path.resolve(process.cwd(), "benchmark-data/capability-matrix-2026-09-15/f1-local-results.json");
+const resultPath = path.resolve(process.cwd(), process.argv[2] || "benchmark-data/capability-matrix-2026-09-15/f1-local-results.json");
 const runnerPath = path.join(os.tmpdir(), "capability-matrix-f1-sandbox-runner.cjs");
 const harness = String.raw`const rows = [
   { kind: "10", id: 1 }, { kind: "__proto__", id: 2 },
@@ -42,14 +42,15 @@ fs.writeFileSync(runnerPath, runner, { mode: 0o600 });
 
 const data = JSON.parse(fs.readFileSync(resultPath, "utf8"));
 for (const attempt of data.attempts) {
-  if (!attempt.response) continue;
+  const source = attempt.submitted_response ?? attempt.response;
+  if (!source) continue;
   const run = childProcess.spawnSync("bwrap", [
     "--unshare-all", "--die-with-parent", "--new-session", "--clearenv",
     "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
     "--ro-bind", "/lib64", "/lib64", "--proc", "/proc", "--dev", "/dev",
     "--tmpfs", "/tmp", "--ro-bind", runnerPath, "/grader.cjs",
     "/usr/bin/node", "/grader.cjs",
-  ], { input: attempt.response, encoding: "utf8", timeout: 3000, maxBuffer: 16 * 1024 });
+  ], { input: source, encoding: "utf8", timeout: 3000, maxBuffer: 16 * 1024 });
   if (run.error || run.status !== 0) {
     attempt.grade = { result: "ERROR", format: false, behavior: false, notes: [run.error?.message || run.stderr.trim() || `sandbox exited ${run.status}`] };
   } else {

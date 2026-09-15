@@ -32,6 +32,7 @@ These are one-run capability-screen results, not reliability estimates.
 | `capability-matrix-2026-09-15-f1-granite4.2-3b-01` | 2026-09-15 | F1 v2026-09-15-public-1 | `granite4.2:3b`, `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 4.17s | Returned a null-prototype object instead of the required Map | `benchmark-data/capability-matrix-2026-09-15/f1-local-results.json` |
 | `capability-matrix-2026-09-15-f1-qwen2.5-coder-3b-01` | 2026-09-15 | F1 v2026-09-15-public-1 | `qwen2.5-coder:3b`, `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 8.42s | Formatted as bare source but generated invalid `Map` construction | `benchmark-data/capability-matrix-2026-09-15/f1-local-results.json` |
 | `capability-matrix-2026-09-15-f1-qwen3.5-4b-01` | 2026-09-15 | F1 v2026-09-15-public-1 | `qwen3.5:4b`, `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | PASS | 14.45s | Returned bare source; Map order, `__proto__`, immutability and TypeError checks all passed | `benchmark-data/capability-matrix-2026-09-15/f1-local-results.json` |
+| `capability-matrix-2026-09-15-f1-granite4.2-3b-02-think` | 2026-09-15 | F1 v2026-09-15-public-1 | `granite4.2:3b`, `think:true`, ctx 16K, predict 16K, temp 0, seed 42 | PASS | 27.12s | Inline reasoning ended with `</think>`; the preserved raw completion’s post-delimiter bare source passed all checks | `benchmark-data/capability-matrix-2026-09-15/f1-granite4.2-3b-think-results.json` |
 | `capability-matrix-2026-09-15-u1-exaone-deep-2.4b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `exaone-deep:2.4b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | ERROR | — | Model load rejected by the q8_0 KV cache / 80-wide K-head incompatibility | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
 | `capability-matrix-2026-09-15-u1-deepseek-r1-1.5b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `deepseek-r1:1.5b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | FAIL | 6.81s | Leaked reasoning, exceeded 60 words, and asserted an unsupported worker-timeout cause | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
 | `capability-matrix-2026-09-15-u1-gemma4-e2b-01` | 2026-09-15 | U1 v2026-09-15-public-1 | `gemma4:e2b`, `think:false`, ctx 16K, predict 512, temp 0, seed 42 | PASS | 6.62s | Declined to diagnose and requested upstream timing/log evidence | `benchmark-data/capability-matrix-2026-09-15/u1-c1-local-results.json` |
@@ -93,6 +94,7 @@ inside a Bubblewrap sandbox with no network or project files mounted.
 | `granite4.2:3b` | `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 4.17s | Returned an object, not the required Map |
 | `qwen2.5-coder:3b` | `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | FAIL | 8.42s | Invalid `Map` construction |
 | `qwen3.5:4b` | `think:false`, ctx 16K, predict 16K, temp 0, seed 42 | PASS | 14.45s | All format and behavioral checks passed |
+| `granite4.2:3b` | `think:true`, ctx 16K, predict 16K, temp 0, seed 42 | PASS | 27.12s | After stripping its final inline `</think>` section boundary, all format and behavioral checks passed |
 
 ## U1 — incomplete evidence comparison
 

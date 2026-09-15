@@ -57,7 +57,7 @@ function grade(source) {
     ];
     const before = JSON.stringify(rows);
     const groups = groupBy(rows);
-    if (!(groups instanceof Map)) throw new Error("did not return a Map");
+    if (Object.prototype.toString.call(groups) !== "[object Map]") throw new Error("did not return a Map");
     const keys = [...groups.keys()];
     if (JSON.stringify(keys) !== JSON.stringify(["10", "__proto__", "2", "alpha"])) throw new Error(`wrong key order: ${JSON.stringify(keys)}`);
     for (const [key, expectedIds] of [["10", [1, 4]], ["__proto__", [2, 6]], ["2", [3]], ["alpha", [5]]]) {
@@ -78,11 +78,15 @@ function grade(source) {
 
 async function main() {
   const collectOnly = process.argv.includes("--collect-only");
-  const output = path.resolve(process.cwd(), "benchmark-data/capability-matrix-2026-09-15/f1-local-results.json");
+  const thinkingGranite = process.argv.includes("--thinking-granite");
+  const runModels = thinkingGranite ? ["granite4.2:3b"] : models;
+  const output = path.resolve(process.cwd(), thinkingGranite
+    ? "benchmark-data/capability-matrix-2026-09-15/f1-granite4.2-3b-think-results.json"
+    : "benchmark-data/capability-matrix-2026-09-15/f1-local-results.json");
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const attempts = fs.existsSync(output) ? JSON.parse(fs.readFileSync(output, "utf8")).attempts : [];
   const completedModels = new Set(attempts.map((attempt) => attempt.model));
-  for (const model of models) {
+  for (const model of runModels) {
     if (completedModels.has(model)) continue;
     const startedAt = new Date().toISOString();
     try {
@@ -93,18 +97,19 @@ async function main() {
           model,
           prompt,
           stream: false,
-          think: false,
+          think: thinkingGranite,
           options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 16384 },
           keep_alive: 0,
         }),
       });
       const data = await response.json();
       if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
-      attempts.push({ model, started_at: startedAt, response: data.response, done_reason: data.done_reason, total_duration_ns: data.total_duration, load_duration_ns: data.load_duration, prompt_eval_count: data.prompt_eval_count, eval_count: data.eval_count, grade: collectOnly ? { result: "PENDING", notes: ["raw completion collected; behavioral grading requires isolated execution"] } : grade(data.response) });
+      const submittedResponse = thinkingGranite ? data.response.split("</think>").at(-1).trimStart() : data.response;
+      attempts.push({ model, started_at: startedAt, response: data.response, submitted_response: submittedResponse, done_reason: data.done_reason, total_duration_ns: data.total_duration, load_duration_ns: data.load_duration, prompt_eval_count: data.prompt_eval_count, eval_count: data.eval_count, grade: collectOnly ? { result: "PENDING", notes: ["raw completion collected; behavioral grading requires isolated execution"] } : grade(submittedResponse) });
     } catch (error) {
       attempts.push({ model, started_at: startedAt, error: error.message, grade: { result: "ERROR", format: false, behavior: false, notes: [error.message] } });
     }
-    fs.writeFileSync(output, `${JSON.stringify({ fixture: "F1 v2026-09-15-public-1", config: { think: false, num_ctx: 16384, num_predict: 16384, temperature: 0, seed: 42 }, prompt, attempts }, null, 2)}\n`);
+    fs.writeFileSync(output, `${JSON.stringify({ fixture: "F1 v2026-09-15-public-1", config: { think: thinkingGranite, num_ctx: 16384, num_predict: 16384, temperature: 0, seed: 42 }, prompt, attempts }, null, 2)}\n`);
     console.log(`${model}: ${attempts.at(-1).grade.result}`);
   }
 }
