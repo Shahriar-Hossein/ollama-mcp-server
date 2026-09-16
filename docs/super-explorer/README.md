@@ -162,7 +162,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 - [x] Extract and index references, dependencies, inheritance, and caller/callee edges; record `exact`, `static`, `heuristic`, or `unresolved` resolution quality.
 - [x] Add `find_symbol`, `find_references`, `find_callers`, and `find_callees`. Run `npm run --silent structural:super-explorer -- find-symbol <repository-root> <name-or-id>`; use a returned ID with `find-references`, `find-callers`, or `find-callees`.
 - [x] Define the framework-adapter interface and keep generic structural tools independent of adapters. See [framework adapters](framework-adapters.md).
-- [ ] Extract WordPress/WooCommerce hooks and connect registrations and emitters to their containing symbols.
+- [x] Extract WordPress/WooCommerce hooks and connect registrations and emitters to their containing symbols. Run `npm run --silent wordpress-hooks:super-explorer -- <repository-root>`; the current generic JS/TS index supports literal hook names in those languages.
 - [ ] Add metadata/options reads and writes to the domain index.
 - [ ] Add REST routes, AJAX handlers, shortcodes, cart hooks, and price-mutation extraction as needed by the benchmark.
 - [ ] Index tests and provide source-to-test lookup.

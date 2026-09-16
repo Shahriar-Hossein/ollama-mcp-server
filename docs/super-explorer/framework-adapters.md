@@ -20,7 +20,19 @@ are interpreted only within that adapter's namespace. The caller must reject
 an adapter result whose schema version, adapter name, or commit hash differs
 from the active generic index. `extractAdapterFacts()` performs those checks.
 
-The initial WordPress/WooCommerce adapter will emit separate facts for hook
-registrations and emitters, with the containing symbol ID linking each fact
-back to generic structural queries. Later adapter-specific tools may consume
-only that adapter's facts; they must not be added to the generic tool surface.
+The WordPress/WooCommerce adapter emits separate `hook_registration` and
+`hook_emitter` facts for the literal hooks in indexed JavaScript and TypeScript
+source. Registrations recognize `add_action` and `add_filter`; emitters
+recognize `do_action`, `do_action_ref_array`, `apply_filters`, and
+`apply_filters_ref_array`. Each fact includes the hook name (or `null` with
+`unresolved` resolution for a dynamic name), invocation, hook type, and, for a
+registration, the callback expression. Its containing symbol ID links back to
+generic structural queries.
+
+Run `npm run --silent wordpress-hooks:super-explorer -- <repository-root>` to
+emit the adapter index, or `null` when the indexed checkout contains no known
+hook invocation. PHP is deliberately not scanned yet because the generic
+index currently supports only JavaScript and TypeScript; it must gain PHP
+symbol support before PHP hook facts can satisfy the stable-symbol link.
+Later adapter-specific tools may consume only that adapter's facts; they must
+not be added to the generic tool surface.
