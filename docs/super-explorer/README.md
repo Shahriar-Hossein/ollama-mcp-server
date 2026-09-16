@@ -102,7 +102,7 @@ This is the compounding mechanism: later explorations begin with verified orient
 Complete these in order. Keep each session focused on one unchecked item; record the result, validation command, and next item in the PR/commit or session handoff.
 
 - [x] Define the first benchmark questions and their gold files, symbols, and relationships. See [the initial benchmark set](benchmarks.md).
-- [ ] Choose the on-disk format and location for generated explorer data; add it to `.gitignore` if it is reproducible.
+- [x] Choose the on-disk format and location for generated explorer data; add it to `.gitignore` if it is reproducible. See [storage](storage.md).
 - [ ] Define a stable symbol-record schema (file, language, kind, name, range, signature, parent).
 - [ ] Build an indexer that discovers supported source files and emits symbol records.
 - [ ] Add `outline_file(path)` backed by the symbol index.
