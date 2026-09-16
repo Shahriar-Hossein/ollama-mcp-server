@@ -16,13 +16,23 @@ The index also emits source-derived relationship arrays alongside `symbols`:
 - `inheritance`: `extends` and `implements` relationships from a child symbol
   to an optional parent symbol; and
 - `calls`: call sites with an optional caller and callee symbol.
+- `tests`: discovered suites and test cases in conventional JavaScript/TypeScript
+  test files; and `test_symbols`: source-backed references from a test case to
+  a resolved production symbol.
 
-Each record has a source `file`, half-open `range`, and `resolution` quality.
+Relationship records have a source `file`, half-open `range`, and `resolution` quality.
 `exact` means a repository file path was resolved directly; `static` means a
 syntax-derived declaration or import binding resolved uniquely; `heuristic`
 means a unique repository-wide name match; and `unresolved` means no safe
 target was found. Tree-sitter extraction alone must not upgrade a relationship
 to a higher quality.
+
+Test discovery recognizes `__tests__/`, `test/`, and `tests/` directories plus
+`.test.*` and `.spec.*` JavaScript/TypeScript filenames. It recognizes literal
+`describe`, `context`, `it`, and `test` calls (including common modifiers) and
+only links a test to a symbol when an indexed reference or call in that test
+resolved to the symbol. A missing link is not evidence that the symbol lacks
+tests; dynamic access and unsupported test layouts remain unrepresented.
 
 ## Record shape
 

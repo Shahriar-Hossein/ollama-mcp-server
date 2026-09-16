@@ -4,6 +4,8 @@ import {
   type ReferenceRecord,
   type RepositoryIndex,
   type SymbolRecord,
+  type TestRecord,
+  type TestSymbolEdge,
 } from "./indexer.js";
 
 export type SymbolMatchKind = "id" | "exact" | "partial";
@@ -29,6 +31,12 @@ export interface CallSearchResult {
   commit_hash: string;
   symbol: SymbolRecord;
   calls: CallEdge[];
+}
+
+export interface TestSearchResult {
+  commit_hash: string;
+  symbol: SymbolRecord;
+  tests: Array<TestRecord & { symbols: TestSymbolEdge[] }>;
 }
 
 function requiredSymbol(symbolId: string, index: RepositoryIndex): SymbolRecord {
@@ -93,4 +101,17 @@ export function findCallees(repositoryRoot: string, symbolId: string, index: Rep
     symbol,
     calls: index.calls.filter((call) => call.caller_symbol_id === symbol.id),
   };
+}
+
+/** Finds conventional JS/TS test cases that source-backed references resolve to this symbol. */
+export function findTestsForSymbol(repositoryRoot: string, symbolId: string, index: RepositoryIndex = indexRepository(repositoryRoot)): TestSearchResult {
+  const symbol = requiredSymbol(symbolId, index);
+  const edges = index.test_symbols.filter((edge) => edge.target_symbol_id === symbol.id);
+  const tests = index.tests
+    .filter((test) => test.kind === "test")
+    .flatMap((test) => {
+      const symbols = edges.filter((edge) => edge.test_file === test.file && edge.test_range.start.byte === test.range.start.byte);
+      return symbols.length ? [{ ...test, symbols }] : [];
+    });
+  return { commit_hash: index.commit_hash, symbol, tests };
 }

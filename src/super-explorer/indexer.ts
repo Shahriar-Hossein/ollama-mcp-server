@@ -90,6 +90,23 @@ export interface CallEdge {
   resolution: ResolutionQuality;
 }
 
+export interface TestRecord {
+  file: string;
+  range: SourceRange;
+  name: string;
+  kind: "suite" | "test";
+  framework: "jest" | "mocha" | "vitest" | "unknown";
+}
+
+/** A source-backed use of a production symbol inside a discovered test case. */
+export interface TestSymbolEdge {
+  test_file: string;
+  test_name: string;
+  test_range: SourceRange;
+  target_symbol_id: string;
+  resolution: ResolutionQuality;
+}
+
 export interface RepositoryIndex {
   commit_hash: string;
   files_indexed: number;
@@ -98,6 +115,8 @@ export interface RepositoryIndex {
   dependencies: DependencyRecord[];
   inheritance: InheritanceEdge[];
   calls: CallEdge[];
+  tests: TestRecord[];
+  test_symbols: TestSymbolEdge[];
 }
 
 type SupportedLanguage = SymbolRecord["language"];
@@ -253,6 +272,74 @@ function isReferenceNode(node: Parser.SyntaxNode, declarationRanges: Set<number>
 function calleeName(node: Parser.SyntaxNode): string | null {
   if (node.type === "identifier" || node.type === "member_expression") return node.text;
   return null;
+}
+
+function isTestFile(file: string): boolean {
+  return /(?:^|\/)(?:__tests__|test|tests)\//.test(file)
+    || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
+}
+
+function testFramework(source: string): TestRecord["framework"] {
+  if (/from\s+["']vitest["']|require\(\s*["']vitest["']\s*\)/.test(source)) return "vitest";
+  if (/from\s+["']mocha["']|require\(\s*["']mocha["']\s*\)/.test(source)) return "mocha";
+  if (/from\s+["']@jest\/globals["']|require\(\s*["']@jest\/globals["']\s*\)/.test(source)) return "jest";
+  return "unknown";
+}
+
+function testCall(node: Parser.SyntaxNode): { name: string; kind: TestRecord["kind"] } | null {
+  if (node.type !== "call_expression") return null;
+  const functionNode = node.childForFieldName("function");
+  const name = functionNode ? calleeName(functionNode) : null;
+  const normalized = name?.replace(/\.(?:only|skip|todo|concurrent|each)$/, "");
+  if (normalized !== "describe" && normalized !== "context" && normalized !== "it" && normalized !== "test") return null;
+  const title = stringValue(node.childForFieldName("arguments")?.namedChildren[0] ?? null);
+  if (!title) return null;
+  return { name: title, kind: normalized === "describe" || normalized === "context" ? "suite" : "test" };
+}
+
+function containsRange(outer: SourceRange, inner: SourceRange): boolean {
+  return outer.start.byte <= inner.start.byte && inner.end.byte <= outer.end.byte;
+}
+
+function collectTests(
+  file: string,
+  language: SupportedLanguage,
+  source: string,
+  references: ReferenceRecord[],
+  calls: CallEdge[],
+  tests: TestRecord[],
+  testSymbols: TestSymbolEdge[]
+): void {
+  if (!isTestFile(file)) return;
+  const framework = testFramework(source);
+  const fileTests: TestRecord[] = [];
+  const visit = (node: Parser.SyntaxNode): void => {
+    const call = testCall(node);
+    if (call) {
+      const record: TestRecord = { file, range: range(node), name: call.name, kind: call.kind, framework };
+      tests.push(record);
+      fileTests.push(record);
+    }
+    for (const child of node.namedChildren) visit(child);
+  };
+  visit(parserFor(language, file).parse(source).rootNode);
+
+  for (const test of fileTests.filter((record) => record.kind === "test")) {
+    const targets = new Map<string, ResolutionQuality>();
+    for (const reference of references) {
+      if (reference.file === file && reference.target_symbol_id && containsRange(test.range, reference.range)) {
+        targets.set(reference.target_symbol_id, reference.resolution);
+      }
+    }
+    for (const call of calls) {
+      if (call.file === file && call.callee_symbol_id && containsRange(test.range, call.range)) {
+        targets.set(call.callee_symbol_id, call.resolution);
+      }
+    }
+    for (const [target_symbol_id, resolution] of targets) {
+      testSymbols.push({ test_file: file, test_name: test.name, test_range: test.range, target_symbol_id, resolution });
+    }
+  }
 }
 
 interface ImportBinding {
@@ -474,5 +561,21 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
     );
   }
 
-  return { commit_hash: commitHash, files_indexed: files.length, symbols: records, references, dependencies, inheritance, calls };
+  const tests: TestRecord[] = [];
+  const testSymbols: TestSymbolEdge[] = [];
+  for (const [file, source] of sources) {
+    collectTests(file, source.language, source.source, references, calls, tests, testSymbols);
+  }
+
+  return {
+    commit_hash: commitHash,
+    files_indexed: files.length,
+    symbols: records,
+    references,
+    dependencies,
+    inheritance,
+    calls,
+    tests,
+    test_symbols: testSymbols,
+  };
 }

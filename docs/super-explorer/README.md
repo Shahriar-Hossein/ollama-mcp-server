@@ -165,7 +165,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 - [x] Extract WordPress/WooCommerce hooks and connect registrations and emitters to their containing symbols. Run `npm run --silent wordpress-hooks:super-explorer -- <repository-root>`; the current generic JS/TS index supports literal hook names in those languages.
 - [x] Add metadata/options reads and writes to the domain index. The WordPress/WooCommerce adapter emits source-backed metadata and option facts for the supported JavaScript/TypeScript APIs, including unresolved computed keys.
 - [x] Add REST routes, AJAX handlers, shortcodes, cart hooks, and price-mutation extraction. The WordPress/WooCommerce adapter emits literal source-backed facts for the supported JavaScript/TypeScript APIs; dynamic route, shortcode, and hook names remain unresolved.
-- [ ] Index tests and provide source-to-test lookup.
+- [x] Index tests and provide source-to-test lookup. Conventional JS/TS test files yield source-backed test-to-symbol edges; run `npm run --silent structural:super-explorer -- find-tests-for-symbol <repository-root> <symbol-id>`.
 - [ ] Add git-history lookups for files and symbols.
 - [ ] Add semantic embeddings and local similarity search.
 - [ ] Implement hybrid retrieval and rank merging; compare it with lexical-only retrieval on the benchmark.
