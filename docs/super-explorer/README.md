@@ -159,7 +159,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 - [x] Build an indexer that discovers supported source files and emits symbol records. Run `npm run --silent index:super-explorer -- <repository-root>`; the initial implementation supports TypeScript/TSX and JavaScript module formats.
 - [x] Add `outline_file(path)` backed by the symbol index. Run `npm run --silent outline:super-explorer -- <repository-root> <path>`; it returns a hierarchical declaration outline without source bodies.
 - [x] Add `read_symbol(symbol)` with source ranges and minimal surrounding context. Run `npm run --silent read-symbol:super-explorer -- <repository-root> <symbol-id>` with an ID returned by `outline_file`.
-- [ ] Extract and index references, dependencies, inheritance, and caller/callee edges; record `exact`, `static`, `heuristic`, or `unresolved` resolution quality.
+- [x] Extract and index references, dependencies, inheritance, and caller/callee edges; record `exact`, `static`, `heuristic`, or `unresolved` resolution quality.
 - [ ] Add `find_symbol`, `find_references`, `find_callers`, and `find_callees`.
 - [ ] Define the framework-adapter interface and keep generic structural tools independent of adapters.
 - [ ] Extract WordPress/WooCommerce hooks and connect registrations and emitters to their containing symbols.

@@ -24,6 +24,9 @@ export type SymbolKind =
   | "variable"
   | "unknown";
 
+/** How confidently the indexer resolved a relationship from source. */
+export type ResolutionQuality = "exact" | "static" | "heuristic" | "unresolved";
+
 export interface SourcePosition {
   line: number;
   column: number;
@@ -51,10 +54,50 @@ export interface SymbolRecord {
   signature: string;
 }
 
+export interface ReferenceRecord {
+  file: string;
+  range: SourceRange;
+  name: string;
+  source_symbol_id: string | null;
+  target_symbol_id: string | null;
+  resolution: ResolutionQuality;
+}
+
+export interface DependencyRecord {
+  file: string;
+  range: SourceRange;
+  module_specifier: string;
+  target_file: string | null;
+  resolution: ResolutionQuality;
+}
+
+export interface InheritanceEdge {
+  kind: "extends" | "implements";
+  child_symbol_id: string;
+  parent_name: string;
+  parent_symbol_id: string | null;
+  file: string;
+  range: SourceRange;
+  resolution: ResolutionQuality;
+}
+
+export interface CallEdge {
+  caller_symbol_id: string | null;
+  callee_name: string;
+  callee_symbol_id: string | null;
+  file: string;
+  range: SourceRange;
+  resolution: ResolutionQuality;
+}
+
 export interface RepositoryIndex {
   commit_hash: string;
   files_indexed: number;
   symbols: SymbolRecord[];
+  references: ReferenceRecord[];
+  dependencies: DependencyRecord[];
+  inheritance: InheritanceEdge[];
+  calls: CallEdge[];
 }
 
 type SupportedLanguage = SymbolRecord["language"];
@@ -170,6 +213,172 @@ function symbolId(file: string, kind: SymbolKind, qualifiedName: string, parentQ
   return `symbol:sha256:${createHash("sha256").update(source, "utf8").digest("hex")}`;
 }
 
+function sourceSymbolFor(records: SymbolRecord[], node: Parser.SyntaxNode): SymbolRecord | null {
+  let containing: SymbolRecord | null = null;
+  for (const record of records) {
+    if (record.range.start.byte <= node.startIndex && node.endIndex <= record.range.end.byte) {
+      if (!containing || record.range.start.byte >= containing.range.start.byte) containing = record;
+    }
+  }
+  return containing;
+}
+
+function resolveModuleFile(file: string, specifier: string, files: Set<string>): string | null {
+  if (!specifier.startsWith(".")) return null;
+  const base = resolve("/", file, "..", specifier).slice(1).split(sep).join("/");
+  const extension = base.slice(base.lastIndexOf("."));
+  const sourceBase = LANGUAGE_BY_EXTENSION[extension] ? base.slice(0, -extension.length) : base;
+  const candidates = [base, ...Object.keys(LANGUAGE_BY_EXTENSION).map((candidateExtension) => `${sourceBase}${candidateExtension}`), ...Object.keys(LANGUAGE_BY_EXTENSION).map((candidateExtension) => `${base}/index${candidateExtension}`)];
+  return candidates.find((candidate) => files.has(candidate)) ?? null;
+}
+
+function stringValue(node: Parser.SyntaxNode | null): string | null {
+  if (!node || (node.type !== "string" && node.type !== "template_string")) return null;
+  const text = node.text;
+  return text.length >= 2 ? text.slice(1, -1) : null;
+}
+
+function isDeclarationName(node: Parser.SyntaxNode, declarationRanges: Set<number>): boolean {
+  return declarationRanges.has(node.startIndex);
+}
+
+function isReferenceNode(node: Parser.SyntaxNode, declarationRanges: Set<number>): boolean {
+  if (node.type !== "identifier" && node.type !== "type_identifier") return false;
+  if (isDeclarationName(node, declarationRanges)) return false;
+  const parent = node.parent;
+  if (!parent) return false;
+  return parent.type !== "import_specifier" && parent.type !== "namespace_import" && parent.type !== "import_clause";
+}
+
+function calleeName(node: Parser.SyntaxNode): string | null {
+  if (node.type === "identifier" || node.type === "member_expression") return node.text;
+  return null;
+}
+
+interface ImportBinding {
+  importedName: string;
+  targetFile: string | null;
+}
+
+function importBindings(node: Parser.SyntaxNode, targetFile: string | null): Map<string, ImportBinding> {
+  const bindings = new Map<string, ImportBinding>();
+  const clause = node.namedChildren.find((child) => child.type === "import_clause");
+  if (!clause) return bindings;
+  for (const child of clause.namedChildren) {
+    if (child.type === "named_imports") {
+      for (const specifier of child.namedChildren) {
+        if (specifier.type !== "import_specifier") continue;
+        const importedName = specifier.namedChildren[0]?.text;
+        const localName = specifier.namedChildren.at(-1)?.text;
+        if (importedName && localName) bindings.set(localName, { importedName, targetFile });
+      }
+    } else if (child.type === "identifier") {
+      bindings.set(child.text, { importedName: "default", targetFile });
+    } else if (child.type === "namespace_import") {
+      const localName = child.namedChildren[0]?.text;
+      if (localName) bindings.set(localName, { importedName: "*", targetFile });
+    }
+  }
+  return bindings;
+}
+
+function collectStructuralRecords(
+  file: string,
+  language: SupportedLanguage,
+  source: string,
+  records: SymbolRecord[],
+  allSymbols: SymbolRecord[],
+  files: Set<string>,
+  references: ReferenceRecord[],
+  dependencies: DependencyRecord[],
+  inheritance: InheritanceEdge[],
+  calls: CallEdge[]
+): void {
+  const tree = parserFor(language, file).parse(source);
+  const declarationRanges = new Set(records.map((record) => record.selection_range.start.byte));
+  const imports = new Map<string, ImportBinding>();
+  const symbolsByName = new Map<string, SymbolRecord[]>();
+  const localSymbolsByName = new Map<string, SymbolRecord[]>();
+  for (const symbol of allSymbols) {
+    const named = symbolsByName.get(symbol.name) ?? [];
+    named.push(symbol);
+    symbolsByName.set(symbol.name, named);
+    if (symbol.file === file) {
+      const local = localSymbolsByName.get(symbol.name) ?? [];
+      local.push(symbol);
+      localSymbolsByName.set(symbol.name, local);
+    }
+  }
+
+  const resolveName = (name: string): { target: SymbolRecord | null; resolution: ResolutionQuality } => {
+    const imported = imports.get(name);
+    if (imported) {
+      const candidates = imported.targetFile
+        ? allSymbols.filter((symbol) => symbol.file === imported.targetFile && symbol.name === imported.importedName)
+        : [];
+      return candidates.length === 1
+        ? { target: candidates[0], resolution: "static" }
+        : { target: null, resolution: "unresolved" };
+    }
+    const local = localSymbolsByName.get(name) ?? [];
+    if (local.length === 1) return { target: local[0], resolution: "static" };
+    const candidates = symbolsByName.get(name) ?? [];
+    return candidates.length === 1
+      ? { target: candidates[0], resolution: "heuristic" }
+      : { target: null, resolution: "unresolved" };
+  };
+
+  const visit = (node: Parser.SyntaxNode): void => {
+    if (node.type === "import_statement") {
+      const sourceNode = node.childForFieldName("source");
+      const moduleSpecifier = stringValue(sourceNode);
+      if (moduleSpecifier && sourceNode) {
+        const targetFile = resolveModuleFile(file, moduleSpecifier, files);
+        dependencies.push({ file, range: range(sourceNode), module_specifier: moduleSpecifier, target_file: targetFile, resolution: targetFile ? "exact" : "unresolved" });
+        for (const [localName, binding] of importBindings(node, targetFile)) imports.set(localName, binding);
+      }
+    }
+
+    if (node.type === "call_expression") {
+      const functionNode = node.childForFieldName("function");
+      const name = functionNode ? calleeName(functionNode) : null;
+      if (functionNode?.type === "identifier" && name === "require") {
+        const argument = node.childForFieldName("arguments")?.namedChildren[0] ?? null;
+        const moduleSpecifier = stringValue(argument);
+        if (moduleSpecifier && argument) {
+          const targetFile = resolveModuleFile(file, moduleSpecifier, files);
+          dependencies.push({ file, range: range(argument), module_specifier: moduleSpecifier, target_file: targetFile, resolution: targetFile ? "exact" : "unresolved" });
+        }
+      }
+      if (name && functionNode) {
+        const resolved = functionNode.type === "identifier" ? resolveName(name) : { target: null, resolution: "unresolved" as const };
+        calls.push({ caller_symbol_id: sourceSymbolFor(records, node)?.id ?? null, callee_name: name, callee_symbol_id: resolved.target?.id ?? null, file, range: range(functionNode), resolution: resolved.resolution });
+      }
+    }
+
+    if (node.type === "extends_clause" || node.type === "implements_clause" || node.type === "extends_type_clause") {
+      const child = sourceSymbolFor(records, node);
+      const kind = node.type === "implements_clause" ? "implements" : "extends";
+      if (child) {
+        for (const candidate of node.namedChildren) {
+          if (candidate.type !== "identifier" && candidate.type !== "type_identifier") continue;
+          const resolved = resolveName(candidate.text);
+          inheritance.push({ kind, child_symbol_id: child.id, parent_name: candidate.text, parent_symbol_id: resolved.target?.id ?? null, file, range: range(candidate), resolution: resolved.resolution });
+        }
+      }
+    }
+
+    if (isReferenceNode(node, declarationRanges)) {
+      const resolved = resolveName(node.text);
+      references.push({ file, range: range(node), name: node.text, source_symbol_id: sourceSymbolFor(records, node)?.id ?? null, target_symbol_id: resolved.target?.id ?? null, resolution: resolved.resolution });
+    }
+
+    for (const child of node.namedChildren) visit(child);
+  };
+
+  visit(tree.rootNode);
+}
+
 function collectSymbols(
   node: Parser.SyntaxNode,
   source: string,
@@ -227,6 +436,7 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
   const records: SymbolRecord[] = [];
   const ids = new Set<string>();
   const files = trackedSourceFiles(root);
+  const sources = new Map<string, { language: SupportedLanguage; source: string }>();
 
   for (const file of files) {
     const language = languageForPath(file);
@@ -234,6 +444,7 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
     const absolutePath = resolve(root, file);
     const relPath = relative(root, absolutePath).split(sep).join("/");
     const source = readFileSync(absolutePath, "utf8");
+    sources.set(relPath, { language, source });
     const tree = parserFor(language, file).parse(source);
     const before = records.length;
     collectSymbols(tree.rootNode, source, relPath, language, commitHash, null, records, new Map());
@@ -243,5 +454,25 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
     }
   }
 
-  return { commit_hash: commitHash, files_indexed: files.length, symbols: records };
+  const references: ReferenceRecord[] = [];
+  const dependencies: DependencyRecord[] = [];
+  const inheritance: InheritanceEdge[] = [];
+  const calls: CallEdge[] = [];
+  const indexedFiles = new Set(files);
+  for (const [file, source] of sources) {
+    collectStructuralRecords(
+      file,
+      source.language,
+      source.source,
+      records.filter((record) => record.file === file),
+      records,
+      indexedFiles,
+      references,
+      dependencies,
+      inheritance,
+      calls
+    );
+  }
+
+  return { commit_hash: commitHash, files_indexed: files.length, symbols: records, references, dependencies, inheritance, calls };
 }

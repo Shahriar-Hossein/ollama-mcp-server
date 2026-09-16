@@ -5,6 +5,25 @@ retrieval tools. One record represents one named declaration in one file at
 one indexed commit. It is not a claim about runtime dispatch, references, or
 call edges; those belong to later index records.
 
+## Structural records
+
+The index also emits source-derived relationship arrays alongside `symbols`:
+
+- `references`: identifier/type-name occurrences with their containing symbol
+  and an optional target symbol;
+- `dependencies`: `import` and static `require()` module specifiers with an
+  optional repository-relative target file;
+- `inheritance`: `extends` and `implements` relationships from a child symbol
+  to an optional parent symbol; and
+- `calls`: call sites with an optional caller and callee symbol.
+
+Each record has a source `file`, half-open `range`, and `resolution` quality.
+`exact` means a repository file path was resolved directly; `static` means a
+syntax-derived declaration or import binding resolved uniquely; `heuristic`
+means a unique repository-wide name match; and `unresolved` means no safe
+target was found. Tree-sitter extraction alone must not upgrade a relationship
+to a higher quality.
+
 ## Record shape
 
 ```json
