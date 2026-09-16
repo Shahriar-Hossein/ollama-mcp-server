@@ -39,6 +39,13 @@ export interface KnowledgeWriteResult {
   claim_ids: string[];
 }
 
+export interface KnowledgeFreshnessResult {
+  commit_hash: string;
+  previous_commit_hash: string | null;
+  changed_files: string[];
+  claims_marked_stale: number;
+}
+
 const MIGRATION_1 = `
 CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE repository_state (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), repository_root TEXT NOT NULL, indexed_commit TEXT NOT NULL, indexed_at TEXT NOT NULL);
@@ -108,16 +115,68 @@ function weakestQuality(evidence: KnowledgeEvidence[]): ResolutionQuality {
   return evidence.reduce((weakest, item) => rank[item.resolution_quality] < rank[weakest] ? item.resolution_quality : weakest, evidence[0].resolution_quality);
 }
 
-function storeIndexedState(db: DatabaseSync, root: string, index: RepositoryIndex): void {
+function sourceFilesAtCommit(root: string, commitHash: string): Map<string, string> {
+  const files = execFileSync("git", ["ls-tree", "-r", "-z", "--name-only", commitHash], { cwd: root, encoding: "buffer" })
+    .toString("utf8").split("\0").filter(Boolean);
+  const sourceFiles = new Map<string, string>();
+  for (const file of files) {
+    const content = execFileSync("git", ["cat-file", "blob", `${commitHash}:${file}`], { cwd: root, encoding: "buffer" });
+    sourceFiles.set(file, createHash("sha256").update(content).digest("hex"));
+  }
+  return sourceFiles;
+}
+
+function storedSourceFiles(db: DatabaseSync, commitHash: string): Map<string, string> {
+  const rows = db.prepare("SELECT file, content_hash FROM source_files WHERE commit_hash = ?").all(commitHash) as Array<{ file: string; content_hash: string }>;
+  return new Map(rows.map(({ file, content_hash }) => [file, content_hash]));
+}
+
+function changedPaths(previous: Map<string, string>, current: Map<string, string>): string[] {
+  return [...new Set([...previous.keys(), ...current.keys()])]
+    .filter((file) => previous.get(file) !== current.get(file))
+    .sort();
+}
+
+function storeIndexedState(db: DatabaseSync, root: string, index: RepositoryIndex, files = sourceFilesAtCommit(root, index.commit_hash)): void {
   const timestamp = now();
   db.prepare("INSERT OR IGNORE INTO indexed_commits (commit_hash, indexed_at) VALUES (?, ?)").run(index.commit_hash, timestamp);
   db.prepare("INSERT INTO repository_state (singleton, repository_root, indexed_commit, indexed_at) VALUES (1, ?, ?, ?) ON CONFLICT(singleton) DO UPDATE SET repository_root = excluded.repository_root, indexed_commit = excluded.indexed_commit, indexed_at = excluded.indexed_at").run(root, index.commit_hash, timestamp);
   const insertFile = db.prepare("INSERT OR REPLACE INTO source_files (commit_hash, file, content_hash) VALUES (?, ?, ?)");
-  const files = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "buffer" }).toString("utf8").split("\0").filter(Boolean);
-  for (const file of files) {
-    const content = readFileSync(resolve(root, file));
-    insertFile.run(index.commit_hash, file, createHash("sha256").update(content).digest("hex"));
-  }
+  for (const [file, contentHash] of files) insertFile.run(index.commit_hash, file, contentHash);
+}
+
+/** Snapshots the indexed commit and marks claims stale when one of their direct source files changed. */
+export function refreshKnowledgeFreshness(repositoryRoot: string): KnowledgeFreshnessResult {
+  const root = resolve(repositoryRoot);
+  const index = indexRepository(root);
+  const path = databasePath(root);
+  const fresh = !existsSync(path);
+  const db = new DatabaseSync(path);
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    migrate(db, fresh);
+    db.exec("BEGIN");
+    try {
+      const state = db.prepare("SELECT repository_root, indexed_commit FROM repository_state WHERE singleton = 1").get() as { repository_root: string; indexed_commit: string } | undefined;
+      if (state && state.repository_root !== root) throw new Error("Knowledge database belongs to a different repository root.");
+      const currentFiles = sourceFilesAtCommit(root, index.commit_hash);
+      const previousFiles = state ? storedSourceFiles(db, state.indexed_commit) : new Map<string, string>();
+      const changed_files = state ? changedPaths(previousFiles, currentFiles) : [];
+      let claims_marked_stale = 0;
+      if (changed_files.length) {
+        const placeholders = changed_files.map(() => "?").join(", ");
+        const result = db.prepare(`UPDATE claims SET stale_at = ?, stale_reason = ?, updated_at = ? WHERE stale_at IS NULL AND id IN (SELECT DISTINCT claim_id FROM claim_source_files WHERE file IN (${placeholders}))`)
+          .run(now(), `Source files changed at ${index.commit_hash}: ${changed_files.length}`, now(), ...changed_files);
+        claims_marked_stale = Number(result.changes);
+      }
+      storeIndexedState(db, root, index, currentFiles);
+      db.exec("COMMIT");
+      return { commit_hash: index.commit_hash, previous_commit_hash: state?.indexed_commit ?? null, changed_files, claims_marked_stale };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  } finally { db.close(); }
 }
 
 /** Saves source-backed verification outcomes atomically. Unsupported outcomes remain auditable but are never current knowledge. */
@@ -141,7 +200,18 @@ export function saveKnowledgeUpdates(repositoryRoot: string, updates: KnowledgeU
     migrate(db, fresh);
     db.exec("BEGIN");
     try {
-      storeIndexedState(db, root, index);
+      const state = db.prepare("SELECT repository_root, indexed_commit FROM repository_state WHERE singleton = 1").get() as { repository_root: string; indexed_commit: string } | undefined;
+      if (state && state.repository_root !== root) throw new Error("Knowledge database belongs to a different repository root.");
+      const currentFiles = sourceFilesAtCommit(root, index.commit_hash);
+      if (state && state.indexed_commit !== index.commit_hash) {
+        const changed = changedPaths(storedSourceFiles(db, state.indexed_commit), currentFiles);
+        if (changed.length) {
+          const placeholders = changed.map(() => "?").join(", ");
+          db.prepare(`UPDATE claims SET stale_at = ?, stale_reason = ?, updated_at = ? WHERE stale_at IS NULL AND id IN (SELECT DISTINCT claim_id FROM claim_source_files WHERE file IN (${placeholders}))`)
+            .run(now(), `Source files changed at ${index.commit_hash}: ${changed.length}`, now(), ...changed);
+        }
+      }
+      storeIndexedState(db, root, index, currentFiles);
       const claimIds: string[] = [];
       let evidenceSaved = 0;
       for (const update of updates) {
