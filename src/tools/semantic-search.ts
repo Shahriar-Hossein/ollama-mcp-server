@@ -10,7 +10,7 @@ export function registerSemanticSearch(server: McpServer) {
       repository_root: z.string().describe("Absolute path to the Git repository root to explore."),
       query: z.string().describe("Natural-language or identifier query."),
       limit: z.number().int().min(1).max(100).optional().describe("Maximum results; defaults to 10."),
-      model: z.string().optional().describe("Local Ollama embedding model; defaults to SUPER_EXPLORER_EMBEDDING_MODEL or nomic-embed-text."),
+      model: z.string().optional().describe("Local Ollama embedding model; defaults to SUPER_EXPLORER_EMBEDDING_MODEL or nomic-embed-text-v2-moe."),
     },
     async ({ repository_root, query, limit, model }) => {
       try {

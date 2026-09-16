@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { embed } from "../ollama-client.js";
 import { indexRepository, type SymbolRecord } from "./indexer.js";
 
-const SEMANTIC_INDEX_VERSION = 1;
-const DEFAULT_EMBEDDING_MODEL = process.env.SUPER_EXPLORER_EMBEDDING_MODEL || "nomic-embed-text";
-const EMBEDDING_BATCH_SIZE = 32;
+const SEMANTIC_INDEX_VERSION = 2;
+const DEFAULT_EMBEDDING_MODEL = process.env.SUPER_EXPLORER_EMBEDDING_MODEL || "nomic-embed-text-v2-moe";
+const EMBEDDING_BATCH_SIZE = 128;
+const MAX_EMBEDDING_TEXT_CHARS = 1_600;
 
 interface SemanticEntry {
   symbol_id: string;
@@ -45,7 +46,7 @@ function sourceForSymbol(root: string, symbol: SymbolRecord): string {
   const prefix = source.subarray(0, symbol.range.start.byte).toString("utf8");
   const docblock = prefix.match(/\/\*\*[\s\S]*?\*\/\s*$/)?.[0] ?? "";
   const body = source.subarray(symbol.range.start.byte, symbol.range.end.byte).toString("utf8");
-  return `${symbol.kind} ${symbol.qualified_name}\n${symbol.signature}\n${docblock}${body}`;
+  return `search_document: ${`${symbol.kind} ${symbol.qualified_name}\n${symbol.signature}\n${docblock}${body}`.slice(0, MAX_EMBEDDING_TEXT_CHARS)}`;
 }
 
 function normalize(vector: number[]): number[] {
@@ -134,7 +135,7 @@ export async function semanticSearch(repositoryRoot: string, query: string, limi
   if (!semanticIndex) await buildSemanticIndex(root, model);
   const current = readReusableIndex(root, index.commit_hash, model);
   if (!current) throw new Error("Semantic index was not available after indexing.");
-  const [queryVector] = await embedAll(model, [trimmedQuery]);
+  const [queryVector] = await embedAll(model, [`search_query: ${trimmedQuery}`]);
   if (queryVector.length !== current.dimensions) throw new Error("Query embedding dimensions do not match the stored semantic index.");
   return {
     commit_hash: current.commit_hash,
