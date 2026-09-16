@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "index:super-explorer": "tsx src/super-explorer/index-cli.ts",
+    "outline:super-explorer": "tsx src/super-explorer/outline-cli.ts",
     "start": "tsx --env-file-if-exists=.env src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
