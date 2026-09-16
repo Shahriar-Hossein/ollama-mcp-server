@@ -30,6 +30,7 @@ export interface KnowledgeUpdate {
   resolution_quality: ResolutionQuality;
   evidence: KnowledgeEvidence[];
   source_files?: string[];
+  symbol_dependencies?: string[];
 }
 
 export interface KnowledgeWriteResult {
@@ -44,6 +45,9 @@ export interface KnowledgeFreshnessResult {
   previous_commit_hash: string | null;
   changed_files: string[];
   claims_marked_stale: number;
+  changed_symbols: number;
+  affected_symbols: number;
+  dependency_claims_marked_stale: number;
 }
 
 const MIGRATION_1 = `
@@ -59,7 +63,26 @@ CREATE INDEX claim_evidence_claim ON claim_evidence (claim_id);
 CREATE INDEX claim_source_files_file ON claim_source_files (file, claim_id);
 `;
 
+const MIGRATION_2 = `
+CREATE TABLE indexed_symbols (commit_hash TEXT NOT NULL REFERENCES indexed_commits(commit_hash), symbol_id TEXT NOT NULL, file TEXT NOT NULL, content_hash TEXT NOT NULL, PRIMARY KEY (commit_hash, symbol_id));
+CREATE TABLE symbol_dependency_edges (commit_hash TEXT NOT NULL REFERENCES indexed_commits(commit_hash), dependent_symbol_id TEXT NOT NULL, dependency_symbol_id TEXT NOT NULL, resolution_quality TEXT NOT NULL CHECK (resolution_quality IN ('exact', 'static')), PRIMARY KEY (commit_hash, dependent_symbol_id, dependency_symbol_id));
+CREATE TABLE claim_symbol_dependencies (claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE, symbol_id TEXT NOT NULL, PRIMARY KEY (claim_id, symbol_id));
+CREATE INDEX indexed_symbols_file ON indexed_symbols (commit_hash, file);
+CREATE INDEX symbol_dependency_edges_dependency ON symbol_dependency_edges (commit_hash, dependency_symbol_id, dependent_symbol_id);
+CREATE INDEX claim_symbol_dependencies_symbol ON claim_symbol_dependencies (symbol_id, claim_id);
+`;
+
 function now(): string { return new Date().toISOString(); }
+
+function assertCleanCheckout(root: string): void {
+  for (const args of [["diff", "--quiet"], ["diff", "--cached", "--quiet"]]) {
+    try { execFileSync("git", args, { cwd: root, stdio: "ignore" }); }
+    catch (error: any) {
+      if (error.status === 1) throw new Error("Knowledge snapshots require a clean Git checkout; commit or stash tracked changes first.");
+      throw error;
+    }
+  }
+}
 
 function normalizedFile(root: string, file: string): string {
   const path = resolve(root, file);
@@ -75,22 +98,24 @@ function databasePath(root: string): string {
 }
 
 function migrate(db: DatabaseSync, fresh: boolean): void {
-  if (fresh) {
-    db.exec("BEGIN");
-    try {
+  db.exec("BEGIN");
+  try {
+    if (fresh) {
       db.exec(MIGRATION_1);
       db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)").run(now());
-      db.exec("COMMIT");
-      return;
-    } catch (error) {
-      db.exec("ROLLBACK");
-      throw error;
     }
-  }
   const version = db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number | null };
-  if (version.version !== null && version.version > 1) throw new Error(`Knowledge database schema version ${version.version} is newer than supported version 1.`);
-  if (version.version === 1) return;
-  throw new Error("Knowledge database has no schema migration record.");
+    if (version.version === null) throw new Error("Knowledge database has no schema migration record.");
+    if (version.version > 2) throw new Error(`Knowledge database schema version ${version.version} is newer than supported version 2.`);
+    if (version.version < 2) {
+      db.exec(MIGRATION_2);
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(now());
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 function validateEvidence(root: string, index: RepositoryIndex, evidence: KnowledgeEvidence): void {
@@ -137,17 +162,82 @@ function changedPaths(previous: Map<string, string>, current: Map<string, string
     .sort();
 }
 
+function symbolContentHash(root: string, symbol: RepositoryIndex["symbols"][number]): string {
+  const source = readFileSync(resolve(root, symbol.file));
+  return createHash("sha256").update(source.subarray(symbol.range.start.byte, symbol.range.end.byte)).digest("hex");
+}
+
+function storeStructuralState(db: DatabaseSync, root: string, index: RepositoryIndex): void {
+  const insertSymbol = db.prepare("INSERT OR REPLACE INTO indexed_symbols (commit_hash, symbol_id, file, content_hash) VALUES (?, ?, ?, ?)");
+  for (const symbol of index.symbols) insertSymbol.run(index.commit_hash, symbol.id, symbol.file, symbolContentHash(root, symbol));
+  const insertEdge = db.prepare("INSERT OR REPLACE INTO symbol_dependency_edges (commit_hash, dependent_symbol_id, dependency_symbol_id, resolution_quality) VALUES (?, ?, ?, ?)");
+  const addEdge = (dependent: string | null, dependency: string | null, quality: ResolutionQuality) => {
+    if (dependent && dependency && (quality === "exact" || quality === "static")) insertEdge.run(index.commit_hash, dependent, dependency, quality);
+  };
+  for (const reference of index.references) addEdge(reference.source_symbol_id, reference.target_symbol_id, reference.resolution);
+  for (const call of index.calls) addEdge(call.caller_symbol_id, call.callee_symbol_id, call.resolution);
+  for (const inheritance of index.inheritance) addEdge(inheritance.child_symbol_id, inheritance.parent_symbol_id, inheritance.resolution);
+}
+
+function changedSymbols(db: DatabaseSync, previousCommit: string | undefined, root: string, index: RepositoryIndex): string[] {
+  if (!previousCommit) return [];
+  const previous = db.prepare("SELECT symbol_id, content_hash FROM indexed_symbols WHERE commit_hash = ?").all(previousCommit) as Array<{ symbol_id: string; content_hash: string }>;
+  const previousHashes = new Map(previous.map(({ symbol_id, content_hash }) => [symbol_id, content_hash]));
+  const currentHashes = new Map(index.symbols.map((symbol) => [symbol.id, symbolContentHash(root, symbol)]));
+  return [...new Set([...previousHashes.keys(), ...currentHashes.keys()])]
+    .filter((id) => previousHashes.get(id) !== currentHashes.get(id))
+    .sort();
+}
+
+function affectedSymbols(db: DatabaseSync, previousCommit: string | undefined, currentCommit: string, changed: string[]): string[] {
+  if (!changed.length) return [];
+  const commits = previousCommit && previousCommit !== currentCommit ? [previousCommit, currentCommit] : [currentCommit];
+  const placeholders = commits.map(() => "?").join(", ");
+  const rows = db.prepare(`SELECT dependent_symbol_id, dependency_symbol_id FROM symbol_dependency_edges WHERE commit_hash IN (${placeholders})`).all(...commits) as Array<{ dependent_symbol_id: string; dependency_symbol_id: string }>;
+  const dependents = new Map<string, string[]>();
+  for (const { dependent_symbol_id, dependency_symbol_id } of rows) {
+    const entries = dependents.get(dependency_symbol_id) ?? [];
+    entries.push(dependent_symbol_id);
+    dependents.set(dependency_symbol_id, entries);
+  }
+  const affected = new Set(changed);
+  const pending = [...changed];
+  while (pending.length) {
+    const dependency = pending.pop()!;
+    for (const dependent of dependents.get(dependency) ?? []) {
+      if (!affected.has(dependent)) { affected.add(dependent); pending.push(dependent); }
+    }
+  }
+  return [...affected].sort();
+}
+
+function markStaleForFiles(db: DatabaseSync, files: string[]): number {
+  if (!files.length) return 0;
+  const placeholders = files.map(() => "?").join(", ");
+  return Number(db.prepare(`UPDATE claims SET stale_at = ?, stale_reason = ?, updated_at = ? WHERE stale_at IS NULL AND id IN (SELECT DISTINCT claim_id FROM claim_source_files WHERE file IN (${placeholders}))`)
+    .run(now(), "Source files changed", now(), ...files).changes);
+}
+
+function markStaleForSymbols(db: DatabaseSync, symbols: string[]): number {
+  if (!symbols.length) return 0;
+  const placeholders = symbols.map(() => "?").join(", ");
+  return Number(db.prepare(`UPDATE claims SET stale_at = ?, stale_reason = ?, updated_at = ? WHERE stale_at IS NULL AND id IN (SELECT DISTINCT claim_id FROM claim_symbol_dependencies WHERE symbol_id IN (${placeholders}))`)
+    .run(now(), "Symbol dependencies changed", now(), ...symbols).changes);
+}
+
 function storeIndexedState(db: DatabaseSync, root: string, index: RepositoryIndex, files = sourceFilesAtCommit(root, index.commit_hash)): void {
   const timestamp = now();
   db.prepare("INSERT OR IGNORE INTO indexed_commits (commit_hash, indexed_at) VALUES (?, ?)").run(index.commit_hash, timestamp);
   db.prepare("INSERT INTO repository_state (singleton, repository_root, indexed_commit, indexed_at) VALUES (1, ?, ?, ?) ON CONFLICT(singleton) DO UPDATE SET repository_root = excluded.repository_root, indexed_commit = excluded.indexed_commit, indexed_at = excluded.indexed_at").run(root, index.commit_hash, timestamp);
   const insertFile = db.prepare("INSERT OR REPLACE INTO source_files (commit_hash, file, content_hash) VALUES (?, ?, ?)");
   for (const [file, contentHash] of files) insertFile.run(index.commit_hash, file, contentHash);
+  storeStructuralState(db, root, index);
 }
 
 /** Snapshots the indexed commit and marks claims stale when one of their direct source files changed. */
 export function refreshKnowledgeFreshness(repositoryRoot: string): KnowledgeFreshnessResult {
   const root = resolve(repositoryRoot);
+  assertCleanCheckout(root);
   const index = indexRepository(root);
   const path = databasePath(root);
   const fresh = !existsSync(path);
@@ -162,16 +252,13 @@ export function refreshKnowledgeFreshness(repositoryRoot: string): KnowledgeFres
       const currentFiles = sourceFilesAtCommit(root, index.commit_hash);
       const previousFiles = state ? storedSourceFiles(db, state.indexed_commit) : new Map<string, string>();
       const changed_files = state ? changedPaths(previousFiles, currentFiles) : [];
-      let claims_marked_stale = 0;
-      if (changed_files.length) {
-        const placeholders = changed_files.map(() => "?").join(", ");
-        const result = db.prepare(`UPDATE claims SET stale_at = ?, stale_reason = ?, updated_at = ? WHERE stale_at IS NULL AND id IN (SELECT DISTINCT claim_id FROM claim_source_files WHERE file IN (${placeholders}))`)
-          .run(now(), `Source files changed at ${index.commit_hash}: ${changed_files.length}`, now(), ...changed_files);
-        claims_marked_stale = Number(result.changes);
-      }
+      const changed_symbol_ids = changedSymbols(db, state?.indexed_commit, root, index);
+      const affected_symbol_ids = affectedSymbols(db, state?.indexed_commit, index.commit_hash, changed_symbol_ids);
+      const fileClaimsMarkedStale = markStaleForFiles(db, changed_files);
+      const dependency_claims_marked_stale = markStaleForSymbols(db, affected_symbol_ids);
       storeIndexedState(db, root, index, currentFiles);
       db.exec("COMMIT");
-      return { commit_hash: index.commit_hash, previous_commit_hash: state?.indexed_commit ?? null, changed_files, claims_marked_stale };
+      return { commit_hash: index.commit_hash, previous_commit_hash: state?.indexed_commit ?? null, changed_files, claims_marked_stale: fileClaimsMarkedStale + dependency_claims_marked_stale, changed_symbols: changed_symbol_ids.length, affected_symbols: affected_symbol_ids.length, dependency_claims_marked_stale };
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
@@ -182,12 +269,16 @@ export function refreshKnowledgeFreshness(repositoryRoot: string): KnowledgeFres
 /** Saves source-backed verification outcomes atomically. Unsupported outcomes remain auditable but are never current knowledge. */
 export function saveKnowledgeUpdates(repositoryRoot: string, updates: KnowledgeUpdate[]): KnowledgeWriteResult {
   const root = resolve(repositoryRoot);
+  assertCleanCheckout(root);
   if (!updates.length) return { commit_hash: indexRepository(root).commit_hash, claims_saved: 0, evidence_saved: 0, claim_ids: [] };
   const index = indexRepository(root);
   for (const update of updates) {
     if (!update.claim.trim()) throw new Error("Knowledge claims must not be empty.");
     if (!update.evidence.length) throw new Error("Knowledge updates require at least one evidence record.");
     if (update.subject_symbol_id && !index.symbols.some(({ id }) => id === update.subject_symbol_id)) throw new Error(`Claim refers to an unknown symbol: ${update.subject_symbol_id}`);
+    for (const symbolId of update.symbol_dependencies ?? []) {
+      if (!index.symbols.some(({ id }) => id === symbolId)) throw new Error(`Claim dependency refers to an unknown symbol: ${symbolId}`);
+    }
     if (update.verification_status === "SUPPORTED" && update.evidence.some(({ resolution_quality }) => resolution_quality === "unresolved")) throw new Error("SUPPORTED claims cannot rely on unresolved evidence.");
     if (update.resolution_quality !== weakestQuality(update.evidence)) throw new Error("Claim resolution quality must equal its weakest evidence quality.");
     for (const evidence of update.evidence) validateEvidence(root, index, evidence);
@@ -205,11 +296,9 @@ export function saveKnowledgeUpdates(repositoryRoot: string, updates: KnowledgeU
       const currentFiles = sourceFilesAtCommit(root, index.commit_hash);
       if (state && state.indexed_commit !== index.commit_hash) {
         const changed = changedPaths(storedSourceFiles(db, state.indexed_commit), currentFiles);
-        if (changed.length) {
-          const placeholders = changed.map(() => "?").join(", ");
-          db.prepare(`UPDATE claims SET stale_at = ?, stale_reason = ?, updated_at = ? WHERE stale_at IS NULL AND id IN (SELECT DISTINCT claim_id FROM claim_source_files WHERE file IN (${placeholders}))`)
-            .run(now(), `Source files changed at ${index.commit_hash}: ${changed.length}`, now(), ...changed);
-        }
+        const changedSymbolIds = changedSymbols(db, state.indexed_commit, root, index);
+        markStaleForFiles(db, changed);
+        markStaleForSymbols(db, affectedSymbols(db, state.indexed_commit, index.commit_hash, changedSymbolIds));
       }
       storeIndexedState(db, root, index, currentFiles);
       const claimIds: string[] = [];
@@ -220,6 +309,7 @@ export function saveKnowledgeUpdates(repositoryRoot: string, updates: KnowledgeU
         claimIds.push(claimId);
         db.prepare("INSERT INTO claims (id, claim, subject_symbol_id, verification_status, resolution_quality, verified_commit, verified_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(claimId, update.claim.trim(), update.subject_symbol_id ?? null, update.verification_status, update.resolution_quality, index.commit_hash, timestamp, timestamp, timestamp);
         const files = new Set(update.source_files?.map((file) => normalizedFile(root, file)) ?? []);
+        const symbolDependencies = new Set([update.subject_symbol_id, ...update.symbol_dependencies ?? [], ...update.evidence.map(({ symbol_id }) => symbol_id)].filter((id): id is string => Boolean(id)));
         for (const evidence of update.evidence) {
           const file = evidence.file ? normalizedFile(root, evidence.file) : null;
           if (file) files.add(file);
@@ -229,6 +319,8 @@ export function saveKnowledgeUpdates(repositoryRoot: string, updates: KnowledgeU
         }
         const addFile = db.prepare("INSERT INTO claim_source_files (claim_id, file) VALUES (?, ?)");
         for (const file of files) addFile.run(claimId, file);
+        const addSymbolDependency = db.prepare("INSERT INTO claim_symbol_dependencies (claim_id, symbol_id) VALUES (?, ?)");
+        for (const symbolId of symbolDependencies) addSymbolDependency.run(claimId, symbolId);
       }
       db.exec("COMMIT");
       return { commit_hash: index.commit_hash, claims_saved: updates.length, evidence_saved: evidenceSaved, claim_ids: claimIds };

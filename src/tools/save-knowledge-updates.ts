@@ -12,7 +12,7 @@ const evidence = z.object({
 export function registerSaveKnowledgeUpdates(server: McpServer) {
   server.tool("save_knowledge_updates", "Atomically saves source-backed verification outcomes as repository knowledge. SUPPORTED claims require non-unresolved evidence and are the only claims eligible for later retrieval.", {
     repository_root: z.string().describe("Absolute path to the Git repository root."),
-    updates: z.array(z.object({ claim: z.string().min(1), subject_symbol_id: z.string().optional(), verification_status: z.enum(["SUPPORTED", "CONTRADICTED", "INSUFFICIENT"]), resolution_quality: quality, evidence: z.array(evidence).min(1), source_files: z.array(z.string()).optional() })).min(1),
+    updates: z.array(z.object({ claim: z.string().min(1), subject_symbol_id: z.string().optional(), verification_status: z.enum(["SUPPORTED", "CONTRADICTED", "INSUFFICIENT"]), resolution_quality: quality, evidence: z.array(evidence).min(1), source_files: z.array(z.string()).optional(), symbol_dependencies: z.array(z.string()).optional() })).min(1),
   }, async ({ repository_root, updates }) => {
     try { return { content: [{ type: "text", text: JSON.stringify(saveKnowledgeUpdates(repository_root, updates)) }] }; }
     catch (error: any) { return { isError: true, content: [{ type: "text", text: `Failed to save knowledge updates: ${error.message}` }] }; }

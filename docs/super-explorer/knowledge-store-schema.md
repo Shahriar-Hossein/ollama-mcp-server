@@ -98,11 +98,39 @@ CREATE TABLE claim_source_files (
   PRIMARY KEY (claim_id, file)
 );
 
+CREATE TABLE indexed_symbols (
+  commit_hash TEXT NOT NULL REFERENCES indexed_commits(commit_hash),
+  symbol_id TEXT NOT NULL,
+  file TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  PRIMARY KEY (commit_hash, symbol_id)
+);
+
+CREATE TABLE symbol_dependency_edges (
+  commit_hash TEXT NOT NULL REFERENCES indexed_commits(commit_hash),
+  dependent_symbol_id TEXT NOT NULL,
+  dependency_symbol_id TEXT NOT NULL,
+  resolution_quality TEXT NOT NULL
+    CHECK (resolution_quality IN ('exact', 'static')),
+  PRIMARY KEY (commit_hash, dependent_symbol_id, dependency_symbol_id)
+);
+
+CREATE TABLE claim_symbol_dependencies (
+  claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+  symbol_id TEXT NOT NULL,
+  PRIMARY KEY (claim_id, symbol_id)
+);
+
 CREATE INDEX claims_current_supported
   ON claims (verified_commit, updated_at)
   WHERE verification_status = 'SUPPORTED' AND stale_at IS NULL;
 CREATE INDEX claim_evidence_claim ON claim_evidence (claim_id);
 CREATE INDEX claim_source_files_file ON claim_source_files (file, claim_id);
+CREATE INDEX indexed_symbols_file ON indexed_symbols (commit_hash, file);
+CREATE INDEX symbol_dependency_edges_dependency
+  ON symbol_dependency_edges (commit_hash, dependency_symbol_id, dependent_symbol_id);
+CREATE INDEX claim_symbol_dependencies_symbol
+  ON claim_symbol_dependencies (symbol_id, claim_id);
 ```
 
 ## Rules
@@ -118,6 +146,13 @@ CREATE INDEX claim_source_files_file ON claim_source_files (file, claim_id);
 - `claim_source_files` contains the distinct source files underlying every
   evidence row, plus any explicitly recorded source dependency. It is the
   only V1 invalidation join; do not parse claim prose to discover files.
+- `claim_symbol_dependencies` contains the claim subject, symbol evidence, and
+  any explicitly supplied symbol dependencies. Writers validate every ID
+  against the current structural index; do not infer dependencies from claim
+  prose.
+- `indexed_symbols` snapshots a declaration-body hash per indexed commit.
+  `symbol_dependency_edges` snapshots exact/static reference, call, and
+  inheritance dependencies, directed from dependent to dependency.
 - An evidence range is half-open UTF-8 byte offsets in `file` at its
   `commit_hash`. It may retain a short excerpt for display, but verification
   must re-read the source range rather than trust that excerpt.
@@ -138,15 +173,22 @@ short `stale_reason` on matching `claim_source_files` rows. Never overwrite
 new evidence as needed, clears both stale columns, and updates verification
 status and `verified_commit` atomically.
 
-The next dependency-aware task may add `claim_symbol_dependencies` and mark
-claims stale through the structural graph. It must preserve this direct-file
-invalidation path.
+## V2 dependency freshness behavior
+
+When a new commit is indexed, compare symbol-body hashes with the prior
+snapshot. Traverse the union of the old and new exact/static dependency edges
+backwards from changed symbols, so a changed callee also affects its callers
+and a removed edge cannot hide stale knowledge. Mark claims that depend on
+any reached symbol stale. Direct-file invalidation still runs independently.
+Heuristic and unresolved edges never cause invalidation.
+Snapshots and knowledge writes require a clean tracked checkout, so the
+structural index and its recorded commit always describe the same bytes.
 
 ## Migration policy
 
-Migration `1` creates all tables above and inserts `(1, <UTC ISO-8601 time>)`
-into `schema_migrations`. The process must run pending migrations in version
-order within one transaction and refuse a database whose highest version is
-newer than it supports. Never infer a table shape from `sqlite_master` or
-silently repair an unknown schema. Additive schema changes receive a new
-migration; a changed field meaning requires a documented data migration.
+Migration `1` creates the V1 tables and migration `2` adds the symbol
+dependency tables. The process runs pending migrations in version order within
+one transaction and refuses a database whose highest version is newer than it
+supports. Never infer a table shape from `sqlite_master` or silently repair an
+unknown schema. Additive schema changes receive a new migration; a changed
+field meaning requires a documented data migration.
