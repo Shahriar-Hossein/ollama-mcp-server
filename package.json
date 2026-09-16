@@ -14,6 +14,7 @@
     "git-history:super-explorer": "tsx src/super-explorer/git-history-cli.ts",
     "wordpress-hooks:super-explorer": "tsx src/super-explorer/wordpress-hooks-cli.ts",
     "knowledge:super-explorer": "tsx src/super-explorer/knowledge-cli.ts",
+    "discover:super-explorer": "tsx src/super-explorer/discovery-cli.ts",
     "start": "tsx --env-file-if-exists=.env src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
