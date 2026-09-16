@@ -26,6 +26,13 @@ vector engine's model-specific files under `.super-explorer/embeddings/`; the
 database records the embedding model, dimensions, source commit, and sidecar
 identifier needed to decide whether those files can be reused.
 
+The initial local sidecar is a JSON file named for its embedding model. It
+contains normalized vectors for each indexed symbol's signature, source body,
+and immediately preceding docblock. It is reusable only when its schema
+version, model, and indexed commit all match the current request. Semantic
+results return source symbol IDs and ranges, not asserted facts; callers must
+still read and verify the cited source.
+
 This decision deliberately does not define tables yet. The next schema task
 will specify stable symbol records first, then add map and knowledge tables
 with explicit migrations. Until then, no code may treat undocumented SQLite

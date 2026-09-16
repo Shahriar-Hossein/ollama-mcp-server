@@ -8,6 +8,7 @@
     "outline:super-explorer": "tsx src/super-explorer/outline-cli.ts",
     "read-symbol:super-explorer": "tsx src/super-explorer/read-symbol-cli.ts",
     "structural:super-explorer": "tsx src/super-explorer/structural-cli.ts",
+    "semantic:super-explorer": "tsx src/super-explorer/semantic-cli.ts",
     "git-history:super-explorer": "tsx src/super-explorer/git-history-cli.ts",
     "wordpress-hooks:super-explorer": "tsx src/super-explorer/wordpress-hooks-cli.ts",
     "start": "tsx --env-file-if-exists=.env src/index.ts",
