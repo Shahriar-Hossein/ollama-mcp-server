@@ -16,6 +16,8 @@
     "knowledge:super-explorer": "tsx src/super-explorer/knowledge-cli.ts",
     "discover:super-explorer": "tsx src/super-explorer/discovery-cli.ts",
     "verify:super-explorer": "tsx src/super-explorer/verification-cli.ts",
+    "synthesize:super-explorer": "tsx src/super-explorer/synthesis-cli.ts",
+    "benchmark:super-explorer": "tsx src/super-explorer/baseline-benchmark-cli.ts",
     "start": "tsx --env-file-if-exists=.env src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

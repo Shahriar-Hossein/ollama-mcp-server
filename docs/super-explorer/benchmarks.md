@@ -71,3 +71,22 @@ For the initial gate, require 100% required-relationship recall and zero
 unsupported claims per answer. Report aggregate file/symbol recall, median
 tool calls, tokens, and latency separately; do not let a fast but unsupported
 answer count as correct.
+
+## Recording a baseline
+
+Run the full pipeline at the fixture revision, then manually score each cited
+answer against the gold table. Save an object with `run_name`, `model`, and a
+12-item `runs` array using the fields above; `fixture_commit` must be the gold
+revision for every item. Token counts include every model request in the run;
+tool calls include retrieval, discovery, verification, and synthesis calls.
+Then aggregate it with:
+
+```sh
+npm run --silent benchmark:super-explorer -- <repository-root> <scored-runs-json-file>
+```
+
+The generated ignored artifact reports answer accuracy (a question passes only
+with full relationship recall and zero unsupported claims), average recall,
+the rate of answers with an unsupported claim (plus the total count), and
+median calls, tokens, and latency. This keeps the gold judgment separate from
+the system being measured.
