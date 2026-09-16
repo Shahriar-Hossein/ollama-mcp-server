@@ -26,7 +26,14 @@ source. Registrations recognize `add_action` and `add_filter`; emitters
 recognize `do_action`, `do_action_ref_array`, `apply_filters`, and
 `apply_filters_ref_array`. Each fact includes the hook name (or `null` with
 `unresolved` resolution for a dynamic name), invocation, hook type, and, for a
-registration, the callback expression. Its containing symbol ID links back to
+registration, the callback expression.
+
+It also emits `metadata_read` and `metadata_write` facts for the WordPress
+post, user, comment, term, and generic metadata APIs, plus `option_read` and
+`option_write` facts for site and network option APIs. Metadata facts include
+`api`, `meta_type`, and `meta_key`; option facts include `api` and
+`option_name`. A computed key or option name is retained as `null` and marked
+`unresolved`, never guessed. Every fact's containing symbol ID links back to
 generic structural queries.
 
 Run `npm run --silent wordpress-hooks:super-explorer -- <repository-root>` to
