@@ -15,6 +15,7 @@ import { registerSaveKnowledgeUpdates } from "./tools/save-knowledge-updates.js"
 import { registerDiscoverEvidence } from "./tools/discover-evidence.js";
 import { registerVerifyClaims } from "./tools/verify-claims.js";
 import { registerSynthesizeVerifiedAnswer } from "./tools/synthesize-verified-answer.js";
+import { registerExploreRepository } from "./tools/explore-repository.js";
 
 const server = new McpServer({
   name: "ollama-subagent-bridge",
@@ -34,6 +35,7 @@ registerSaveKnowledgeUpdates(server);
 registerDiscoverEvidence(server);
 registerVerifyClaims(server);
 registerSynthesizeVerifiedAnswer(server);
+registerExploreRepository(server);
 
 // Autonomous shell-executing tools: opt-in only, off by default. See
 // docs/local-claude-worker-experiment-2026-09-14.md for why the cloud model
