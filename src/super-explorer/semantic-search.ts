@@ -46,7 +46,11 @@ function sourceForSymbol(root: string, symbol: SymbolRecord): string {
   const prefix = source.subarray(0, symbol.range.start.byte).toString("utf8");
   const docblock = prefix.match(/\/\*\*[\s\S]*?\*\/\s*$/)?.[0] ?? "";
   const body = source.subarray(symbol.range.start.byte, symbol.range.end.byte).toString("utf8");
-  return `search_document: ${`${symbol.kind} ${symbol.qualified_name}\n${symbol.signature}\n${docblock}${body}`.slice(0, MAX_EMBEDDING_TEXT_CHARS)}`;
+  return `${symbol.kind} ${symbol.qualified_name}\n${symbol.signature}\n${docblock}${body}`.slice(0, MAX_EMBEDDING_TEXT_CHARS);
+}
+
+function embeddingInput(model: string, role: "query" | "document", text: string): string {
+  return model.startsWith("nomic-embed-text-v2-moe") ? `search_${role}: ${text}` : text;
 }
 
 function normalize(vector: number[]): number[] {
@@ -97,7 +101,7 @@ export async function buildSemanticIndex(repositoryRoot: string, model = DEFAULT
   if (reusable) return { commit_hash: reusable.commit_hash, model: reusable.model, dimensions: reusable.dimensions, entries_indexed: reusable.entries.length };
 
   const symbols = index.symbols;
-  const texts = symbols.map((symbol) => sourceForSymbol(root, symbol));
+  const texts = symbols.map((symbol) => embeddingInput(model, "document", sourceForSymbol(root, symbol)));
   const vectors = await embedAll(model, texts);
   const dimensions = vectors[0]?.length ?? 0;
   if (!dimensions || vectors.some((vector) => vector.length !== dimensions)) throw new Error("Ollama returned embeddings with inconsistent dimensions.");
@@ -135,7 +139,7 @@ export async function semanticSearch(repositoryRoot: string, query: string, limi
   if (!semanticIndex) await buildSemanticIndex(root, model);
   const current = readReusableIndex(root, index.commit_hash, model);
   if (!current) throw new Error("Semantic index was not available after indexing.");
-  const [queryVector] = await embedAll(model, [`search_query: ${trimmedQuery}`]);
+  const [queryVector] = await embedAll(model, [embeddingInput(model, "query", trimmedQuery)]);
   if (queryVector.length !== current.dimensions) throw new Error("Query embedding dimensions do not match the stored semantic index.");
   return {
     commit_hash: current.commit_hash,
