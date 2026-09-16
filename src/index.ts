@@ -8,6 +8,7 @@ import { registerRunLocalWorkerTask } from "./tools/run-local-worker-task.js";
 import { registerLocalExplorerTask } from "./tools/local-explorer-task.js";
 import { registerOutlineFile } from "./tools/outline-file.js";
 import { registerReadSymbol } from "./tools/read-symbol.js";
+import { registerStructuralQueries } from "./tools/structural-queries.js";
 
 const server = new McpServer({
   name: "ollama-subagent-bridge",
@@ -20,6 +21,7 @@ registerSummarizeOutput(server);
 registerLocalExplorerTask(server);
 registerOutlineFile(server);
 registerReadSymbol(server);
+registerStructuralQueries(server);
 
 // Autonomous shell-executing tools: opt-in only, off by default. See
 // docs/local-claude-worker-experiment-2026-09-14.md for why the cloud model

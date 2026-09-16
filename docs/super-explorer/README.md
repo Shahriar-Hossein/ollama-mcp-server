@@ -160,7 +160,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 - [x] Add `outline_file(path)` backed by the symbol index. Run `npm run --silent outline:super-explorer -- <repository-root> <path>`; it returns a hierarchical declaration outline without source bodies.
 - [x] Add `read_symbol(symbol)` with source ranges and minimal surrounding context. Run `npm run --silent read-symbol:super-explorer -- <repository-root> <symbol-id>` with an ID returned by `outline_file`.
 - [x] Extract and index references, dependencies, inheritance, and caller/callee edges; record `exact`, `static`, `heuristic`, or `unresolved` resolution quality.
-- [ ] Add `find_symbol`, `find_references`, `find_callers`, and `find_callees`.
+- [x] Add `find_symbol`, `find_references`, `find_callers`, and `find_callees`. Run `npm run --silent structural:super-explorer -- find-symbol <repository-root> <name-or-id>`; use a returned ID with `find-references`, `find-callers`, or `find-callees`.
 - [ ] Define the framework-adapter interface and keep generic structural tools independent of adapters.
 - [ ] Extract WordPress/WooCommerce hooks and connect registrations and emitters to their containing symbols.
 - [ ] Add metadata/options reads and writes to the domain index.
