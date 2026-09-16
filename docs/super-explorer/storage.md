@@ -33,10 +33,11 @@ version, model, and indexed commit all match the current request. Semantic
 results return source symbol IDs and ranges, not asserted facts; callers must
 still read and verify the cited source.
 
-This decision deliberately does not define tables yet. The next schema task
-will specify stable symbol records first, then add map and knowledge tables
-with explicit migrations. Until then, no code may treat undocumented SQLite
-tables as a public interface.
+The verified-knowledge tables, freshness rules, and migration contract are
+defined in [the knowledge-store schema](knowledge-store-schema.md). The
+source-index tables remain an implementation detail until the indexer moves
+from generated JSON to SQLite; code must not treat undocumented tables as a
+public interface.
 
 ## Lifecycle
 
