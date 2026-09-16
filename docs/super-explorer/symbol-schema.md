@@ -46,7 +46,7 @@ symbol. `qualified_name` is required even when it equals `name`.
 | `language` | Lowercase parser language identifier, such as `typescript`, `javascript`, `php`, `json`, or `markdown`; never a filename extension. |
 | `kind` | One of `class`, `interface`, `trait`, `enum`, `function`, `method`, `constructor`, `property`, `constant`, `type`, `namespace`, `module`, `variable`, or `unknown`. Use `unknown` when a supported parser exposes a named declaration that cannot be mapped safely. |
 | `name` | Declaration name exactly as represented by the parser, excluding parent qualification. Anonymous declarations do not create records. |
-| `qualified_name` | Dot-separated lexical path, starting with the top-level declaration and ending in `name`; it disambiguates nested symbols. Literal dots in parser names are escaped as `\\.`. |
+| `qualified_name` | Dot-separated lexical path, starting with the top-level declaration and ending in `name`; it disambiguates nested symbols. Literal dots in parser names are escaped as `\\.`. If multiple records would otherwise have the same path through unnamed syntax (for example, methods in separate object literals), append `#<N>` to the final part in source order, starting at `#2`. |
 | `parent_id` | The containing symbol's `id`, or `null`. A parent must be in the same file and commit. |
 | `range` | Half-open source range covering the entire declaration: `start` is inclusive and `end` is exclusive. Lines and columns are 1-based; `byte` is a 0-based UTF-8 byte offset. |
 | `selection_range` | Half-open range of the declared name, contained in `range`. For declarations whose parser has no separate name span, set it equal to `range`. |
