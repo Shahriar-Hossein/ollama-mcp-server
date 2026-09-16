@@ -36,6 +36,20 @@ post, user, comment, term, and generic metadata APIs, plus `option_read` and
 `unresolved`, never guessed. Every fact's containing symbol ID links back to
 generic structural queries.
 
+The same JavaScript/TypeScript extraction pass emits `rest_route` facts for
+`register_rest_route`, `ajax_handler` facts for `add_action`/`add_filter`
+registrations whose literal hook begins `wp_ajax_`, and
+`shortcode_registration` facts for `add_shortcode`. `rest_route` records the
+literal namespace and route; AJAX and shortcode facts retain the callback
+expression when supplied. Dynamic names are `null` and `unresolved`.
+
+WooCommerce-specific facts are deliberately narrow: literal `woocommerce_`
+hooks containing `cart`, plus the common `woocommerce_before_calculate_totals`
+price-recalculation hook, produce `wc_cart_hook_registration` or
+`wc_cart_hook_emitter`; calls to `set_price`, `set_regular_price`, or
+`set_sale_price` through a member expression produce `wc_price_mutation`.
+The latter records the syntactic receiver but does not claim its runtime type.
+
 Run `npm run --silent wordpress-hooks:super-explorer -- <repository-root>` to
 emit the adapter index, or `null` when the indexed checkout contains no known
 hook invocation. PHP is deliberately not scanned yet because the generic

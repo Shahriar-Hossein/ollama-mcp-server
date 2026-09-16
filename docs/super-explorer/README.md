@@ -164,7 +164,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 - [x] Define the framework-adapter interface and keep generic structural tools independent of adapters. See [framework adapters](framework-adapters.md).
 - [x] Extract WordPress/WooCommerce hooks and connect registrations and emitters to their containing symbols. Run `npm run --silent wordpress-hooks:super-explorer -- <repository-root>`; the current generic JS/TS index supports literal hook names in those languages.
 - [x] Add metadata/options reads and writes to the domain index. The WordPress/WooCommerce adapter emits source-backed metadata and option facts for the supported JavaScript/TypeScript APIs, including unresolved computed keys.
-- [ ] Add REST routes, AJAX handlers, shortcodes, cart hooks, and price-mutation extraction as needed by the benchmark.
+- [x] Add REST routes, AJAX handlers, shortcodes, cart hooks, and price-mutation extraction. The WordPress/WooCommerce adapter emits literal source-backed facts for the supported JavaScript/TypeScript APIs; dynamic route, shortcode, and hook names remain unresolved.
 - [ ] Index tests and provide source-to-test lookup.
 - [ ] Add git-history lookups for files and symbols.
 - [ ] Add semantic embeddings and local similarity search.
