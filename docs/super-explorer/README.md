@@ -166,7 +166,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 - [x] Add metadata/options reads and writes to the domain index. The WordPress/WooCommerce adapter emits source-backed metadata and option facts for the supported JavaScript/TypeScript APIs, including unresolved computed keys.
 - [x] Add REST routes, AJAX handlers, shortcodes, cart hooks, and price-mutation extraction. The WordPress/WooCommerce adapter emits literal source-backed facts for the supported JavaScript/TypeScript APIs; dynamic route, shortcode, and hook names remain unresolved.
 - [x] Index tests and provide source-to-test lookup. Conventional JS/TS test files yield source-backed test-to-symbol edges; run `npm run --silent structural:super-explorer -- find-tests-for-symbol <repository-root> <symbol-id>`.
-- [ ] Add git-history lookups for files and symbols.
+- [x] Add git-history lookups for files and symbols. Run `npm run --silent git-history:super-explorer -- <file-introduction|symbol-introduction|file-recent-changes|symbol-recent-changes|blame-symbol> <repository-root> <file-or-symbol-id> [limit]`; file history follows renames, and symbol history/blame uses its indexed source range.
 - [ ] Add semantic embeddings and local similarity search.
 - [ ] Implement hybrid retrieval and rank merging; compare it with lexical-only retrieval on the benchmark.
 - [ ] Define the SQLite knowledge-store schema, including claims, evidence, verification status, resolution quality, verified commit, and stale state.
