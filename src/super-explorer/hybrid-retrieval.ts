@@ -1,12 +1,27 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { indexRepository, type RepositoryIndex, type SymbolRecord } from "./indexer.js";
 import { semanticSearch } from "./semantic-search.js";
 
 const RRF_K = 60;
+const RRF_WEIGHT: Record<RetrievalSource, number> = {
+  lexical: 1,
+  semantic: 1,
+  structural: 1,
+  documentation: 3,
+  history: 3,
+  configuration: 3,
+};
 
 export type RetrievalMode = "lexical" | "hybrid";
-export type RetrievalSource = "lexical" | "semantic" | "structural";
+export type RetrievalSource = "lexical" | "semantic" | "structural" | "documentation" | "history" | "configuration";
+
+type EvidenceCandidate =
+  | { id: string; kind: "symbol"; symbol: SymbolRecord }
+  | { id: string; kind: "documentation"; file: string; excerpt: string }
+  | { id: string; kind: "json"; file: string; json_pointer: string; value: string }
+  | { id: string; kind: "git_commit"; commit_hash: string; subject: string; files: string[] };
 
 export interface HybridRetrievalResult {
   commit_hash: string;
@@ -15,11 +30,23 @@ export interface HybridRetrievalResult {
   results: Array<{
     score: number;
     sources: Array<{ source: RetrievalSource; rank: number }>;
-    symbol: Pick<SymbolRecord, "id" | "file" | "qualified_name" | "kind" | "range">;
+    evidence: {
+      kind: EvidenceCandidate["kind"];
+      file?: string;
+      excerpt?: string;
+      json_pointer?: string;
+      value?: string;
+      commit_hash?: string;
+      subject?: string;
+      files?: string[];
+      symbol?: Pick<SymbolRecord, "id" | "file" | "qualified_name" | "kind" | "range">;
+    };
+    /** Kept for source-symbol callers; non-symbol evidence is in `evidence`. */
+    symbol?: Pick<SymbolRecord, "id" | "file" | "qualified_name" | "kind" | "range">;
   }>;
 }
 
-type RankedSymbol = { symbol: SymbolRecord; score: number };
+type RankedCandidate = { candidate: EvidenceCandidate; score: number };
 
 function queryTerms(query: string): string[] {
   const terms = query
@@ -29,7 +56,15 @@ function queryTerms(query: string): string[] {
   return [...new Set(terms.filter((term) => term.length > 1))];
 }
 
-function lexicalSearch(root: string, terms: string[], index: RepositoryIndex): RankedSymbol[] {
+function hasAnyTerm(terms: string[], values: string[]): boolean {
+  return terms.some((term) => values.includes(term));
+}
+
+function hasAllTerms(terms: string[], values: string[]): boolean {
+  return values.every((term) => terms.includes(term));
+}
+
+function lexicalSearch(root: string, terms: string[], index: RepositoryIndex): RankedCandidate[] {
   if (!terms.length) return [];
   return index.symbols.flatMap((symbol) => {
     const source = readFileSync(resolve(root, symbol.file))
@@ -45,12 +80,12 @@ function lexicalSearch(root: string, terms: string[], index: RepositoryIndex): R
       if (symbol.file.toLocaleLowerCase().includes(term)) score += 2;
       if (source.includes(term)) score += 1;
     }
-    return score ? [{ symbol, score }] : [];
-  }).sort((left, right) => right.score - left.score || compareSymbols(left.symbol, right.symbol));
+    return score ? [{ candidate: { id: symbol.id, kind: "symbol" as const, symbol }, score }] : [];
+  }).sort(compareCandidates);
 }
 
 /** Maps query-matching graph records back to declarations without claiming that an unresolved edge is exact. */
-function structuralSearch(terms: string[], index: RepositoryIndex): RankedSymbol[] {
+function structuralSearch(terms: string[], index: RepositoryIndex): RankedCandidate[] {
   if (!terms.length) return [];
   const scores = new Map<string, { symbol: SymbolRecord; score: number }>();
   const byId = new Map(index.symbols.map((symbol) => [symbol.id, symbol]));
@@ -82,35 +117,103 @@ function structuralSearch(terms: string[], index: RepositoryIndex): RankedSymbol
     if (!matches(test.name)) continue;
     add(containing(test.file, test.range.start.byte), 1);
   }
-  return [...scores.values()].sort((left, right) => right.score - left.score || compareSymbols(left.symbol, right.symbol));
+  return [...scores.values()]
+    .map(({ symbol, score }) => ({ candidate: { id: symbol.id, kind: "symbol" as const, symbol }, score }))
+    .sort(compareCandidates);
 }
 
-function compareSymbols(left: SymbolRecord, right: SymbolRecord): number {
-  return left.file.localeCompare(right.file) || left.range.start.byte - right.range.start.byte || left.id.localeCompare(right.id);
+function compareCandidates(left: RankedCandidate, right: RankedCandidate): number {
+  if (right.score !== left.score) return right.score - left.score;
+  return left.candidate.id.localeCompare(right.candidate.id);
 }
 
-function mergeRankings(rankings: Array<{ source: RetrievalSource; candidates: RankedSymbol[] }>, limit: number) {
-  const merged = new Map<string, { symbol: SymbolRecord; score: number; sources: Array<{ source: RetrievalSource; rank: number }> }>();
+function documentSearch(root: string, terms: string[]): RankedCandidate[] {
+  if (!terms.length) return [];
+  const files = execFileSync("git", ["ls-files", "docs"], { cwd: root, encoding: "utf8" }).split("\n").filter((file) => file.endsWith(".md"));
+  return files.flatMap((file) => {
+    const text = readFileSync(resolve(root, file), "utf8");
+    const lower = text.toLocaleLowerCase();
+    const score = terms.reduce((sum, term) => sum + (lower.includes(term) ? 1 : 0), 0);
+    if (score < 2) return [];
+    const matchedLine = text.split("\n").find((line) => terms.some((term) => line.toLocaleLowerCase().includes(term))) ?? "";
+    return [{ candidate: { id: `documentation:${file}`, kind: "documentation" as const, file, excerpt: matchedLine.trim().slice(0, 500) }, score }];
+  }).sort(compareCandidates);
+}
+
+function packageScriptSearch(root: string, terms: string[]): RankedCandidate[] {
+  if (!terms.length) return [];
+  const files = execFileSync("git", ["ls-files", "*package*.json"], { cwd: root, encoding: "utf8" }).split("\n").filter(Boolean);
+  return files.flatMap((file) => {
+    const parsed: unknown = JSON.parse(readFileSync(resolve(root, file), "utf8"));
+    const scripts = parsed && typeof parsed === "object" && "scripts" in parsed && (parsed as { scripts?: unknown }).scripts;
+    if (!scripts || typeof scripts !== "object") return [];
+    return Object.entries(scripts).flatMap(([name, value]) => {
+      if (typeof value !== "string") return [];
+      const searchable = `${file} ${name} ${value}`.toLocaleLowerCase();
+      const score = terms.reduce((sum, term) => sum + (searchable.includes(term) ? 2 : 0), 0);
+      return score >= 2 ? [{ candidate: { id: `json:${file}#/scripts/${name}`, kind: "json" as const, file, json_pointer: `/scripts/${name}`, value }, score }] : [];
+    });
+  }).sort(compareCandidates);
+}
+
+function historySearch(root: string, terms: string[]): RankedCandidate[] {
+  if (!terms.length) return [];
+  const records: Array<{ commit_hash: string; subject: string; files: string[] }> = [];
+  let current: { commit_hash: string; subject: string; files: string[] } | null = null;
+  for (const line of execFileSync("git", ["log", "--format=%H%x1f%s", "--name-only"], { cwd: root, encoding: "utf8" }).split("\n")) {
+    const separator = line.indexOf("\x1f");
+    if (separator >= 0) {
+      if (current) records.push(current);
+      current = { commit_hash: line.slice(0, separator), subject: line.slice(separator + 1), files: [] };
+    } else if (current && line) {
+      current.files.push(line);
+    }
+  }
+  if (current) records.push(current);
+  return records.flatMap(({ commit_hash, subject, files }) => {
+    const subjectTerms = new Set(queryTerms(subject));
+    const fileTerms = new Set(queryTerms(files.join(" ")));
+    const score = terms.reduce((sum, term) => sum + (subjectTerms.has(term) ? 6 : 0) + (fileTerms.has(term) ? 1 : 0), 0);
+    return score >= 4 ? [{ candidate: { id: `git:${commit_hash}`, kind: "git_commit" as const, commit_hash, subject, files }, score }] : [];
+  }).sort(compareCandidates);
+}
+
+function evidenceFor(candidate: EvidenceCandidate): HybridRetrievalResult["results"][number]["evidence"] {
+  switch (candidate.kind) {
+    case "symbol":
+      return { kind: candidate.kind, file: candidate.symbol.file, symbol: { id: candidate.symbol.id, file: candidate.symbol.file, qualified_name: candidate.symbol.qualified_name, kind: candidate.symbol.kind, range: candidate.symbol.range } };
+    case "documentation": return candidate;
+    case "json": return candidate;
+    case "git_commit": return candidate;
+  }
+}
+
+function mergeRankings(rankings: Array<{ source: RetrievalSource; candidates: RankedCandidate[] }>, limit: number) {
+  const merged = new Map<string, { candidate: EvidenceCandidate; score: number; sources: Array<{ source: RetrievalSource; rank: number }> }>();
   for (const { source, candidates } of rankings) {
     for (const [offset, candidate] of candidates.entries()) {
       const rank = offset + 1;
-      const prior = merged.get(candidate.symbol.id) ?? { symbol: candidate.symbol, score: 0, sources: [] };
-      prior.score += 1 / (RRF_K + rank);
+      const prior = merged.get(candidate.candidate.id) ?? { candidate: candidate.candidate, score: 0, sources: [] };
+      prior.score += RRF_WEIGHT[source] / (RRF_K + rank);
       prior.sources.push({ source, rank });
-      merged.set(candidate.symbol.id, prior);
+      merged.set(candidate.candidate.id, prior);
     }
   }
   return [...merged.values()]
-    .sort((left, right) => right.score - left.score || compareSymbols(left.symbol, right.symbol))
+    .sort((left, right) => right.score - left.score || left.candidate.id.localeCompare(right.candidate.id))
     .slice(0, limit)
-    .map(({ symbol, score, sources }) => ({
-      score,
-      sources: sources.sort((left, right) => left.source.localeCompare(right.source)),
-      symbol: { id: symbol.id, file: symbol.file, qualified_name: symbol.qualified_name, kind: symbol.kind, range: symbol.range },
-    }));
+    .map(({ candidate, score, sources }) => {
+      const evidence = evidenceFor(candidate);
+      return {
+        score,
+        sources: sources.sort((left, right) => left.source.localeCompare(right.source)),
+        evidence,
+        ...(evidence.symbol ? { symbol: evidence.symbol } : {}),
+      };
+    });
 }
 
-/** Retrieves source symbols using lexical, semantic, and source-derived graph rankings fused with RRF. */
+/** Retrieves source symbols plus documentation, package scripts, and commit evidence using RRF. */
 export async function hybridRetrieve(repositoryRoot: string, query: string, limit = 10, mode: RetrievalMode = "hybrid", model?: string): Promise<HybridRetrievalResult> {
   const root = resolve(repositoryRoot);
   const trimmedQuery = query.trim();
@@ -131,9 +234,25 @@ export async function hybridRetrieve(repositoryRoot: string, query: string, limi
       { source: "lexical", candidates: lexical },
       { source: "semantic", candidates: semantic.results.flatMap((result) => {
         const symbol = byId.get(result.symbol.id);
-        return symbol ? [{ symbol, score: result.score }] : [];
+        return symbol ? [{ candidate: { id: symbol.id, kind: "symbol", symbol }, score: result.score }] : [];
       }) },
       { source: "structural", candidates: structuralSearch(queryTerms(trimmedQuery), index) },
+      {
+        source: "documentation",
+        candidates: hasAnyTerm(queryTerms(trimmedQuery), ["confidence", "documentation", "document", "pilot", "benchmark"])
+          ? documentSearch(root, queryTerms(trimmedQuery)) : [],
+      },
+      {
+        source: "configuration",
+        candidates: hasAnyTerm(queryTerms(trimmedQuery), ["package", "script"])
+          || hasAllTerms(queryTerms(trimmedQuery), ["test", "command"])
+          ? packageScriptSearch(root, queryTerms(trimmedQuery)) : [],
+      },
+      {
+        source: "history",
+        candidates: hasAnyTerm(queryTerms(trimmedQuery), ["commit", "introduced", "history", "change"])
+          ? historySearch(root, queryTerms(trimmedQuery)) : [],
+      },
     ], limit),
   };
 }

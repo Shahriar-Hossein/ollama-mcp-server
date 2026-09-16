@@ -5,7 +5,7 @@ import { hybridRetrieve } from "../super-explorer/hybrid-retrieval.js";
 export function registerHybridRetrieval(server: McpServer) {
   server.tool(
     "hybrid_retrieve",
-    "Ranks source-symbol candidates with lexical, local semantic, and source-derived structural retrieval. Use lexical mode for a lexical-only benchmark baseline, then read_symbol to verify claims.",
+    "Ranks source symbols plus documentation, package-script, and Git-commit evidence. Use lexical mode for the source-symbol baseline, then verify returned evidence before making claims.",
     {
       repository_root: z.string().describe("Absolute path to the Git repository root to explore."),
       query: z.string().describe("Question, identifier, path, or behavior to retrieve."),
