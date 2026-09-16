@@ -103,7 +103,7 @@ Complete these in order. Keep each session focused on one unchecked item; record
 
 - [x] Define the first benchmark questions and their gold files, symbols, and relationships. See [the initial benchmark set](benchmarks.md).
 - [x] Choose the on-disk format and location for generated explorer data; add it to `.gitignore` if it is reproducible. See [storage](storage.md).
-- [ ] Define a stable symbol-record schema (file, language, kind, name, range, signature, parent).
+- [x] Define a stable symbol-record schema (file, language, kind, name, range, signature, parent). See [the symbol-record schema](symbol-schema.md).
 - [ ] Build an indexer that discovers supported source files and emits symbol records.
 - [ ] Add `outline_file(path)` backed by the symbol index.
 - [ ] Add `read_symbol(symbol)` with source ranges and minimal surrounding context.
