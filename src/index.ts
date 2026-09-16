@@ -13,6 +13,7 @@ import { registerSemanticSearch } from "./tools/semantic-search.js";
 import { registerHybridRetrieval } from "./tools/hybrid-retrieval.js";
 import { registerSaveKnowledgeUpdates } from "./tools/save-knowledge-updates.js";
 import { registerDiscoverEvidence } from "./tools/discover-evidence.js";
+import { registerVerifyClaims } from "./tools/verify-claims.js";
 
 const server = new McpServer({
   name: "ollama-subagent-bridge",
@@ -30,6 +31,7 @@ registerSemanticSearch(server);
 registerHybridRetrieval(server);
 registerSaveKnowledgeUpdates(server);
 registerDiscoverEvidence(server);
+registerVerifyClaims(server);
 
 // Autonomous shell-executing tools: opt-in only, off by default. See
 // docs/local-claude-worker-experiment-2026-09-14.md for why the cloud model
