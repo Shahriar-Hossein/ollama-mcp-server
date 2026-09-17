@@ -64,7 +64,7 @@ export interface DiscoveryResult {
   question: string;
   retrieval: HybridRetrievalResult;
   discovery: DiscoveryPlan;
-  model_calls: 1 | 2;
+  model_calls: number;
 }
 
 function evidenceSummary(result: HybridRetrievalResult): string {
@@ -77,6 +77,20 @@ function evidenceSummary(result: HybridRetrievalResult): string {
     if (evidence.kind === "json") return `${offset + 1}. config ${evidence.file}${evidence.json_pointer}: ${evidence.value}`;
     return `${offset + 1}. documentation ${evidence.file}: ${evidence.excerpt}`;
   }).join("\n") || "(no candidates retrieved)";
+}
+
+/** Merges retrieval results by evidence identity, keeping the earlier (higher-ranked) occurrence. */
+function mergeRetrievalResults(base: HybridRetrievalResult, extra: HybridRetrievalResult, limit: number): HybridRetrievalResult {
+  const seen = new Set<string>();
+  const merged: HybridRetrievalResult["results"] = [];
+  for (const candidate of [...base.results, ...extra.results]) {
+    const key = JSON.stringify(candidate.evidence);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(candidate);
+    if (merged.length >= limit) break;
+  }
+  return { ...base, results: merged };
 }
 
 export function parseDiscoveryModelResponse(text: string): DiscoveryPlan {
@@ -154,6 +168,31 @@ function normalizeEvidenceRequest(value: unknown): unknown {
   };
 }
 
+const DISCOVERY_SYSTEM = "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads. Your entire response must be the schema-valid JSON object and nothing else.";
+
+function buildDiscoveryPrompt(question: string, retrieval: HybridRetrievalResult): string {
+  return `Question:\n${question}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn one JSON object matching the supplied schema. Do not use Markdown fences or prose. This is discovery, not verification or synthesis: do not answer the question, state conclusions, assign verification statuses, or cite proof. Use only the retrieved candidates to name concrete evidence targets. A hypothesis must be a narrow, falsifiable repository claim that the requested evidence could directly support or disprove; do not add evaluative language. Use one kind value per evidence request: source_range, symbol, relationship, adapter_fact, or git_history. Targets must be exact: a symbol ID or exact qualified name for symbol; \`caller-symbol-id -> callee-symbol-id\` for relationship; \`relative/path:start_byte:end_byte\` for source_range; or a full commit hash for git_history. adapter_fact is unavailable unless a matching adapter candidate is listed. If the candidates cannot support a concrete hypothesis, return [] for hypotheses and put each missing, specific lead in retrieval_gaps. Do not return both arrays empty.`;
+}
+
+/** Issues the discovery prompt and, on schema failure, one repair attempt. Returns null if both fail. */
+async function runDiscoveryPass(
+  model: string,
+  prompt: string
+): Promise<{ plan: DiscoveryPlan; calls: number } | { error: unknown; calls: number }> {
+  const response = await generate(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat);
+  try {
+    return { plan: parseDiscoveryModelResponse(response), calls: 1 };
+  } catch (firstError) {
+    const repairPrompt = `Convert the prior discovery response below into the supplied canonical JSON schema. Preserve its intended hypotheses and evidence targets; do not add claims, conclusions, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
+    const repaired = await generate(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat);
+    try {
+      return { plan: parseDiscoveryModelResponse(repaired), calls: 2 };
+    } catch {
+      return { error: firstError, calls: 2 };
+    }
+  }
+}
+
 /**
  * Produces an unverified investigation plan. This deliberately never returns
  * an answer or a verification status: later stages must obtain and assess the
@@ -167,20 +206,28 @@ export async function discoverEvidence(
   const root = resolve(repositoryRoot);
   const trimmedQuestion = question.trim();
   if (!trimmedQuestion) throw new Error("Discovery question must not be empty.");
-  const retrieval = await hybridRetrieve(root, trimmedQuestion, options.limit ?? 10, options.mode ?? "hybrid");
-  const prompt = `Question:\n${trimmedQuestion}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn one JSON object matching the supplied schema. Do not use Markdown fences or prose. This is discovery, not verification or synthesis: do not answer the question, state conclusions, assign verification statuses, or cite proof. Use only the retrieved candidates to name concrete evidence targets. A hypothesis must be a narrow, falsifiable repository claim that the requested evidence could directly support or disprove; do not add evaluative language. Use one kind value per evidence request: source_range, symbol, relationship, adapter_fact, or git_history. Targets must be exact: a symbol ID or exact qualified name for symbol; \`caller-symbol-id -> callee-symbol-id\` for relationship; \`relative/path:start_byte:end_byte\` for source_range; or a full commit hash for git_history. adapter_fact is unavailable unless a matching adapter candidate is listed. If the candidates cannot support a concrete hypothesis, return [] for hypotheses and put each missing, specific lead in retrieval_gaps. Do not return both arrays empty.`;
+  const limit = options.limit ?? 10;
+  const mode = options.mode ?? "hybrid";
   const model = options.model ?? DEFAULT_MODEL;
-  const system = "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads. Your entire response must be the schema-valid JSON object and nothing else.";
-  const response = await generate(model, prompt, system, discoveryResponseFormat);
-  try {
-    return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: parseDiscoveryModelResponse(response), model_calls: 1 };
-  } catch (firstError) {
-    const repairPrompt = `Convert the prior discovery response below into the supplied canonical JSON schema. Preserve its intended hypotheses and evidence targets; do not add claims, conclusions, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
-    const repaired = await generate(model, repairPrompt, system, discoveryResponseFormat);
-    try {
-      return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: parseDiscoveryModelResponse(repaired), model_calls: 2 };
-    } catch {
-      throw new Error(`Discovery model response failed schema validation after one repair attempt: ${firstError instanceof Error ? firstError.message : String(firstError)}`);
-    }
+
+  const retrieval = await hybridRetrieve(root, trimmedQuestion, limit, mode);
+  const first = await runDiscoveryPass(model, buildDiscoveryPrompt(trimmedQuestion, retrieval));
+  if ("error" in first) {
+    throw new Error(`Discovery model response failed schema validation after one repair attempt: ${first.error instanceof Error ? first.error.message : String(first.error)}`);
   }
+  if (first.plan.hypotheses.length > 0 || first.plan.retrieval_gaps.length === 0) {
+    return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: first.plan, model_calls: first.calls };
+  }
+
+  // Empty hypotheses but named gaps: one bounded retry, re-retrieving with the gap
+  // descriptions as extra search terms rather than giving up immediately.
+  const gapQuery = `${trimmedQuestion} ${first.plan.retrieval_gaps.join(" ")}`;
+  const gapRetrieval = await hybridRetrieve(root, gapQuery, limit, mode);
+  const mergedRetrieval = mergeRetrievalResults(retrieval, gapRetrieval, limit * 2);
+  const second = await runDiscoveryPass(model, buildDiscoveryPrompt(trimmedQuestion, mergedRetrieval));
+  const totalCalls = first.calls + second.calls;
+  if ("error" in second) {
+    return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: first.plan, model_calls: totalCalls };
+  }
+  return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval: mergedRetrieval, discovery: second.plan, model_calls: totalCalls };
 }

@@ -274,6 +274,37 @@ rather than asserting the wrong claim. SE-03 was not reached in this run.
 |---|---:|---|
 | Super Explorer + `gpt-oss:20b-cloud` | 0/5 (4 attempted, 1 outright pipeline failure was skipped) | Worse than Gemma/Nemotron: fails to hold the pipeline's own discovery JSON contract on 3 of 4 attempted questions, and its one completed answer names the wrong environment-variable gate. Not a viable routing target for this pipeline as-is. |
 
+## Discovery retrieval-gap retry (2026-09-18)
+
+`discoverEvidence` (`src/super-explorer/discovery.ts`) previously gave up
+after one model call: if the model returned zero hypotheses but named
+`retrieval_gaps`, the pipeline withheld an answer immediately, even though
+the gaps often described a concrete, searchable lead the first retrieval
+pass missed. Added one bounded retry: when hypotheses are empty and gaps are
+present, merge the gap descriptions into the retrieval query, re-run
+`hybridRetrieve`, merge the new candidates into the original set (deduped),
+and re-prompt discovery once more. `model_calls` is now a plain `number`
+instead of `1 | 2` to reflect the extra round.
+
+Verification run: `qwen3.5:4b` through the CLI gold-set runner against the
+current worktree (fixture revision `8e4ef8acfeff67a28de82f1c191ec3dc617fb609`),
+SE-01 through SE-05. Result: still 0/5, and the retry path did not fire on
+any of the five questions in this run — discovery returned at least one
+hypothesis on the first pass every time (non-deterministic sampling; a prior
+run of SE-01 alone did hit the empty-hypotheses case this fix targets).
+SE-01's answer improved qualitatively over the earlier SE-01/SE-02-only run
+in this session (one hypothesis now resolves to the real
+`registerLocalExplorerTask` symbol with a supported citation), but the gold
+check still fails on the missing `src/index.ts` call-site citation and the
+conditional-gate contrast. SE-02 through SE-05 failed on wrong-pick
+hypotheses (hallucinated symbol IDs, wrong gating variable names) rather than
+empty ones — the failure mode the still-open gate-condition-expansion item
+below targets, not this one.
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| Super Explorer + `qwen3.5:4b` (with retrieval-gap retry) | 0/5 | No regression; retry path untriggered this run because discovery no longer returned fully-empty hypotheses. Fix is contained to `discovery.ts`, no indexer changes. |
+
 ## Next session
 
 - [x] Run `nemotron-3-super:cloud` through the Gemma protocol (adapted: MCP
@@ -283,3 +314,8 @@ rather than asserting the wrong claim. SE-03 was not reached in this run.
   runner with explicit per-question latency capture, matching the Gemma
   protocol exactly, if latency comparison becomes load-bearing for a routing
   decision.
+- [ ] Gate-condition expansion (fixes wrong-pick failures like SE-02): teach
+  the expansion pass to walk from a tool's registration call site up to its
+  enclosing `if`/env-var guard. Needs the indexer to track enclosing
+  conditional ranges around calls (it doesn't today) — bigger lift than the
+  retrieval-gap retry above, touches `indexer.ts`'s schema.
