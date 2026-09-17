@@ -30,6 +30,16 @@ Evidence verifier
 Cited answer + knowledge updates
 ```
 
+Discovery plans use a strict canonical schema. The transport layer may remove a
+JSON fence and normalize the documented aliases `description`/`claim` and
+`evidence_requests`/`evidence`, but all normalized plans must then satisfy the
+canonical schema. Evidence targets are exact: a symbol ID or qualified name, a
+`caller-symbol-id -> callee-symbol-id` relationship, a
+`relative/path:start_byte:end_byte` source range, or a full Git commit hash.
+Unmaterializable targets do not receive unrelated retrieved evidence.
+If a model response still fails the canonical schema, discovery makes one
+repair-only call that may reformat but must not add semantic content.
+
 The harness performs obvious navigation work. The model forms hypotheses, requests focused evidence where needed, checks whether each claim is supported, and writes the answer. It must not infer implementation merely from names or unverified search results.
 
 Use call budgets instead of a fixed turn count: for example, 3 calls for simple lookup, 8 for a normal trace, and 15 for a deep bounded trace. Prefer many small, focused observations to a few large file dumps.

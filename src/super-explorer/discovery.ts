@@ -64,6 +64,7 @@ export interface DiscoveryResult {
   question: string;
   retrieval: HybridRetrievalResult;
   discovery: DiscoveryPlan;
+  model_calls: 1 | 2;
 }
 
 function evidenceSummary(result: HybridRetrievalResult): string {
@@ -78,12 +79,79 @@ function evidenceSummary(result: HybridRetrievalResult): string {
   }).join("\n") || "(no candidates retrieved)";
 }
 
-function parseModelResponse(text: string): DiscoveryPlan {
-  const trimmed = text.trim();
+export function parseDiscoveryModelResponse(text: string): DiscoveryPlan {
+  const trimmed = text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
   let parsed: unknown;
   try { parsed = JSON.parse(trimmed); }
   catch { throw new Error("Discovery model must return one JSON object with hypotheses and retrieval_gaps."); }
-  return modelResponseSchema.parse(parsed);
+  return modelResponseSchema.parse(normalizeModelResponse(parsed));
+}
+
+/** Translates documented equivalent field names, then leaves canonical validation strict. */
+function normalizeModelResponse(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const plan = value as Record<string, unknown>;
+  if (!Array.isArray(plan.hypotheses)) return value;
+  return {
+    ...plan,
+    hypotheses: plan.hypotheses.map((item) => normalizeHypothesis(item)),
+  };
+}
+
+function normalizeHypothesis(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const hypothesis = value as Record<string, unknown>;
+  const {
+    hypothesis_id: _ignoredId,
+    hypothesis: canonicalHypothesis,
+    description,
+    claim,
+    statement,
+    required_evidence: canonicalEvidence,
+    evidence_requests,
+    evidence,
+    ...rest
+  } = hypothesis;
+  const requestedEvidence = canonicalEvidence ?? evidence_requests ?? evidence;
+  return {
+    ...rest,
+    hypothesis: canonicalHypothesis ?? description ?? claim ?? statement,
+    required_evidence: Array.isArray(requestedEvidence)
+      ? requestedEvidence.map((request) => normalizeEvidenceRequest(request))
+      : requestedEvidence,
+  };
+}
+
+function normalizeEvidenceRequest(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const request = value as Record<string, unknown>;
+  const {
+    kind: canonicalKind,
+    target: canonicalTarget,
+    reason: canonicalReason,
+    type,
+    id,
+    symbol,
+    relationship,
+    value: targetValue,
+    description,
+    rationale,
+    ...rest
+  } = request;
+  const target = canonicalTarget ?? symbol ?? relationship ?? id ?? targetValue;
+  const kind = canonicalKind
+    ?? (typeof symbol === "string" ? "symbol" : undefined)
+    ?? (typeof relationship === "string" ? "relationship" : undefined)
+    // An unknown model-specific type is only an identifier lookup request,
+    // never evidence or a claimed semantic classification.
+    ?? (typeof target === "string" ? "symbol" : undefined)
+    ?? type;
+  return {
+    ...rest,
+    kind,
+    target,
+    reason: canonicalReason ?? rationale ?? description ?? (typeof target === "string" ? `Locate ${target} in indexed source.` : undefined),
+  };
 }
 
 /**
@@ -100,7 +168,19 @@ export async function discoverEvidence(
   const trimmedQuestion = question.trim();
   if (!trimmedQuestion) throw new Error("Discovery question must not be empty.");
   const retrieval = await hybridRetrieve(root, trimmedQuestion, options.limit ?? 10, options.mode ?? "hybrid");
-  const prompt = `Question:\n${trimmedQuestion}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn one JSON object matching the supplied schema. Do not use Markdown fences or prose. This is discovery, not verification or synthesis: do not answer the question, state conclusions, assign verification statuses, or cite proof. Use only the retrieved candidates to name concrete evidence targets. A hypothesis must be a narrow, falsifiable repository claim that the requested evidence could directly support or disprove; do not add evaluative language. Use one kind value per evidence request: source_range, symbol, relationship, adapter_fact, or git_history. If the candidates cannot support a concrete hypothesis, return [] for hypotheses and put each missing, specific lead in retrieval_gaps. Do not return both arrays empty.`;
-  const response = await generate(options.model ?? DEFAULT_MODEL, prompt, "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads. Your entire response must be the schema-valid JSON object and nothing else.", discoveryResponseFormat);
-  return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: parseModelResponse(response) };
+  const prompt = `Question:\n${trimmedQuestion}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn one JSON object matching the supplied schema. Do not use Markdown fences or prose. This is discovery, not verification or synthesis: do not answer the question, state conclusions, assign verification statuses, or cite proof. Use only the retrieved candidates to name concrete evidence targets. A hypothesis must be a narrow, falsifiable repository claim that the requested evidence could directly support or disprove; do not add evaluative language. Use one kind value per evidence request: source_range, symbol, relationship, adapter_fact, or git_history. Targets must be exact: a symbol ID or exact qualified name for symbol; \`caller-symbol-id -> callee-symbol-id\` for relationship; \`relative/path:start_byte:end_byte\` for source_range; or a full commit hash for git_history. adapter_fact is unavailable unless a matching adapter candidate is listed. If the candidates cannot support a concrete hypothesis, return [] for hypotheses and put each missing, specific lead in retrieval_gaps. Do not return both arrays empty.`;
+  const model = options.model ?? DEFAULT_MODEL;
+  const system = "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads. Your entire response must be the schema-valid JSON object and nothing else.";
+  const response = await generate(model, prompt, system, discoveryResponseFormat);
+  try {
+    return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: parseDiscoveryModelResponse(response), model_calls: 1 };
+  } catch (firstError) {
+    const repairPrompt = `Convert the prior discovery response below into the supplied canonical JSON schema. Preserve its intended hypotheses and evidence targets; do not add claims, conclusions, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
+    const repaired = await generate(model, repairPrompt, system, discoveryResponseFormat);
+    try {
+      return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: parseDiscoveryModelResponse(repaired), model_calls: 2 };
+    } catch {
+      throw new Error(`Discovery model response failed schema validation after one repair attempt: ${firstError instanceof Error ? firstError.message : String(firstError)}`);
+    }
+  }
 }

@@ -1,8 +1,7 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { discoverEvidence } from "./discovery.js";
-import { findSymbol } from "./structural-tools.js";
+import { indexRepository, type RepositoryIndex } from "./indexer.js";
 import { synthesizeVerifiedClaims, type SynthesisResult } from "./synthesis.js";
 import { verifyClaims, type VerificationInputClaim } from "./verification.js";
 
@@ -21,30 +20,61 @@ export interface ExploreResult extends SynthesisResult {
 }
 
 function evidenceForDiscovery(
-  root: string,
-  discovery: Awaited<ReturnType<typeof discoverEvidence>>,
-  target: string
+  index: RepositoryIndex,
+  request: Awaited<ReturnType<typeof discoverEvidence>>["discovery"]["hypotheses"][number]["required_evidence"][number]
 ): VerificationInputClaim["evidence"] {
-  const index = discovery.retrieval;
   const evidence: VerificationInputClaim["evidence"] = [];
   const addSymbol = (symbolId: string) => {
     if (!evidence.some((item) => item.evidence_kind === "symbol" && item.symbol_id === symbolId)) evidence.push({ evidence_kind: "symbol", symbol_id: symbolId });
   };
-
-  // Prefer the discovery request itself, then use only the already retrieved leads.
-  for (const match of findSymbol(root, target).symbols.slice(0, 2)) addSymbol(match.symbol.id);
-  for (const candidate of index.results) {
-    if (candidate.evidence.kind === "symbol" && candidate.evidence.symbol) addSymbol(candidate.evidence.symbol.id);
-    if (candidate.evidence.kind === "git_commit" && candidate.evidence.commit_hash && !evidence.some((item) => item.evidence_kind === "git_commit" && item.git_commit_hash === candidate.evidence.commit_hash)) {
-      evidence.push({ evidence_kind: "git_commit", git_commit_hash: candidate.evidence.commit_hash });
+  const exactSymbol = (target: string) => index.symbols.find((symbol) => symbol.id === target)
+    ?? index.symbols.find((symbol) => symbol.name === target || symbol.qualified_name === target);
+  // A model shouldn't have to name every symbol needed to prove a claim about one of them:
+  // pull in its direct structural neighbors (callers/callees, and symbols that reference or
+  // are referenced by it, e.g. the functions in the same module that use a config constant).
+  const expandSymbol = (symbolId: string) => {
+    for (const call of index.calls) {
+      if (call.callee_symbol_id === symbolId && call.caller_symbol_id) addSymbol(call.caller_symbol_id);
+      if (call.caller_symbol_id === symbolId && call.callee_symbol_id) addSymbol(call.callee_symbol_id);
     }
-    if ((candidate.evidence.kind === "documentation" || candidate.evidence.kind === "json") && candidate.evidence.file) {
-      const source = readFileSync(resolve(root, candidate.evidence.file));
-      if (source.length && !evidence.some((item) => item.evidence_kind === "source_range" && item.file === candidate.evidence.file)) {
-        evidence.push({ evidence_kind: "source_range", file: candidate.evidence.file, start_byte: 0, end_byte: source.length });
+    for (const reference of index.references) {
+      if (reference.target_symbol_id === symbolId && reference.source_symbol_id) addSymbol(reference.source_symbol_id);
+      if (reference.source_symbol_id === symbolId && reference.target_symbol_id) addSymbol(reference.target_symbol_id);
+    }
+  };
+
+  if (request.kind === "symbol") {
+    const symbol = exactSymbol(request.target);
+    if (symbol) {
+      addSymbol(symbol.id);
+      expandSymbol(symbol.id);
+    }
+  } else if (request.kind === "source_range") {
+    const match = /^([^:]+):(\d+):(\d+)$/.exec(request.target);
+    if (match) {
+      const [, file, start, end] = match;
+      const start_byte = Number(start);
+      const end_byte = Number(end);
+      if (end_byte > start_byte) evidence.push({ evidence_kind: "source_range", file, start_byte, end_byte });
+    }
+  } else if (request.kind === "git_history") {
+    if (/^[0-9a-f]{40,64}$/i.test(request.target)) evidence.push({ evidence_kind: "git_commit", git_commit_hash: request.target });
+  } else if (request.kind === "relationship") {
+    const match = /^(.+?)\s*->\s*(.+)$/.exec(request.target);
+    const caller = match && exactSymbol(match[1].trim());
+    const callee = match && exactSymbol(match[2].trim());
+    if (caller && callee) {
+      for (const call of index.calls) {
+        if (call.caller_symbol_id === caller.id && call.callee_symbol_id === callee.id) {
+          evidence.push({ evidence_kind: "source_range", file: call.file, start_byte: call.range.start.byte, end_byte: call.range.end.byte });
+        }
+      }
+      for (const reference of index.references) {
+        if (reference.source_symbol_id === caller.id && reference.target_symbol_id === callee.id) {
+          evidence.push({ evidence_kind: "source_range", file: reference.file, start_byte: reference.range.start.byte, end_byte: reference.range.end.byte });
+        }
       }
     }
-    if (evidence.length >= 10) break;
   }
   return evidence.slice(0, 10);
 }
@@ -54,8 +84,10 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
   const options = inputSchema.parse(input);
   const root = resolve(options.repository_root);
   const discovery = await discoverEvidence(root, options.question, { model: options.model, limit: options.limit, mode: options.mode });
+  const index = indexRepository(root);
+  if (index.commit_hash !== discovery.commit_hash) throw new Error("Repository changed between discovery and evidence materialization.");
   const claims: VerificationInputClaim[] = discovery.discovery.hypotheses.flatMap((hypothesis, hypothesisIndex) => {
-    const evidence = [...new Map(hypothesis.required_evidence.flatMap((request) => evidenceForDiscovery(root, discovery, request.target)).map((item) => [JSON.stringify(item), item])).values()].slice(0, 10);
+    const evidence = [...new Map(hypothesis.required_evidence.flatMap((request) => evidenceForDiscovery(index, request)).map((item) => [JSON.stringify(item), item])).values()].slice(0, 10);
     return evidence.length ? [{ id: `hypothesis-${hypothesisIndex + 1}`, claim: hypothesis.hypothesis, evidence }] : [];
   });
   if (!claims.length) {
@@ -65,7 +97,7 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
       answer_to_user: "I could not materialize evidence for a supported answer.",
       cited_claims: [],
       omitted_claim_ids: [],
-      tool_calls: 1,
+      tool_calls: discovery.model_calls,
       discovery: discovery.discovery,
       verification: { commit_hash: discovery.commit_hash, results: [] },
     };
@@ -73,7 +105,7 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
   const verification = await verifyClaims(root, claims, options.model);
   return {
     ...synthesizeVerifiedClaims({ question: options.question, verification }),
-    tool_calls: 2,
+    tool_calls: discovery.model_calls + 1,
     discovery: discovery.discovery,
     verification,
   };
