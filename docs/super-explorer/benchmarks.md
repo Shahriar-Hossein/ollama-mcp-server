@@ -375,8 +375,52 @@ different pre-existing errors as before this change).
 |---|---:|---|
 | Super Explorer + `qwen3.5:4b` (gate-condition expansion, 4 runs) | 0/5 each run | SE-02's underlying hypothesis/evidence chain is now correct; still blocked by this model's naming inconsistency and JSON-output flakiness, not by missing gate information. |
 
+## Cloud model re-test after gate-condition expansion (2026-09-18)
+
+Re-ran all four available cloud models — `gpt-oss:20b-cloud`,
+`gpt-oss:120b-cloud`, `nemotron-3-super:cloud`, `gemma4:31b-cloud` — through
+the CLI gold-set runner (`gold-set:super-explorer`, SE-01 through SE-05)
+against the pinned fixture worktree
+(`/tmp/ollama-mcp-super-explorer-gemma-2026-09-17`), using the current
+worktree's pipeline code (i.e. including the gate-condition expansion above).
+Models ran one at a time, serially, respecting the free-tier one-cloud-model
+limit.
+
+| Model | Passed | SE-02 outcome |
+|---|---:|---|
+| `gpt-oss:20b-cloud` | 0/5 | Discovery completed but self-failed as "could not materialize evidence"; SE-04/SE-05 also hit unrelated `503` responses from the cloud endpoint. |
+| `gpt-oss:120b-cloud` | 0/5 | Discovery-stage JSON schema failure — never reached evidence resolution. 4 of 5 questions overall failed at the same discovery-schema stage, worse than the 20b variant. |
+| `nemotron-3-super:cloud` | 0/5 | Discovery-stage JSON schema failure — never reached evidence resolution. SE-04/SE-05 did complete but on unrelated failure modes. |
+| `gemma4:31b-cloud` | 0/5 | Discovery-stage JSON schema failure — never reached evidence resolution. SE-01/03/04 completed with plausible-looking but gold-check-incomplete answers. |
+
+**None of the four cloud models improved on their prior results, and none
+exercised the gate-condition fix on SE-02** — in every case, SE-02 failed
+before or during discovery, so the new `conditional` retrieval channel and
+`guard_condition` evidence path were never reached for this question. The
+common blocker across all four is the same discovery-stage JSON-contract
+flakiness already tracked for `qwen3.5:4b` below, not missing gate
+information — and it's worse here: three of the four cloud models failed the
+discovery schema on the majority of their questions, where `qwen3.5:4b`
+mostly clears discovery and fails later (at verification or the gold-check
+phrase match). No cloud model in this pipeline is currently a viable routing
+target; `qwen3.5:4b` remains the least-broken option pending a discovery
+repair-retry (see below).
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| Super Explorer + `gpt-oss:20b-cloud` (gate-condition expansion) | 0/5 | Same profile as the earlier 20b trial; unrelated `503`s on 2 questions. |
+| Super Explorer + `gpt-oss:120b-cloud` (gate-condition expansion) | 0/5 | Worse discovery-schema reliability than the smaller 20b variant on this fixture. |
+| Super Explorer + `nemotron-3-super:cloud` (gate-condition expansion) | 0/5 | Regressed from 2/5 (Gemma-protocol trial above) to discovery-schema failures on SE-01/02/03 this run — likely sampling variance, not a regression from this change (no pipeline code touches discovery's schema handling). |
+| Super Explorer + `gemma4:31b-cloud` (gate-condition expansion) | 0/5 | Matches its earlier 2/5-class profile qualitatively, but SE-02 itself now fails earlier (discovery schema) rather than later. |
+
 ## Next session
 
+- [ ] Discovery-stage JSON schema failures are now the dominant blocker for
+  every cloud model tested (`gpt-oss:20b/120b-cloud`, `nemotron-3-super:cloud`,
+  `gemma4:31b-cloud` all hit them on 60-100% of questions) — a discovery
+  repair-retry (see the existing `qwen3.5:4b` verification-retry item below)
+  would need to target this stage too, or SE-02's gate-condition fix can
+  never be evaluated on these models.
 - [x] Run `nemotron-3-super:cloud` through the Gemma protocol (adapted: MCP
   tool call instead of CLI runner, no per-question latency capture) — see
   above.
