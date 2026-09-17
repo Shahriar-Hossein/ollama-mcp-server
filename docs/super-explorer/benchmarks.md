@@ -90,3 +90,88 @@ with full relationship recall and zero unsupported claims), average recall,
 the rate of answers with an unsupported claim (plus the total count), and
 median calls, tokens, and latency. This keeps the gold judgment separate from
 the system being measured.
+
+## Luna versus `qwen3.5:4b` Super Explorer (2026-09-17)
+
+This run used SE-01 through SE-05 at fixture revision
+`f1a75a19d1708e36f60bba0de76714acc2343492`. Luna ran first against that fixed
+revision and produced 5/5 answers with all required relationships supported
+and no unsupported claims. Its read-only exploration used seven shell/search
+invocations and took about 0.7 seconds of cumulative command time.
+
+`qwen3.5:4b` then ran the production `explore:super-explorer` pipeline once
+per question, serially. A 25-second per-question deadline was used so an
+unreturned result counts as a reproducible failure rather than an interrupted
+foreground process. It passed 0/5: SE-01 and SE-02 failed because discovery
+did not return the required single JSON object; SE-03 and SE-04 hit the
+deadline; and SE-05 completed in 9,394 ms but returned no verified claim.
+The five Qwen wall times were 4,807, 14,576, 25,010, 25,009, and 9,394 ms
+(median 14,576 ms). No Qwen answer included an unsupported user-facing claim,
+because the pipeline correctly withheld every unsupported result; that is a
+safety property, not answer success.
+
+| Explorer | Questions passed | Unsupported claims | Outcome |
+|---|---:|---:|---|
+| Luna | 5/5 | 0 | All required relationships supported. |
+| Super Explorer + `qwen3.5:4b` | 0/5 | 0 | Two invalid discovery responses, two timeouts, one withheld answer. |
+
+This is an answer-quality comparison on identical questions and source
+revision, not a fair end-to-end latency comparison: Luna used its native
+read-only exploration interface, while Qwen ran retrieval, discovery,
+evidence materialization, verification, and synthesis locally. The decisive
+finding is nevertheless clear: the current Qwen discovery stage cannot yet
+reliably turn retrieved symbol leads into the strict evidence plan required by
+the production pipeline. Do not route these five task shapes to it without a
+fallback.
+
+Raw artifacts are retained only in ignored
+`benchmark-data/super-explorer-luna-local-2026-09-17/qwen3.5_4b-final/`.
+
+Fixture note: the pinned source calls the timeout constant `OLLAMA_TIMEOUT_MS`;
+the current gold-table wording calls it `REQUEST_TIMEOUT_MS`. The default
+value and shared Axios behavior are the same, so scoring should judge that
+relationship rather than the stale identifier spelling.
+
+## Qwen rerun versus Granite trial (2026-09-17)
+
+Both candidates ran the same production `explore:super-explorer` pipeline on
+SE-01 through SE-05 at fixture revision
+`f1a75a19d1708e36f60bba0de76714acc2343492`, serially, with a 25-second
+per-question deadline. `nomic-embed-text-v2-moe` was explicitly unloaded
+before each worker series and after the final run. The pipeline loaded it while
+performing retrieval, so it was a required concurrent dependency rather than
+an avoidable resident model.
+
+| Explorer | Questions passed | Completed answers | Outcome |
+|---|---:|---:|---|
+| Super Explorer + `qwen3.5:4b` (rerun) | 0/5 | 0/5 | Every question timed out at 25,008–25,012 ms. |
+| Super Explorer + `granite4.2:3b` | 0/5 | 0/5 | Every question timed out at 25,008–25,011 ms. |
+
+Neither run emitted a completed JSON answer, so neither made a user-facing
+claim or qualified for manual evidence scoring. This does not invalidate the
+earlier Granite exploration result, but it does show that Granite is not yet
+qualified for this production Explorer path. Keep both models optional first
+passes only, with a mandatory fallback.
+
+Raw artifacts are retained only in ignored
+`benchmark-data/super-explorer-worker-comparison-2026-09-17/`.
+
+## 150-second rerun: Qwen versus Granite (2026-09-17)
+
+The same five questions and pinned fixture were rerun serially with a
+150-second per-question deadline. The longer deadline removed timeouts but did
+not produce a passing answer. `qwen3.5:4b` finished all five in 9,878–62,003
+ms, but every response failed the discovery JSON/schema contract. Granite
+finished all five in 7,955–37,182 ms: three answers were withheld for lacking
+materialized or verified evidence, one failed the discovery schema, and SE-05
+made only a partial allowlist claim that omitted the required shell-chaining
+prevention path.
+
+| Explorer | Questions passed | Timeouts | Outcome |
+|---|---:|---:|---|
+| Super Explorer + `qwen3.5:4b` | 0/5 | 0/5 | Discovery-format failures on every question. |
+| Super Explorer + `granite4.2:3b` | 0/5 | 0/5 | No full, verifier-supported answer; one partial response. |
+
+Increasing the limit is therefore not a remedy for either model on this
+pipeline. Raw artifacts are retained only in ignored
+`benchmark-data/super-explorer-worker-comparison-2026-09-17-150s/`.
