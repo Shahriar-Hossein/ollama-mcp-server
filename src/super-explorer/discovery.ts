@@ -8,15 +8,54 @@ const evidenceRequestSchema = z.object({
   kind: z.enum(["source_range", "symbol", "relationship", "adapter_fact", "git_history"]),
   target: z.string().trim().min(1).max(500),
   reason: z.string().trim().min(1).max(500),
-});
+}).strict();
 const hypothesisSchema = z.object({
   hypothesis: z.string().trim().min(1).max(1_000),
   required_evidence: z.array(evidenceRequestSchema).min(1).max(5),
-});
+}).strict();
 const modelResponseSchema = z.object({
   hypotheses: z.array(hypothesisSchema).max(5),
   retrieval_gaps: z.array(z.string().trim().min(1).max(500)).max(5),
-}).strict();
+}).strict().refine(
+  (plan) => plan.hypotheses.length > 0 || plan.retrieval_gaps.length > 0,
+  "Discovery must provide a hypothesis or a retrieval gap."
+);
+
+const discoveryResponseFormat = {
+  type: "object",
+  additionalProperties: false,
+  required: ["hypotheses", "retrieval_gaps"],
+  properties: {
+    hypotheses: {
+      type: "array",
+      maxItems: 5,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["hypothesis", "required_evidence"],
+        properties: {
+          hypothesis: { type: "string", minLength: 1, maxLength: 1_000 },
+          required_evidence: {
+            type: "array",
+            minItems: 1,
+            maxItems: 5,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["kind", "target", "reason"],
+              properties: {
+                kind: { type: "string", enum: ["source_range", "symbol", "relationship", "adapter_fact", "git_history"] },
+                target: { type: "string", minLength: 1, maxLength: 500 },
+                reason: { type: "string", minLength: 1, maxLength: 500 },
+              },
+            },
+          },
+        },
+      },
+    },
+    retrieval_gaps: { type: "array", maxItems: 5, items: { type: "string", minLength: 1, maxLength: 500 } },
+  },
+} as const;
 
 export type DiscoveryPlan = z.infer<typeof modelResponseSchema>;
 
@@ -40,7 +79,7 @@ function evidenceSummary(result: HybridRetrievalResult): string {
 }
 
 function parseModelResponse(text: string): DiscoveryPlan {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const trimmed = text.trim();
   let parsed: unknown;
   try { parsed = JSON.parse(trimmed); }
   catch { throw new Error("Discovery model must return one JSON object with hypotheses and retrieval_gaps."); }
@@ -61,7 +100,7 @@ export async function discoverEvidence(
   const trimmedQuestion = question.trim();
   if (!trimmedQuestion) throw new Error("Discovery question must not be empty.");
   const retrieval = await hybridRetrieve(root, trimmedQuestion, options.limit ?? 10, options.mode ?? "hybrid");
-  const prompt = `Question:\n${trimmedQuestion}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn JSON only, exactly this shape:\n{"hypotheses":[{"hypothesis":"tentative, falsifiable lead","required_evidence":[{"kind":"source_range|symbol|relationship|adapter_fact|git_history","target":"specific file, symbol ID, relationship, fact, or history query","reason":"what this would establish or disprove"}]}],"retrieval_gaps":["specific missing lead"]}\n\nThis is discovery, not verification or synthesis. Do not answer the question, state conclusions, assign verification statuses, cite proof, or include any keys other than hypotheses and retrieval_gaps. Every hypothesis needs at least one concrete required_evidence item. If the candidates are insufficient, return an empty hypotheses array and explain the missing retrieval in retrieval_gaps.`;
-  const response = await generate(options.model ?? DEFAULT_MODEL, prompt, "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads.");
+  const prompt = `Question:\n${trimmedQuestion}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn one JSON object matching the supplied schema. Do not use Markdown fences or prose. This is discovery, not verification or synthesis: do not answer the question, state conclusions, assign verification statuses, or cite proof. Use only the retrieved candidates to name concrete evidence targets. A hypothesis must be a narrow, falsifiable repository claim that the requested evidence could directly support or disprove; do not add evaluative language. Use one kind value per evidence request: source_range, symbol, relationship, adapter_fact, or git_history. If the candidates cannot support a concrete hypothesis, return [] for hypotheses and put each missing, specific lead in retrieval_gaps. Do not return both arrays empty.`;
+  const response = await generate(options.model ?? DEFAULT_MODEL, prompt, "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads. Your entire response must be the schema-valid JSON object and nothing else.", discoveryResponseFormat);
   return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: parseModelResponse(response) };
 }
