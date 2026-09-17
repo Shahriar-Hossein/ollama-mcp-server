@@ -175,3 +175,111 @@ prevention path.
 Increasing the limit is therefore not a remedy for either model on this
 pipeline. Raw artifacts are retained only in ignored
 `benchmark-data/super-explorer-worker-comparison-2026-09-17-150s/`.
+
+## Gemma cloud trial (2026-09-17)
+
+`gemma4:31b-cloud` ran the same production Explorer pipeline on SE-01 through
+SE-05, serially, against fixture revision
+`f1a75a19d1708e36f60bba0de76714acc2343492`, with a 150-second deadline per
+question. The current runner was used because the pinned fixture predates the
+Explorer CLI; the fixture itself supplied all indexed source and Git evidence.
+Only one cloud inference request was active at a time. Local semantic
+retrieval used `nomic-embed-text-v2-moe` concurrently as the pipeline's
+required local dependency.
+
+Gemma completed every question in 9,090--17,583 ms (median 14,437 ms). Strict
+manual scoring passed SE-03 and SE-05: it correctly identified the shared
+Ollama host/timeout configuration and the tokenized, direct-argv git-command
+boundary. SE-01 omitted `src/index.ts` and the default-enable relationship;
+SE-02 substituted `ALLOWED_TOOLS_FLAG` for the two environment gates; and
+SE-04 withheld an answer because it did not materialize the `generate`
+implementation. The SE-02 answer also made one unsupported assertion that the
+allowlist constant was environment-variable-backed.
+
+| Explorer | Questions passed | Unsupported claims | Outcome |
+|---|---:|---:|---|
+| Super Explorer + `gemma4:31b-cloud` | 2/5 | 1 | Completes reliably within the deadline, but does not meet the five-question evidence-quality gate. |
+
+## Nemotron cloud trial and Granite retest (2026-09-17)
+
+`nemotron-3-super:cloud` and `granite4.2:3b` ran SE-01 through SE-05 via the
+`explore_repository` MCP tool (same production pipeline as the Gemma trial)
+against the existing pinned-fixture worktree
+(`/tmp/ollama-mcp-super-explorer-gemma-2026-09-17`, fixture revision
+`f1a75a19d1708e36f60bba0de76714acc2343492`). Questions ran serially per model;
+only one cloud (`nemotron-3-super:cloud`) request was active at a time, run
+concurrently with the local `granite4.2:3b` calls. The tool's own timeout
+(`REQUEST_TIMEOUT_MS`, 120s default) applied to both; neither model timed out
+on any question. Per-call latency was not captured — the MCP tool does not
+return timing metadata.
+
+Nemotron passed SE-03 and SE-05 with full evidence and citations. SE-01's
+hypothesis covered only the registration site, missing the `src/index.ts`
+call-site relationship and the contrast with the two conditional autonomous
+registrars. SE-02 retrieved no evidence connecting environment variables to
+either gated tool and withheld an answer. SE-04 retrieved the correct
+evidence (the shared `REQUEST_TIMEOUT_MS` constant and both its call sites)
+but phrased its own hypothesis as a claim about the constant being "overly
+restrictive," which the evidence didn't support, so it self-failed as
+INSUFFICIENT despite holding the right citations.
+
+Granite did not pass any question. Every answer was withheld with
+"could not materialize evidence" or INSUFFICIENT, including SE-05 where it
+retrieved the exact same supporting symbols as Nemotron's passing answer but
+only asserted a vaguer, unlinked claim ("validated against an allowlist")
+rather than the required chained relationship — this matches the partial,
+under-specific pattern from the earlier 150-second rerun rather than a
+retrieval failure.
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| Super Explorer + `nemotron-3-super:cloud` | 2/5 | Same result profile as Gemma: reliable completion, evidence-format/hypothesis-scoping failures on 3 of 5. |
+| Super Explorer + `granite4.2:3b` | 0/5 | Consistent with prior Granite trials: retrieves relevant evidence in several cases but rarely commits to a fully-scoped, verifier-supported claim. |
+
+## Haiku baseline via Explore subagent (2026-09-17)
+
+Claude Haiku, run as an `Explore` subagent (not through the Super Explorer
+pipeline — this is the same out-of-pipeline baseline methodology as the
+Haiku row in [`docs/BENCHMARKS.md`](../BENCHMARKS.md)), answered SE-01
+through SE-05 directly against the same pinned-fixture worktree.
+
+Haiku passed all five questions with correct citations, including the
+`src/index.ts` registration and conditional-gate contrast that both Gemma and
+Nemotron missed on SE-01, and the two-variable/two-tool mapping on SE-02 that
+both Ollama-hosted models failed to retrieve any evidence for.
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| Haiku (`Explore` subagent, no Super Explorer pipeline) | 5/5 | Matches the prior `docs/BENCHMARKS.md` result: beats every Super Explorer configuration tried so far on this gold set. |
+
+## gpt-oss:20b-cloud trial (2026-09-18)
+
+`gpt-oss:20b-cloud` ran SE-01 through SE-05 via the `explore_repository` MCP
+tool (same production pipeline as the Gemma/Nemotron trials) against the same
+pinned-fixture worktree (`/tmp/ollama-mcp-super-explorer-gemma-2026-09-17`,
+fixture revision `f1a75a19d1708e36f60bba0de76714acc2343492`). Questions ran
+serially.
+
+The model's discovery-stage output failed the pipeline's own JSON schema on
+SE-01, SE-04, and SE-05: the tool call errored before reaching verification
+(`Discovery model must return one JSON object with hypotheses and
+retrieval_gaps`, and on the first attempt a `hypotheses[1]` string in place of
+an object). Only SE-02 completed; it retrieved plausible-looking evidence
+(`ALLOWED_TOOLS_FLAG`, a `TOOLS` array) but both hypotheses actually named the
+wrong gating mechanism — neither matches the real `CLOUD_CLAUDE_ENABLED`/
+`LOCAL_WORKER_ENABLED` gates — and self-failed as INSUFFICIENT, so it withheld
+rather than asserting the wrong claim. SE-03 was not reached in this run.
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| Super Explorer + `gpt-oss:20b-cloud` | 0/5 (4 attempted, 1 outright pipeline failure was skipped) | Worse than Gemma/Nemotron: fails to hold the pipeline's own discovery JSON contract on 3 of 4 attempted questions, and its one completed answer names the wrong environment-variable gate. Not a viable routing target for this pipeline as-is. |
+
+## Next session
+
+- [x] Run `nemotron-3-super:cloud` through the Gemma protocol (adapted: MCP
+  tool call instead of CLI runner, no per-question latency capture) — see
+  above.
+- [ ] Re-run `nemotron-3-super:cloud` and `granite4.2:3b` through the CLI
+  runner with explicit per-question latency capture, matching the Gemma
+  protocol exactly, if latency comparison becomes load-bearing for a routing
+  decision.
