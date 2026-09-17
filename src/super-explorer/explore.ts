@@ -28,6 +28,8 @@ function evidenceForDiscovery(
     if (!evidence.some((item) => item.evidence_kind === "symbol" && item.symbol_id === symbolId)) evidence.push({ evidence_kind: "symbol", symbol_id: symbolId });
   };
   const exactSymbol = (target: string) => index.symbols.find((symbol) => symbol.id === target)
+    // Models sometimes copy a symbol ID from the retrieved-candidates list but drop its "symbol:" scheme prefix.
+    ?? (!target.startsWith("symbol:") ? index.symbols.find((symbol) => symbol.id === `symbol:${target}`) : undefined)
     ?? index.symbols.find((symbol) => symbol.name === target || symbol.qualified_name === target);
   // A model shouldn't have to name every symbol needed to prove a claim about one of them:
   // pull in its direct structural neighbors (callers/callees, and symbols that reference or
@@ -48,6 +50,16 @@ function evidenceForDiscovery(
     if (symbol) {
       addSymbol(symbol.id);
       expandSymbol(symbol.id);
+    } else {
+      // The model may cite the guard's own condition text (surfaced via "[guarded by: ...]")
+      // as its evidence target instead of naming the gated symbol — resolve it the same way.
+      const strip = (value: string) => value.trim().replace(/^\(+|\)+$/g, "");
+      const target = strip(request.target);
+      for (const call of index.calls) {
+        if (!call.guard_condition || strip(call.guard_condition) !== target) continue;
+        evidence.push({ evidence_kind: "source_range", file: call.file, start_byte: call.range.start.byte, end_byte: call.range.end.byte });
+        if (call.callee_symbol_id) addSymbol(call.callee_symbol_id);
+      }
     }
   } else if (request.kind === "source_range") {
     const match = /^([^:]+):(\d+):(\d+)$/.exec(request.target);

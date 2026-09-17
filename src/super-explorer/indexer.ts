@@ -88,6 +88,8 @@ export interface CallEdge {
   file: string;
   range: SourceRange;
   resolution: ResolutionQuality;
+  /** Source text of the nearest enclosing `if` condition gating this call, negated if reached via its `else` branch. Null if the call isn't conditionally guarded, or the guard sits outside the call's own function scope. */
+  guard_condition: string | null;
 }
 
 export interface TestRecord {
@@ -274,6 +276,45 @@ function calleeName(node: Parser.SyntaxNode): string | null {
   return null;
 }
 
+const FUNCTION_BOUNDARY_TYPES = new Set([
+  "function_declaration",
+  "generator_function_declaration",
+  "function_expression",
+  "generator_function",
+  "arrow_function",
+  "method_definition",
+]);
+
+/** Scoped to env-var feature flags (`process.env...`), not general control flow — an ordinary `if` inside a function isn't a "gate" worth surfacing as one. */
+function isEnvGuard(condition: Parser.SyntaxNode): boolean {
+  return condition.text.includes("process.env");
+}
+
+/**
+ * Walks up from a call expression to find the nearest enclosing env-var `if`
+ * guard, stopping at the call's own function scope so a guard around an
+ * unrelated enclosing function isn't misattributed to this call. An
+ * intervening non-env `if` is skipped over rather than stopping the search.
+ * Negates the condition when the call is reached only via the `else` branch.
+ */
+function guardConditionFor(node: Parser.SyntaxNode): string | null {
+  let current = node;
+  let parent = current.parent;
+  while (parent) {
+    if (FUNCTION_BOUNDARY_TYPES.has(parent.type)) return null;
+    if (parent.type === "if_statement") {
+      const condition = parent.childForFieldName("condition");
+      if (condition && isEnvGuard(condition)) {
+        if (parent.childForFieldName("consequence") === current) return condition.text;
+        if (parent.childForFieldName("alternative") === current) return `!${condition.text}`;
+      }
+    }
+    current = parent;
+    parent = current.parent;
+  }
+  return null;
+}
+
 function isTestFile(file: string): boolean {
   return /(?:^|\/)(?:__tests__|test|tests)\//.test(file)
     || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file);
@@ -439,7 +480,7 @@ function collectStructuralRecords(
       }
       if (name && functionNode) {
         const resolved = functionNode.type === "identifier" ? resolveName(name) : { target: null, resolution: "unresolved" as const };
-        calls.push({ caller_symbol_id: sourceSymbolFor(records, node)?.id ?? null, callee_name: name, callee_symbol_id: resolved.target?.id ?? null, file, range: range(functionNode), resolution: resolved.resolution });
+        calls.push({ caller_symbol_id: sourceSymbolFor(records, node)?.id ?? null, callee_name: name, callee_symbol_id: resolved.target?.id ?? null, file, range: range(functionNode), resolution: resolved.resolution, guard_condition: guardConditionFor(node) });
       }
     }
 

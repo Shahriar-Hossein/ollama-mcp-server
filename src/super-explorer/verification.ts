@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { generate } from "../ollama-client.js";
-import { indexRepository, type ResolutionQuality } from "./indexer.js";
+import { indexRepository, type RepositoryIndex, type ResolutionQuality } from "./indexer.js";
 import { readSymbol } from "./read-symbol.js";
 
 const DEFAULT_MODEL = "qwen3.5:4b";
@@ -45,12 +45,17 @@ function withinRoot(root: string, file: string): string {
   return path;
 }
 
-function materializeEvidence(root: string, commitHash: string, input: z.infer<typeof evidenceInputSchema>): VerificationEvidence {
+function materializeEvidence(root: string, commitHash: string, index: RepositoryIndex, input: z.infer<typeof evidenceInputSchema>): VerificationEvidence {
   if (input.evidence_kind === "symbol") {
-    const read = readSymbol(root, input.symbol_id);
+    const read = readSymbol(root, input.symbol_id, index);
     const symbol = read.symbol;
-    const source = read.source.text;
-    return { evidence_kind: "symbol", commit_hash: commitHash, resolution_quality: quality, symbol_id: symbol.id, file: symbol.file, start_byte: symbol.range.start.byte, end_byte: symbol.range.end.byte, excerpt: source.slice(0, 8_000) };
+    const guards = [...new Set(
+      index.calls
+        .filter((call) => call.callee_symbol_id === symbol.id && call.guard_condition)
+        .map((call) => call.guard_condition!)
+    )];
+    const guardNote = guards.length ? `\n\n// Reached only when: ${guards.join(" | ")}` : "";
+    return { evidence_kind: "symbol", commit_hash: commitHash, resolution_quality: quality, symbol_id: symbol.id, file: symbol.file, start_byte: symbol.range.start.byte, end_byte: symbol.range.end.byte, excerpt: (read.source.text + guardNote).slice(0, 8_000) };
   }
   if (input.evidence_kind === "source_range") {
     if (input.end_byte <= input.start_byte) throw new Error(`Evidence range must have a positive length: ${input.file}`);
@@ -85,7 +90,7 @@ export async function verifyClaims(repositoryRoot: string, claimsInput: Verifica
   const claims = z.array(claimInputSchema).min(1).max(20).parse(claimsInput);
   if (new Set(claims.map((claim) => claim.id)).size !== claims.length) throw new Error("Verification claim IDs must be unique.");
   const index = indexRepository(root);
-  const materialized = claims.map((claim) => claim.evidence.map((evidence) => materializeEvidence(root, index.commit_hash, evidence)));
+  const materialized = claims.map((claim) => claim.evidence.map((evidence) => materializeEvidence(root, index.commit_hash, index, evidence)));
   const prompt = `Classify each repository claim using only its numbered evidence. Return JSON only: {"results":[{"id":"input id","verification_status":"SUPPORTED|CONTRADICTED|INSUFFICIENT","rationale":"brief evidence-bound assessment","evidence_indexes":[0]}]}.\n\nSUPPORTED requires direct supplied evidence that establishes the claim. CONTRADICTED requires supplied evidence that directly conflicts with it. Otherwise choose INSUFFICIENT. Do not infer from names, omit results, answer the broader question, or write a final synthesis.\n\n${claims.map((claim, index) => `Claim ${index + 1} (id ${claim.id}): ${claim.claim}\nEvidence:\n${materialized[index].map((evidence, evidenceIndex) => `[${evidenceIndex}] ${evidence.evidence_kind} ${evidence.file ?? evidence.symbol_id ?? evidence.git_commit_hash}\n${evidence.excerpt}`).join("\n")}`).join("\n\n")}`;
   const assessed = parseModelResponse(await generate(model, prompt, "You are a strict evidence verifier. Classify only what the supplied repository evidence establishes."), claims, materialized.map((evidence) => evidence.length));
   return {

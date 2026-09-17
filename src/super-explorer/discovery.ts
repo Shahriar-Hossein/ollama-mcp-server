@@ -71,7 +71,8 @@ function evidenceSummary(result: HybridRetrievalResult): string {
   return result.results.map((candidate, offset) => {
     const evidence = candidate.evidence;
     if (evidence.kind === "symbol") {
-      return `${offset + 1}. symbol ${evidence.symbol!.id} (${evidence.symbol!.kind} ${evidence.symbol!.qualified_name} in ${evidence.symbol!.file})`;
+      const guard = evidence.guarded_by?.length ? ` [guarded by: ${evidence.guarded_by.join(" | ")}]` : "";
+      return `${offset + 1}. symbol ${evidence.symbol!.id} (${evidence.symbol!.kind} ${evidence.symbol!.qualified_name} in ${evidence.symbol!.file})${guard}`;
     }
     if (evidence.kind === "git_commit") return `${offset + 1}. git commit ${evidence.commit_hash}: ${evidence.subject}`;
     if (evidence.kind === "json") return `${offset + 1}. config ${evidence.file}${evidence.json_pointer}: ${evidence.value}`;

@@ -305,6 +305,76 @@ below targets, not this one.
 |---|---:|---|
 | Super Explorer + `qwen3.5:4b` (with retrieval-gap retry) | 0/5 | No regression; retry path untriggered this run because discovery no longer returned fully-empty hypotheses. Fix is contained to `discovery.ts`, no indexer changes. |
 
+### Gate-condition expansion (2026-09-18)
+
+Implemented the item below: `indexer.ts`'s `CallEdge` gained a
+`guard_condition` field (`guardConditionFor` walks up from a call to the
+nearest enclosing `if` whose condition contains `process.env`, stopping at
+the call's own function scope; negated if reached only via `else`). Scoped
+to `process.env` checks deliberately — an unscoped version that fired on any
+enclosing `if` was tried first and made things *worse*: nearly every call in
+the codebase sits inside some conditional, so the new retrieval channel
+below returned mostly noise until this was narrowed to actual feature-flag
+guards.
+
+Three more pieces were needed before this was end-to-end useful, not just
+recorded in the index:
+
+1. **New `conditional` retrieval channel** in `hybrid-retrieval.ts`. A
+   question like SE-02 shares no vocabulary with the guard text itself
+   (`"which env vars gate the tools"` vs.
+   `process.env.CLOUD_CLAUDE_ENABLED === "1"`), so lexical/structural search
+   never found the guarded symbols regardless of the new indexer field. The
+   new channel triggers on gating vocabulary (`gate`, `guard`, `environment`,
+   `enabled`, ...) and directly surfaces every symbol reached through a
+   guarded call, ranked by term overlap with the guard text.
+2. **Naming collision with the fix's own code.** The indexer treats every
+   local `const` as an indexable symbol. The first pass named things
+   `gatedBy`/`gateNote`/`gateConditionsFor` — which, once indexed, out-scored
+   the real `registerRunCloudClaudeTask`/`registerRunLocalWorkerTask` targets
+   for any query containing "gate", because those are literally this
+   server's own source now. Renamed everything to `guard*` (matching
+   `guard_condition` already) to stop self-colliding on the query vocabulary
+   it exists to serve.
+3. **Two long-standing evidence-resolution gaps in `explore.ts` that were
+   silently dropping correct hypotheses**, found by tracing SE-02 runs after
+   (1) and (2) started producing the *right* hypothesis text:
+   - `exactSymbol` required an exact `symbol:sha256:...` ID match; the model
+     frequently echoes a candidate's ID without the `symbol:` prefix, which
+     silently zeroed out the claim's evidence and dropped it. Now also tries
+     the ID with `symbol:` prepended.
+   - A hypothesis citing the guard condition text itself as its evidence
+     target (e.g. after seeing `[guarded by: ...]`) had nowhere to resolve to
+     — `evidenceForDiscovery` only matched symbol IDs/names. Added a
+     fallback: a `kind: "symbol"` request whose target matches a call's
+     `guard_condition` (parens-insensitive) resolves to a `source_range` over
+     that call site plus the gated symbol.
+   - `verification.ts`'s symbol excerpts also gained a
+     `// Reached only when: <condition>` trailer, since previously the
+     verifier only ever saw the gated function's own body — never proof it
+     was conditional at all.
+
+**Net effect, `qwen3.5:4b`, four runs of SE-02 across these fixes:** discovery
+now reliably proposes the *correct* hypothesis (`CLOUD_CLAUDE_ENABLED` gates
+`registerRunCloudClaudeTask`, `LOCAL_WORKER_ENABLED` gates
+`registerRunLocalWorkerTask`) with the right symbol IDs — the specific
+wrong-pick failure mode this item targeted is gone. One run got as far as a
+`SUPPORTED` verification on the cloud-gate half with the guard condition
+correctly in the cited excerpt. SE-02 still didn't clear the gold check in
+any of the four runs: the model is inconsistent about naming
+`registerRunLocalWorkerTask` correctly (once typo'd as
+`registerLocalWorkerTask`, silently dropping that half of the answer) and
+about writing the literal variable names into `answer_to_user` rather than
+paraphrasing ("uses specific environment variables" instead of naming them),
+and the verification-model JSON output itself is still flaky on this model
+(schema failures on 2 of 4 runs, independent of this fix). SE-01/03/04/05
+were unaffected (unrelated failure modes, not regressions — same or
+different pre-existing errors as before this change).
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| Super Explorer + `qwen3.5:4b` (gate-condition expansion, 4 runs) | 0/5 each run | SE-02's underlying hypothesis/evidence chain is now correct; still blocked by this model's naming inconsistency and JSON-output flakiness, not by missing gate information. |
+
 ## Next session
 
 - [x] Run `nemotron-3-super:cloud` through the Gemma protocol (adapted: MCP
@@ -314,8 +384,19 @@ below targets, not this one.
   runner with explicit per-question latency capture, matching the Gemma
   protocol exactly, if latency comparison becomes load-bearing for a routing
   decision.
-- [ ] Gate-condition expansion (fixes wrong-pick failures like SE-02): teach
-  the expansion pass to walk from a tool's registration call site up to its
-  enclosing `if`/env-var guard. Needs the indexer to track enclosing
-  conditional ranges around calls (it doesn't today) — bigger lift than the
-  retrieval-gap retry above, touches `indexer.ts`'s schema.
+- [x] Gate-condition expansion (fixes wrong-pick failures like SE-02) — see
+  above. Closed as "root cause fixed, gold check still failing on unrelated
+  model flakiness," not as "SE-02 passes."
+- [ ] `qwen3.5:4b`'s verification-stage JSON-schema failures (`"Verification
+  model must return exactly one result per claim"` / `"...one JSON object
+  with results"`) are now the most common single failure reason across
+  SE-01/02/04/05 in these runs. `verifyClaims` has no repair-retry the way
+  `discoverEvidence` does — consider adding one, mirroring
+  `runDiscoveryPass`'s one-shot repair prompt.
+- [ ] The gold-set phrase/file checks require exact lowercase variable names
+  in `answer_to_user`; a correct-but-paraphrased answer (e.g. "uses specific
+  environment variables to enable execution") fails the check even when the
+  cited evidence is right. Consider whether `synthesis.ts` should be
+  instructed to name gate variables literally when citing `guard_condition`
+  evidence, or whether the gold check should accept a paraphrase backed by a
+  correctly-cited guard citation.

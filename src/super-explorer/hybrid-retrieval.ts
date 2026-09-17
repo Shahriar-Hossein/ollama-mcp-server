@@ -12,10 +12,20 @@ const RRF_WEIGHT: Record<RetrievalSource, number> = {
   documentation: 3,
   history: 3,
   configuration: 3,
+  conditional: 3,
 };
 
 export type RetrievalMode = "lexical" | "hybrid";
-export type RetrievalSource = "lexical" | "semantic" | "structural" | "documentation" | "history" | "configuration";
+export type RetrievalSource = "lexical" | "semantic" | "structural" | "documentation" | "history" | "configuration" | "conditional";
+
+/**
+ * A question about gating vocabulary rarely shares any substring with the
+ * guard's own condition text (e.g. "which env vars gate the tools" vs.
+ * `process.env.CLOUD_CLAUDE_ENABLED === "1"`), so lexical/structural search
+ * can't bridge it. This trigger list turns the question itself into the
+ * signal instead: any mention of gating surfaces every guarded call target.
+ */
+const GUARD_TRIGGER_WORDS = ["gate", "gated", "gates", "gating", "guard", "guarded", "guards", "environment", "env", "enable", "enabled", "disable", "disabled", "flag", "conditional", "condition", "toggle"];
 
 type EvidenceCandidate =
   | { id: string; kind: "symbol"; symbol: SymbolRecord }
@@ -40,6 +50,8 @@ export interface HybridRetrievalResult {
       subject?: string;
       files?: string[];
       symbol?: Pick<SymbolRecord, "id" | "file" | "qualified_name" | "kind" | "range">;
+      /** Distinct guard conditions found on call sites that invoke this symbol, if any. */
+      guarded_by?: string[];
     };
     /** Kept for source-symbol callers; non-symbol evidence is in `evidence`. */
     symbol?: Pick<SymbolRecord, "id" | "file" | "qualified_name" | "kind" | "range">;
@@ -122,6 +134,25 @@ function structuralSearch(terms: string[], index: RepositoryIndex): RankedCandid
     .sort(compareCandidates);
 }
 
+/** Surfaces every symbol reached only through a guarded call, ranked by term overlap with the guard's own condition text. */
+function conditionalSearch(terms: string[], index: RepositoryIndex): RankedCandidate[] {
+  const byId = new Map(index.symbols.map((symbol) => [symbol.id, symbol]));
+  const scores = new Map<string, { symbol: SymbolRecord; score: number }>();
+  for (const call of index.calls) {
+    if (!call.guard_condition || !call.callee_symbol_id) continue;
+    const symbol = byId.get(call.callee_symbol_id);
+    if (!symbol) continue;
+    const lowerGuard = call.guard_condition.toLocaleLowerCase();
+    const overlap = terms.filter((term) => lowerGuard.includes(term)).length;
+    const score = 1 + overlap * 2;
+    const prior = scores.get(symbol.id);
+    if (!prior || score > prior.score) scores.set(symbol.id, { symbol, score });
+  }
+  return [...scores.values()]
+    .map(({ symbol, score }) => ({ candidate: { id: symbol.id, kind: "symbol" as const, symbol }, score }))
+    .sort(compareCandidates);
+}
+
 function compareCandidates(left: RankedCandidate, right: RankedCandidate): number {
   if (right.score !== left.score) return right.score - left.score;
   return left.candidate.id.localeCompare(right.candidate.id);
@@ -178,17 +209,33 @@ function historySearch(root: string, terms: string[]): RankedCandidate[] {
   }).sort(compareCandidates);
 }
 
-function evidenceFor(candidate: EvidenceCandidate): HybridRetrievalResult["results"][number]["evidence"] {
+/** Guard conditions found on call sites that invoke `symbolId`, deduplicated and in call order. */
+function guardConditionsFor(index: RepositoryIndex, symbolId: string): string[] {
+  return [...new Set(
+    index.calls
+      .filter((call) => call.callee_symbol_id === symbolId && call.guard_condition)
+      .map((call) => call.guard_condition!)
+  )];
+}
+
+function evidenceFor(candidate: EvidenceCandidate, index: RepositoryIndex): HybridRetrievalResult["results"][number]["evidence"] {
   switch (candidate.kind) {
-    case "symbol":
-      return { kind: candidate.kind, file: candidate.symbol.file, symbol: { id: candidate.symbol.id, file: candidate.symbol.file, qualified_name: candidate.symbol.qualified_name, kind: candidate.symbol.kind, range: candidate.symbol.range } };
+    case "symbol": {
+      const guardedBy = guardConditionsFor(index, candidate.symbol.id);
+      return {
+        kind: candidate.kind,
+        file: candidate.symbol.file,
+        symbol: { id: candidate.symbol.id, file: candidate.symbol.file, qualified_name: candidate.symbol.qualified_name, kind: candidate.symbol.kind, range: candidate.symbol.range },
+        ...(guardedBy.length ? { guarded_by: guardedBy } : {}),
+      };
+    }
     case "documentation": return candidate;
     case "json": return candidate;
     case "git_commit": return candidate;
   }
 }
 
-function mergeRankings(rankings: Array<{ source: RetrievalSource; candidates: RankedCandidate[] }>, limit: number) {
+function mergeRankings(rankings: Array<{ source: RetrievalSource; candidates: RankedCandidate[] }>, limit: number, index: RepositoryIndex) {
   const merged = new Map<string, { candidate: EvidenceCandidate; score: number; sources: Array<{ source: RetrievalSource; rank: number }> }>();
   for (const { source, candidates } of rankings) {
     for (const [offset, candidate] of candidates.entries()) {
@@ -203,7 +250,7 @@ function mergeRankings(rankings: Array<{ source: RetrievalSource; candidates: Ra
     .sort((left, right) => right.score - left.score || left.candidate.id.localeCompare(right.candidate.id))
     .slice(0, limit)
     .map(({ candidate, score, sources }) => {
-      const evidence = evidenceFor(candidate);
+      const evidence = evidenceFor(candidate, index);
       return {
         score,
         sources: sources.sort((left, right) => left.source.localeCompare(right.source)),
@@ -221,7 +268,7 @@ export async function hybridRetrieve(repositoryRoot: string, query: string, limi
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Retrieval result limit must be an integer from 1 through 100.");
   const index = indexRepository(root);
   const lexical = lexicalSearch(root, queryTerms(trimmedQuery), index);
-  if (mode === "lexical") return { commit_hash: index.commit_hash, mode, query: trimmedQuery, results: mergeRankings([{ source: "lexical", candidates: lexical }], limit) };
+  if (mode === "lexical") return { commit_hash: index.commit_hash, mode, query: trimmedQuery, results: mergeRankings([{ source: "lexical", candidates: lexical }], limit, index) };
 
   const semantic = await semanticSearch(root, trimmedQuery, 100, model);
   if (semantic.commit_hash !== index.commit_hash) throw new Error("Semantic index commit does not match the structural index.");
@@ -253,6 +300,11 @@ export async function hybridRetrieve(repositoryRoot: string, query: string, limi
         candidates: hasAnyTerm(queryTerms(trimmedQuery), ["commit", "introduced", "history", "change"])
           ? historySearch(root, queryTerms(trimmedQuery)) : [],
       },
-    ], limit),
+      {
+        source: "conditional",
+        candidates: hasAnyTerm(queryTerms(trimmedQuery), GUARD_TRIGGER_WORDS)
+          ? conditionalSearch(queryTerms(trimmedQuery), index) : [],
+      },
+    ], limit, index),
   };
 }
