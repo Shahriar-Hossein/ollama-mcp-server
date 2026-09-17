@@ -63,6 +63,30 @@ See [README.md](README.md) for the full picture, known gaps, and what's
 missing to make delegation reliable (model mismatch, no cloud routing, no
 model discovery).
 
+## Known traps (from 2026-09-17/18 super-explorer benchmark session)
+
+- `explore_repository`/`explore-cli.ts` calls git via `execFileSync`/
+  `spawnSync` with `cwd: repository_root`. If that directory doesn't exist
+  (e.g. a `git worktree` entry marked `prunable` whose folder was already
+  deleted), Node reports `spawnSync git ENOENT` — identical to git missing
+  from `PATH`. Don't chase a PATH/sandbox fix on that error; first check
+  `ls <repository_root>` and `git worktree list` for a stale/prunable entry.
+- `explore_repository` has no `timeout` param and returns no per-call latency
+  in its response — it inherits `REQUEST_TIMEOUT_MS` from
+  `src/ollama-client.ts` (120s default) for every model. If a benchmark needs
+  latency numbers or a different deadline per model, use the CLI runner
+  (`src/super-explorer/explore-cli.ts`) instead of the MCP tool.
+- On the SE-01..SE-05 gold set, `granite4.2:3b` still fails to produce a
+  verifier-supported answer through the Super Explorer pipeline (0/5,
+  consistent across three separate trials) — it retrieves relevant evidence
+  but underspecifies the claim. `nemotron-3-super:cloud` scores like
+  `gemma4:31b-cloud` (2/5: passes host/timeout and shell-chaining questions,
+  fails env-var-gating and registration-contrast questions). A Haiku
+  `Explore` subagent run directly against the same fixture (no Super
+  Explorer pipeline) still gets 5/5. See
+  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md) for
+  full detail.
+
 ## Why this project exists
 
 The user's Claude Code usage keeps hitting 5h/weekly limits, cutting into

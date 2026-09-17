@@ -38,6 +38,24 @@ framework.
 - When changing behavior, update relevant documentation if the project
   rationale or operational assumptions become inaccurate.
 
+## Known traps (super-explorer benchmark session, 2026-09-17/18)
+
+- `explore_repository` runs git via `spawnSync`/`execFileSync` with
+  `cwd: repository_root`. A missing `repository_root` (e.g. a `git worktree`
+  entry marked `prunable` after its folder was deleted) also throws
+  `spawnSync git ENOENT` — indistinguishable from git missing on `PATH`.
+  Check `ls <repository_root>` / `git worktree list` before assuming a
+  PATH or sandbox problem.
+- `explore_repository` has no `timeout` param and reports no per-call
+  latency; it inherits `REQUEST_TIMEOUT_MS` (120s default) for every model.
+  Use the CLI runner (`src/super-explorer/explore-cli.ts`) if a benchmark
+  needs latency data or a non-default deadline.
+- On the SE-01..SE-05 gold set: `granite4.2:3b` scores 0/5 through this
+  pipeline across three trials (evidence retrieved, claims underspecified).
+  `nemotron-3-super:cloud` scores 2/5, matching `gemma4:31b-cloud`. A Haiku
+  `Explore` subagent run directly (no pipeline) scores 5/5. Details in
+  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md).
+
 ## Security invariants
 
 - `run_local_worker_task` and `run_cloud_claude_task` must remain opt-in,
