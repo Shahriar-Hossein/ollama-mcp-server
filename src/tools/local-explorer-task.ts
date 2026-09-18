@@ -215,6 +215,12 @@ export function registerLocalExplorerTask(server: McpServer) {
         });
         const data: any = await res.json();
         const message = data.message;
+        if (!message) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Ollama returned no message (${res.status}): ${data.error || JSON.stringify(data)}` }],
+          };
+        }
         messages.push(message);
 
         if (!message.tool_calls || message.tool_calls.length === 0) {
