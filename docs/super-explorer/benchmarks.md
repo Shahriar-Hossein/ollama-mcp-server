@@ -519,6 +519,41 @@ baseline reliability, and do not trust `qwen3.5:4b` on this loop without a
 larger, repeated-run sample (see the expanded-gold-set item below) before
 using it as any fine-tune baseline.
 
+## SE-06..SE-12 via Super Explorer pipeline, `qwen3.5:4b` (2026-09-18)
+
+First scored run of the previously-unscored SE-06..SE-12 questions, via
+`npm run gold-set:super-explorer -- <root> qwen3.5:4b SE-06 SE-07 SE-08 SE-09
+SE-10 SE-11 SE-12` (the one-shot Super Explorer pipeline, not
+`local_explorer_task`'s tool-calling loop).
+
+**0/7 passed.**
+
+| Q | Result |
+|---|---|
+| SE-06 | Fail — pipeline error: "Verification model must return exactly one result per claim in input order." |
+| SE-07 | Fail — `ENOENT`: model emitted a literal placeholder path (`relative/tools/local-explorer-task.ts`) instead of a real repo-relative path. |
+| SE-08 | Fail — same verification-model claim/result mismatch error as SE-06. |
+| SE-09 | Fail — no crash, but gave up: "I could not materialize evidence for a supported answer," despite the discovery stage generating the right hypotheses. |
+| SE-10 | Fail — pipeline error: "Evidence range exceeds file length" (bad byte-offset citation into `run-cloud-claude-task.ts`). |
+| SE-11 | Fail on gold check only — found the right commit and got it `SUPPORTED` in verification, but omitted the required file-level citations (`src/index.ts`, `src/tools/local-explorer-task.ts`) and never said "feat: add local explorer tool". |
+| SE-12 | Fail — gave up ("I could not materialize evidence") despite listing the exact right target (`package.json` test script) in its own hypotheses. |
+
+Two of the seven (SE-06, SE-08) are a **pipeline bug**, not a model-quality
+signal: the verification stage errors when its result count doesn't match
+the claim count, before any model-quality scoring happens. SE-10 is a
+related pipeline bug (bad evidence-range resolution). The other four
+(SE-07, SE-09, SE-11, SE-12) are consistent with this pipeline's existing
+0/5 result on SE-01..05 — same failure shape (fabricated/placeholder paths,
+premature give-up despite locating the right target, and citation gaps),
+same conclusion as the rest of this document: **the one-shot discovery
+contract is the bottleneck, not model capability.** This extends that
+finding from 0/5 to 0/12 on the full gold set for this pipeline.
+
+Not yet done: re-running SE-06..12 through `local_explorer_task`'s
+tool-calling loop (which scored 5/5 on SE-01..05) to see if the same
+questions clear there — that comparison is the actual apples-to-apples test
+`docs/explorer-finetune-plan.md`'s Step 0 gold-set expansion needs.
+
 ## Next session
 
 - [x] Re-run `qwen3.5:4b` serially (one question at a time, no parallel

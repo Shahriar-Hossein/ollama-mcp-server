@@ -73,11 +73,29 @@ Two supporting points:
       model digest. Treat 2026-09-16's 5/5 as an outlier; no baseline is
       trustworthy off a single run — this is exactly what the expanded
       gold set + repeated-run item below is for.
-- [ ] Expand the gold set from 5 scored questions to 50-100, with answers and
-      required evidence. Reuse SE-06..SE-12, which already exist but are
-      unscored.
-- [ ] Split the gold set by repository/feature, not randomly — otherwise
+- [x] Expand the gold set from 12 scored questions to 50-100, with answers
+      and required evidence. **Partial progress 2026-09-18:** SE-06..SE-12
+      are now scored (0/7 on `qwen3.5:4b` via the Super Explorer pipeline —
+      see
+      [super-explorer/benchmarks.md](super-explorer/benchmarks.md#se-06se-12-via-super-explorer-pipeline-qwen354b-2026-09-18)),
+      bringing the set to SE-01..SE-12 (12 total). **Done 2026-09-18:** added
+      SE-13..SE-50 covering every remaining `src/super-explorer/*` module
+      (discovery, hybrid retrieval, indexing/knowledge store, structural
+      tools, outline/read-symbol, semantic search, synthesis/verification,
+      framework adapters, explore orchestration, git history), bringing the
+      set to 50 questions in `src/super-explorer/gold-set-cli.ts`. SE-13..50
+      are not yet scored against any model — only SE-01..12 have run
+      results so far. Still need the same run through `local_explorer_task`'s
+      tool-calling loop for comparison (not done yet), and could still grow
+      toward the 100 end of the range later.
+- [x] Split the gold set by repository/feature, not randomly — otherwise
       "Where is X called?" trains and "Who calls X?" tests, which is cheating.
+      **Done 2026-09-18:** every question in `gold-set-cli.ts` now carries a
+      `group` tag (15 groups, one per feature area — e.g. `shell-safety`,
+      `hybrid-retrieval`, `synthesis-verification`). `gold-set:super-explorer
+      <root> [model] group:<name>[,<name>...]` runs whole groups at once, so
+      a train/test split can hold out entire feature areas instead of
+      individual questions that leak an answer to a sibling question.
 - [ ] Re-run `gpt-oss:20b-cloud` post-crash-fix so the cloud bar to beat is a
       real number, not a floor.
 
