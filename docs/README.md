@@ -64,4 +64,5 @@ benchmark response says.
 | [benchmarks/early-trials-2026-09-12-13.md](benchmarks/early-trials-2026-09-12-13.md) | Pre-fixture single-prompt trials |
 | [local-claude-worker-experiment-2026-09-14.md](local-claude-worker-experiment-2026-09-14.md) | Full-harness experiment behind `run_local_worker_task` — referenced from `src/` |
 | [cloud-strategy.md](cloud-strategy.md) | Cloud model routing plan — referenced from `CLAUDE.md` |
+| [explorer-finetune-plan.md](explorer-finetune-plan.md) | Plan for a fine-tuned local Explorer — prerequisites, checklist, open questions |
 | [improvements-backlog.md](improvements-backlog.md) | Open proposals, including unresolved git-option-injection findings |

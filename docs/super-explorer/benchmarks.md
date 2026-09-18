@@ -413,8 +413,146 @@ repair-retry (see below).
 | Super Explorer + `nemotron-3-super:cloud` (gate-condition expansion) | 0/5 | Regressed from 2/5 (Gemma-protocol trial above) to discovery-schema failures on SE-01/02/03 this run — likely sampling variance, not a regression from this change (no pipeline code touches discovery's schema handling). |
 | Super Explorer + `gemma4:31b-cloud` (gate-condition expansion) | 0/5 | Matches its earlier 2/5-class profile qualitatively, but SE-02 itself now fails earlier (discovery schema) rather than later. |
 
+## `local_explorer_task` tool-calling-loop comparison (2026-09-18)
+
+Prompted by the cloud re-test above showing every cloud model stuck at 0/5
+on discovery-stage JSON schema, this session tested a different hypothesis:
+that the Super Explorer pipeline's one-shot structured-JSON discovery
+contract, not the models' underlying search/reasoning ability, is the
+bottleneck. Control: a Haiku `Explore` subagent (real tool-calling, no
+bespoke schema) already gets 5/5 on this same fixture (see the Haiku
+baseline section above). Test: run the same SE-01 through SE-05 questions
+through `local_explorer_task` (the existing Glob/Grep/Read tool-calling
+loop, `src/tools/local-explorer-task.ts`) instead of the Super Explorer
+pipeline, against the pinned fixture worktree
+(`/tmp/ollama-mcp-super-explorer-gemma-2026-09-17`), for the same four cloud
+models plus two local models.
+
+**Round 1 — serial, one question at a time, default `max_tool_calls: 8`:**
+
+| Model | Passed | Notes |
+|---|---:|---|
+| `gpt-oss:20b-cloud` | 1/5 | 3 gave up after 8 tool calls; 1 crashed with `Cannot read properties of undefined (reading 'tool_calls')` on SE-02 — a code bug in the tool's response handling, not a model failure. |
+| `gpt-oss:120b-cloud` | 3/5 | SE-01 gave up; SE-02 partial (right core facts, one fabricated detail, self-flagged medium confidence). |
+| `nemotron-3-super:cloud` | 2/5 | SE-03 correctly self-flagged low confidence (no files read); SE-01/SE-05 gave up. |
+| `gemma4:31b-cloud` | 2/5 | SE-01/SE-04 correctly self-flagged low confidence (no matches found — genuine misses, not hallucinations); SE-05 partial (right allowlist mechanism, missed the `runShellTool`/`spawnSync` no-shell detail). |
+
+Every model went from 0/5 (Super Explorer pipeline) to a real score, and
+every self-reported low-confidence answer in this round was correct to
+flag — no confidently-wrong hallucinations. This matches the earlier
+`qwen3.5:4b` pilot finding that confidence is the one signal that tracks
+correctness for this tool.
+
+**Round 2 — parallel dispatch (all 5 questions fired in one batch, like 5
+independent tasks) with `max_tool_calls` bumped 3x to 24, tested per user
+request to see if concurrent calls are viable before adopting them:**
+
+| Model | Passed | Notes |
+|---|---:|---|
+| `gpt-oss:20b-cloud` | 3/5 | 1 gave up (SE-03), 1 hit the same `tool_calls` crash bug (SE-04). |
+| `gpt-oss:120b-cloud` | 5/5 | Clean sweep. |
+| `nemotron-3-super:cloud` | 5/5 | Clean sweep. |
+| `gemma4:31b-cloud` | 5/5 | Clean sweep. |
+
+Bumping the tool-call budget and dispatching in parallel took three of four
+cloud models to a full clean sweep, up from 0/5 under the Super Explorer
+pipeline on the same fixture and questions. This strongly supports the
+hypothesis: the pipeline's one-shot structured-JSON discovery contract was
+the bottleneck, not the models' capability at "search and report."
+`gpt-oss:20b-cloud` remains the weakest cloud model here, partly due to the
+`tool_calls` crash bug rather than a clean capability gap.
+
+**Round 3 — local models, same parallel-dispatch protocol, `max_tool_calls:
+24`, one model loaded on GPU at a time (`ollama stop` the previous model,
+`ollama run <model> "hi"` to preload the next before testing):**
+
+| Model | Passed | Notes |
+|---|---:|---|
+| `granite4.1:3b` (new, first test) | 0/5 | Fabricated wholesale: 3 of 5 answers show `[0 tool call(s), 0 file(s) read]` — it never searched, and invented a plausible-looking but nonexistent Python/YAML codebase (`run_ollama_task.py`, `config/client.yaml`, `src/worker/git_wrapper.ts`). One fabricated answer was tagged **Confidence: high** — the one case in this session where the confidence signal failed to catch a hallucination. |
+| `qwen3.5:4b` | 2/5 clean (SE-04/05), 1 correctly self-flagged low (SE-03), 1 wrong-and-unflagged (SE-01, falsely claimed the tool "is not present"), 1 dangerous partial (SE-02: right conclusion, fabricated supporting file citations, tagged **Confidence: high**) | Worse than its established reputation as the most reliable local model for this loop. |
+
+Both local models did meaningfully worse than every cloud model in Round 2,
+and both produced confidently-wrong output under parallel dispatch — the
+opposite of the confidence signal's normal reliability. **Confound not yet
+isolated:** all 5 questions were fired at once against a single
+locally-loaded GPU model instance, unlike the cloud models, which have
+server-side capacity to handle concurrent requests independently. It is not
+yet known whether this is a genuine capability gap at 3-4b parameter count,
+or whether concurrent request batching against one local GPU instance
+degrades output quality (context bleed between the 5 simultaneous calls).
+This needs to be resolved by re-running `qwen3.5:4b` serially (its
+previously-validated mode) as a control before drawing any conclusion about
+local-model viability under this protocol.
+
+## `qwen3.5:4b` drift resolution (2026-09-18, recreated fixture)
+
+The 2026-09-16 baseline (5/5) versus 2026-09-18 serial re-run (1/5) drift had
+three candidate causes: fixture drift, prompt change, model-side variance.
+Ruled out before re-running: the prompt (`local-explorer-task.ts`'s
+`systemPrompt`) has been unchanged since the tool's single commit
+(`5b0f7d8`, 2026-09-16 02:09); `qwen3.5:4b`'s installed digest
+(`2a654d98e6fb`) has not changed either, so it's the same weights across all
+three runs. The original pinned worktree
+(`/tmp/ollama-mcp-super-explorer-gemma-2026-09-17`) no longer existed
+(`/tmp` is ephemeral, never committed), so it was recreated fresh via
+`git worktree add` at the same pinned fixture revision
+(`f1a75a19d1708e36f60bba0de76714acc2343492`) to control for fixture drift.
+
+Re-ran SE-01 through SE-05 serially (one call at a time, no model switch so
+no pause needed), `qwen3.5:4b`, `max_tool_calls: 24`, against the freshly
+recreated fixture:
+
+| Q | Result |
+|---|---|
+| SE-01 | Fail — cited `local-explorer-task.ts` (definition site) as the registration site instead of `src/index.ts`'s unconditional call; missed the required contrast with the two gated autonomous tools; no confidence field. |
+| SE-02 | Fail — correct variable→tool mapping, but cited `.env.example` instead of the actual gating code (`src/index.ts`, `registerRunCloudClaudeTask`, `registerRunLocalWorkerTask`); missed the `=== "1"` check and `local_explorer_task`'s exemption; no confidence field. |
+| SE-03 | Fail — wrong default host (claimed `127.0.0.1:11434`; actual default in `ollama-client.ts` is `http://localhost:11434`); conflated the tool's own hardcoded `/api/chat` fetch with the shared `generate`/`listModels` config; confident, unflagged. |
+| SE-04 | **Pass, clean** — accurate citations and trace, correctly self-flagged `Confidence: high`. |
+| SE-05 | Fail — correct chaining-prevention mechanism, but misattributed the `spawnSync` call to `shell-allowlist.ts`; it's actually in `run-local-worker-task.ts`'s `runShellTool`; no confidence field. |
+
+**1/5**, matching the 2026-09-18 serial re-run's rate (also 1/5, on a
+different question that time). With both fixture drift and prompt change
+independently controlled for and the low score still reproducing, **the
+drift is genuine model-side variance, not fixture drift or a prompt
+change.** Treat the 2026-09-16 5/5 result as an outlier, not this model's
+baseline reliability, and do not trust `qwen3.5:4b` on this loop without a
+larger, repeated-run sample (see the expanded-gold-set item below) before
+using it as any fine-tune baseline.
+
 ## Next session
 
+- [x] Re-run `qwen3.5:4b` serially (one question at a time, no parallel
+  dispatch) through `local_explorer_task` on the same fixture, to isolate
+  whether Round 3's regression (2/5, with a high-confidence fabrication on
+  SE-02) is a parallel-dispatch artifact or a genuine change from its
+  established reliability. **Result (2026-09-18): 1/5 (SE-05 only), worse
+  than Round 3.** SE-01 was a confident wrong answer with no confidence
+  rating at all, despite having read the file containing
+  `registerLocalExplorerTask`. SE-02/03/04 self-flagged `Confidence: low`
+  but for the wrong reason (searched for Python/`os.environ` patterns in
+  this TypeScript repo, never located the real files). Serial dispatch did
+  **not** restore clean results, so the regression is not a
+  parallel-dispatch artifact — treat `qwen3.5:4b`'s prior 2026-09-16
+  reliability numbers as stale until re-validated; something else changed
+  (fixture drift, prompt, or genuine model-side variance).
+- [x] Fix the `Cannot read properties of undefined (reading 'tool_calls')`
+  crash in `local_explorer_task`'s response handling (hit twice this
+  session, both times on `gpt-oss:20b-cloud`) — likely an unguarded access
+  when the model's response omits an expected field. **Fixed 2026-09-18**:
+  `src/tools/local-explorer-task.ts` now checks `data.message` before use
+  and returns a clean error (including `data.error` if present) instead of
+  crashing.
+- [ ] Consider whether `local_explorer_task`'s tool-calling loop should
+  replace or front the Super Explorer pipeline's discovery stage, given
+  Round 2's cloud-model clean sweeps versus the pipeline's 0/5 on the same
+  fixture and questions — this is an architecture-level question, not a
+  quick patch.
+- [ ] `granite4.1:3b` should not be trusted for `local_explorer_task` as-is:
+  it fabricated an entire nonexistent codebase on 3/5 questions in Round 3,
+  including one under Confidence: high. Needs a serial re-test (per the
+  parallel-dispatch confound above) before ruling it out entirely, but the
+  high-confidence fabrication is a sharper problem than a low-confidence
+  give-up.
 - [ ] Discovery-stage JSON schema failures are now the dominant blocker for
   every cloud model tested (`gpt-oss:20b/120b-cloud`, `nemotron-3-super:cloud`,
   `gemma4:31b-cloud` all hit them on 60-100% of questions) — a discovery
