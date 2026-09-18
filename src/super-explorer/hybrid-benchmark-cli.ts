@@ -15,7 +15,7 @@ const questions = [
   ["SE-06", "What independently validates Bash commands for the cloud Claude worker, and how is it attached?", ["src/tools/run-cloud-claude-task.ts", "scripts/validate-cloud-bash.cjs"]],
   ["SE-07", "Which functions stop a local explorer model from reading outside its requested repository root?", ["src/tools/local-explorer-task.ts"]],
   ["SE-08", "How are tool-call and distinct-file-read budgets enforced in local_explorer_task?", ["src/tools/local-explorer-task.ts"]],
-  ["SE-09", "What is the default model for local exploration, and what evidence justifies treating low-confidence results as untrusted?", ["src/tools/local-explorer-task.ts", "docs/benchmarks/local-explorer-2026-09-16.md"]],
+  ["SE-09", "What is the default model for local exploration, and what evidence justifies treating low-confidence results as untrusted?", ["src/tools/local-explorer-task.ts", "docs/benchmarks/runs/2026-09-16-local-explorer.md"]],
   ["SE-10", "If the cloud Bash validation hook receives invalid JSON, does it block the command?", ["scripts/validate-cloud-bash.cjs"]],
   ["SE-11", "Which commit introduced the local explorer tool, and which source files did that introduction add or change?", ["src/index.ts", "src/tools/local-explorer-task.ts"], "5b0f7d8edecfff3fe2304d8dffc43feff4606412"],
   ["SE-12", "Does this repository define a usable automated test command for the server?", ["package.json"]],

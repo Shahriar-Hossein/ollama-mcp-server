@@ -6,7 +6,7 @@ import { join, relative, resolve } from "node:path";
 import { OLLAMA_HOST } from "../ollama-client.js";
 
 // Read-only repo-discovery worker: promoted from the throwaway harness used
-// in docs/benchmarks/local-explorer-2026-09-16.md. That pilot found
+// in docs/benchmarks/runs/2026-09-16-local-explorer.md. That pilot found
 // qwen3.5:4b is the only local model that reliably drives this tool loop
 // (qwen2.5-coder:7b doesn't emit real tool_calls and fabricates confidently;
 // granite4.2:3b works but wastes its budget guessing paths) - see that doc
@@ -271,7 +271,7 @@ export function registerLocalExplorerTask(server: McpServer) {
     "Delegates read-only repo discovery (find files, grep symbols, read code, trace how something works) to a " +
       "local Ollama model with a Glob/Grep/Read tool loop, bounded on tool calls/files/output. Returns a FINAL " +
       "ANSWER with files, symbols, cited evidence, and a self-reported confidence. Per " +
-      "docs/benchmarks/local-explorer-2026-09-16.md: treat 'low' confidence as a signal to redo the search " +
+      "docs/benchmarks/runs/2026-09-16-local-explorer.md: treat 'low' confidence as a signal to redo the search " +
       "yourself or with a stronger model rather than trusting it - qwen3.5:4b's own hallucination in that pilot " +
       "was correctly self-flagged low confidence. Never trusted blindly for anything you'll act on directly.",
     {

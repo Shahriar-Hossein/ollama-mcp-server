@@ -35,7 +35,7 @@ that doesn't need frontier-level reasoning, so Claude/Codex time is spent
 only on work that actually benefits from it (architecture decisions,
 judgment calls, anything touching the current diff/context).
 
-This is already partly encoded in this repo's [CLAUDE.md](../CLAUDE.md) (when
+This is already partly encoded in this repo's [CLAUDE.md](../../CLAUDE.md) (when
 to delegate vs not). The gap is that it's a soft instruction Claude has to
 remember to follow, not something enforced. Same policy should extend to
 Codex if it has a comparable MCP/tool-calling mechanism.

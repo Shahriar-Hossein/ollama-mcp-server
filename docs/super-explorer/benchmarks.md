@@ -5,7 +5,7 @@ the exploration work this server actually needs: locating symbols, following
 registration and configuration paths, checking a security boundary, finding a
 bounded control flow, and retrieving a relevant introduction commit. It is not
 a model-capability benchmark and is separate from the worker benchmarks in
-[`docs/BENCHMARKS.md`](../BENCHMARKS.md).
+[`docs/benchmarks/MASTER.md`](../benchmarks/MASTER.md).
 
 ## Fixture contract
 
@@ -38,7 +38,7 @@ held-out variants; do not tune retrieval only to these identifiers.
 | SE-06 | What independently validates Bash commands for the cloud Claude worker, and how is it attached? | `src/tools/run-cloud-claude-task.ts`: `BASH_VALIDATOR_HOOK`, `HOOK_SETTINGS`, `registerRunCloudClaudeTask`; `scripts/validate-cloud-bash.cjs`: stdin handler | The cloud launcher passes `HOOK_SETTINGS` with a `PreToolUse` `Bash` hook that invokes the validator script. The validator separately rejects commands that are not a bare allowed `git` invocation or contain shell metacharacters. |
 | SE-07 | Which functions stop a local explorer model from reading outside its requested repository root? | `src/tools/local-explorer-task.ts`: `resolveWithinRoot`, `runGrep`, `runRead` | `resolveWithinRoot` rejects absolute or parent-escaping relative results; both `runGrep` and `runRead` call it and return a refusal when it returns `null`. |
 | SE-08 | How are tool-call and distinct-file-read budgets enforced in `local_explorer_task`? | `src/tools/local-explorer-task.ts`: `registerLocalExplorerTask`, `runRead` | The chat loop increments `toolCallCount` and refuses calls beyond `max_tool_calls`; `runRead` tracks a `Set` of files and refuses a new path after `max_files_read`, while allowing an already read path. |
-| SE-09 | What is the default model for local exploration, and what evidence justifies treating low-confidence results as untrusted? | `src/tools/local-explorer-task.ts`: `DEFAULT_MODEL`, `systemPrompt`, `registerLocalExplorerTask`; `docs/benchmarks/local-explorer-2026-09-16.md` | The default is `qwen3.5:4b`. The prompt requires a confidence field and says low confidence instead of guessing; the public tool description directs callers to redo low-confidence searches rather than trust them. The benchmark document records the pilot limitation. |
+| SE-09 | What is the default model for local exploration, and what evidence justifies treating low-confidence results as untrusted? | `src/tools/local-explorer-task.ts`: `DEFAULT_MODEL`, `systemPrompt`, `registerLocalExplorerTask`; `docs/benchmarks/runs/2026-09-16-local-explorer.md` | The default is `qwen3.5:4b`. The prompt requires a confidence field and says low confidence instead of guessing; the public tool description directs callers to redo low-confidence searches rather than trust them. The benchmark document records the pilot limitation. |
 | SE-10 | If the cloud Bash validation hook receives invalid JSON, does it block the command? | `scripts/validate-cloud-bash.cjs`: stdin `end` handler | The JSON parse failure path exits `0` and explicitly defers to the primary `--allowedTools` gate. It is not an independent block in that case. |
 | SE-11 | Which commit introduced the local explorer tool, and which source files did that introduction add or change? | commit `5b0f7d8edecfff3fe2304d8dffc43feff4606412`; `src/index.ts`; `src/tools/local-explorer-task.ts` | The commit subject is `feat: add local explorer tool`; it adds the explorer implementation and changes server registration. Documentation files in that commit are supporting evidence, not substitutes for the source relationship. |
 | SE-12 | Does this repository define a usable automated test command for the server? | `package.json`: `scripts.test` | The only declared `test` script prints `Error: no test specified` and exits `1`; answer that no usable automated test command is defined at the gold revision. Do not claim individual source behavior is tested. |
@@ -240,7 +240,7 @@ retrieval failure.
 
 Claude Haiku, run as an `Explore` subagent (not through the Super Explorer
 pipeline — this is the same out-of-pipeline baseline methodology as the
-Haiku row in [`docs/BENCHMARKS.md`](../BENCHMARKS.md)), answered SE-01
+Haiku row in [`docs/benchmarks/MASTER.md`](../benchmarks/MASTER.md)), answered SE-01
 through SE-05 directly against the same pinned-fixture worktree.
 
 Haiku passed all five questions with correct citations, including the
@@ -250,7 +250,7 @@ both Ollama-hosted models failed to retrieve any evidence for.
 
 | Explorer | Questions passed | Outcome |
 |---|---:|---|
-| Haiku (`Explore` subagent, no Super Explorer pipeline) | 5/5 | Matches the prior `docs/BENCHMARKS.md` result: beats every Super Explorer configuration tried so far on this gold set. |
+| Haiku (`Explore` subagent, no Super Explorer pipeline) | 5/5 | Matches the prior `docs/benchmarks/MASTER.md` result: beats every Super Explorer configuration tried so far on this gold set. |
 
 ## gpt-oss:20b-cloud trial (2026-09-18)
 
@@ -552,7 +552,7 @@ finding from 0/5 to 0/12 on the full gold set for this pipeline.
 Not yet done: re-running SE-06..12 through `local_explorer_task`'s
 tool-calling loop (which scored 5/5 on SE-01..05) to see if the same
 questions clear there — that comparison is the actual apples-to-apples test
-`docs/explorer-finetune-plan.md`'s Step 0 gold-set expansion needs.
+`docs/planning/explorer-finetune-plan.md`'s Step 0 gold-set expansion needs.
 
 ## Next session
 

@@ -46,7 +46,7 @@ the first pass (`deepseek-r1:8b`, `ministral-3:8b`, `lfm2.5:8b`,
 survivors at a uniform `num_ctx:16384` / `num_predict:16384`, `think:false`
 — the original run split context by installed size (8K for tags over 4 GB)
 to probe GPU spillover; this pass drops that split since it's no longer the
-open question. Same [fixture](../BENCHMARKS.md#the-fixture), `temperature 0`,
+open question. Same [fixture](../MASTER.md#the-fixture), `temperature 0`,
 `seed 42`, `keep_alive:2m`, GPU idle (333 MiB) before the run started.
 
 | Model | ctx (requested) | ctx (actual) | Extract | Fix | Summary (words) | Wall: extract / fix / summary |

@@ -1,7 +1,7 @@
 # Capability-matrix results
 
 This is the reviewable, append-only comparison tracker for the
-[capability-matrix plan](capability-matrix-plan.md). Add one row per model,
+[capability-matrix plan](2026-09-15-capability-matrix-plan.md). Add one row per model,
 configuration and fixture attempt. Keep raw requests and responses in the
 gitignored `benchmark-data/capability-matrix-YYYY-MM-DD/` directory, and put
 only the outcome and decision-relevant evidence here.
@@ -397,7 +397,7 @@ One genuine recovery (R1, previously `ERROR` under `q8_0`), no change on the
 rest — E1/F1 reason correctly but habitually fence the final answer
 regardless of budget or cache type; I1/S1 are genuinely too verbose for even
 a 16K budget (`done_reason:length`); U1/C1 fail on content. Full analysis in
-[BENCHMARKS.md](../BENCHMARKS.md#follow-up-probe-does-a-bigger-output-budget-change-anything-2026-09-16).
+[BENCHMARKS.md](../MASTER.md#follow-up-probe-does-a-bigger-output-budget-change-anything-2026-09-16).
 `exaone-deep:2.4b` is a plausible additional R1 candidate but not yet
 promoted — needs Phase 3/4 confirmation first. The same session also reran
 the 7 I1 Phase-1 losers at `num_predict:16384` on the normal `q8_0` service

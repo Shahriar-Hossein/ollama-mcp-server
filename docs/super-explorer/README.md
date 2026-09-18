@@ -1,5 +1,21 @@
 # Super Explorer
 
+Design spec and delivery roadmap. For the plain-language version of what this
+is and why, read [overview.md](overview.md) first.
+
+## Files in this directory
+
+| File | What it is |
+|---|---|
+| [overview.md](overview.md) | Plain-language companion — what it is, why a tiny model, how it works in a real case |
+| README.md (this file) | Design goal, architecture, delivery roadmap |
+| [benchmarks.md](benchmarks.md) | Gold question set, scoring method, and every recorded trial |
+| [storage.md](storage.md) | On-disk format and lifecycle for generated explorer data |
+| [symbol-schema.md](symbol-schema.md) | Symbol-record schema: structural records, field rules, invariants |
+| [knowledge-store-schema.md](knowledge-store-schema.md) | SQLite schema: claims, evidence, verification status, freshness |
+| [framework-adapters.md](framework-adapters.md) | Framework-adapter interface for generic structural tools |
+| [git-history.md](git-history.md) | Git-history lookups for files and symbols |
+
 ## Goal
 
 Build a local, repository-specific exploration system in which Qwen3.5 4B is the reasoning component, not the repository navigator. The system should answer bounded questions—where behavior lives, what writes metadata, which hooks trigger a flow, and which tests verify it—with cited, verified evidence.

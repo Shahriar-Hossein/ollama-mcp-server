@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { OLLAMA_HOST } from "../ollama-client.js";
 import { ALLOWLIST_DESCRIPTION, parseAllowedGitCommand, WORKER_SYSTEM_PROMPT } from "../shell-allowlist.js";
 
-// Tier 2 from docs/local-claude-worker-experiment-2026-09-14.md: a hand-rolled
+// Tier 2 from docs/planning/local-claude-worker-experiment.md: a hand-rolled
 // tool loop against Ollama's /api/chat, no Claude Code harness. ~10s for a
 // real git commit vs. minutes for a full-harness cloud run via run_cloud_claude_task.
 //

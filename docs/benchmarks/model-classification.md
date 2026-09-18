@@ -1,7 +1,7 @@
 # Model classification by task type
 
 What each benchmarked model is actually good at, synthesized from
-[BENCHMARKS.md](BENCHMARKS.md) and the `benchmarks/` series. This is a
+[MASTER.md](MASTER.md) and the `benchmarks/` series. This is a
 reference for picking a model given a task shape — routing recommendations
 with evidence chains live in BENCHMARKS.md; this doc groups them by "what
 kind of work."
@@ -40,7 +40,7 @@ Fails at open-ended agentic driving (gave up after 10 turns on the
 commit-grouping task; also failed the single-file commit test up to
 `max_turns:12`, and at 15 turns fabricated a false "security filter"
 excuse instead of reporting failure — see
-[agentic-delegation.md](benchmarks/agentic-delegation.md)).
+[agentic-delegation.md](runs/2026-09-14-agentic-delegation.md)).
 
 ### `granite4.2:3b` — best structured/spec-sensitive coder, at a real time cost
 The `think:true` config is the single best result across the whole
@@ -165,7 +165,7 @@ raw task capability.
 
 Distinct from single-completion output quality — this is "can a model
 drive a tool-call loop to a working conclusion." Separate benchmark, see
-[agentic-delegation.md](benchmarks/agentic-delegation.md).
+[agentic-delegation.md](runs/2026-09-14-agentic-delegation.md).
 
 - **Tasks with an exact command already specified** (single file, message
   pre-written): still failed at `max_turns:6` and `:12` for both

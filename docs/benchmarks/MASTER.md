@@ -35,7 +35,7 @@ horse: the only model in the whole `think:false` series to solve `fix` 6/6,
 at 2.33s. It doesn't unseat `granite4.2:3b` + `think:true` yet — its summary
 overruns the 90-word cap — but for fix-shaped tasks it may beat the 21-63s
 `think:true` route outright. Details in
-[the 16K series](benchmarks/16k-context-series.md).
+[the 16K series](runs/2026-09-15-16k-context.md).
 
 ## Winners and losers, at a glance
 
@@ -75,27 +75,27 @@ Each of these ran the fixture above under a different context/output budget
 or model set. Open one when you need the reasoning behind a number, not just
 the number itself.
 
-- [16K context / 16K output](benchmarks/16k-context-series.md) — the current
+- [16K context / 16K output](runs/2026-09-15-16k-context.md) — the current
   series. `think:false` and `think:true` head-to-head, matched-budget
   speedup comparison, GPU residency.
-- [8K context, qwen2.5-coder:7b only](benchmarks/8k-context-coder.md) —
+- [8K context, qwen2.5-coder:7b only](runs/2026-09-15-8k-context-coder.md) —
   checks whether a smaller context budget changes anything for a
   `think:true`-incapable model.
-- [New models, 2026-09-15](benchmarks/new-models-2026-09-15.md) — nine
+- [New models, 2026-09-15](runs/2026-09-15-new-models.md) — nine
   newly-pulled tags (exaone-deep, deepseek-r1, gemma3/4, nemotron, lfm2.5,
   ministral-3:8b) benchmarked against the same fixture, plus a rerun of the
   five survivors at a uniform 16K/16K after most large tags were removed.
   None beat the recommendation above. Notably, `exaone-deep:7.8b`'s 6/6 `fix`
   result from the 8K pass did not reproduce at 16K (dropped to 2/6, different
   bug) — don't treat a single-context result as context-independent.
-- [32K context / 512 output](benchmarks/32k-context-series.md) — the earlier,
+- [32K context / 512 output](runs/2026-09-14-32k-context.md) — the earlier,
   superseded series. Kept because it's the source of the `think:false` fix
   result and the phi4-mini non-reproducing anomaly, plus the thinking-budget
   threshold sweep and 32K GPU residency data.
-- [Agentic delegation](benchmarks/agentic-delegation.md) — a different
+- [Agentic delegation](runs/2026-09-14-agentic-delegation.md) — a different
   question: can a model drive a git task to completion (worker-tool and
   cloud-harness runs).
-- [Early trials, 2026-09-12/13](benchmarks/early-trials-2026-09-12-13.md) —
+- [Early trials, 2026-09-12/13](runs/2026-09-12-early-trials.md) —
   the pre-fixture single-prompt trials that found the `think:false` bug.
 
 ## Hardware and runtime
@@ -124,7 +124,7 @@ the number itself.
   scored 5/6 while wrapping its answer in a markdown fence it was told not to
   use.
 - **Don't trust a worker's self-report.** See
-  [benchmarks/agentic-delegation.md](benchmarks/agentic-delegation.md) — models
+  [benchmarks/agentic-delegation.md](runs/2026-09-14-agentic-delegation.md) — models
   in this series have fabricated a "security filter blocked me" excuse and
   claimed a single-file commit that actually touched two files.
 - `generate()` in `src/ollama-client.ts` discards Ollama's `eval_count`,
@@ -138,7 +138,7 @@ the number itself.
   back-to-back.** `keep_alive:2m` left the previous model resident when the
   next one's requests started, splitting the GPU between two models for that
   run (see the 16K rerun in
-  [new-models-2026-09-15.md](benchmarks/new-models-2026-09-15.md)) — its
+  [new-models-2026-09-15.md](runs/2026-09-15-new-models.md)) — its
   `ollama ps` processor split isn't a clean solo measurement. Unload
   (`keep_alive:0`) or wait out the window between models when residency
   numbers matter.
@@ -152,9 +152,9 @@ the number itself.
 - [model-classification.md](model-classification.md) — models grouped by
   what they're good at (extraction, code fix, tool use, agentic driving,
   etc.), synthesized from this doc and the `benchmarks/` series.
-- [local-claude-worker-experiment-2026-09-14.md](local-claude-worker-experiment-2026-09-14.md)
+- [local-claude-worker-experiment-2026-09-14.md](../planning/local-claude-worker-experiment.md)
   — full-harness experiment behind `run_local_worker_task`.
-- [improvements-backlog.md](improvements-backlog.md) — proposed changes,
+- [improvements-backlog.md](../planning/improvements-backlog.md) — proposed changes,
   including unresolved git-option-injection findings.
 
 ## Capability matrix Track B — public-2 screen (2026-09-15)
@@ -188,54 +188,20 @@ passes (`qwen3.5:4b`, `nemotron-3-nano:4b`, and `ministral-3:3b`) need the
 plan's repeated public-fixture and held-out confirmation runs. No candidate
 passed T1 under this exact contract.
 
-## Capability matrix Track B — public-2 diagnosis and confirmation (2026-09-16)
+## Capability matrix Track B — public-2 diagnosis, confirmation, and held-out (2026-09-16)
 
-The closest T1 near-miss, `qwen3.5:4b`, had completed the required behavior
-but omitted `timeout_ms:65000` from its final JSON. The diagnostic changed
-only the final-report wording: it required the exact object and explicitly
-said not to omit the numeric timeout. Under the otherwise unchanged T1
-fixture/configuration, it passed 5/5: every run read a fixture file, ran the
-focused test successfully, preserved the read-only repository, and returned
-the exact required report. Median wall time was 6.42s (range 6.37–13.02s).
-
-The three G1 screen passers were also completed to five serial public-fixture
-attempts, each from a fresh disposable repository. `qwen3.5:4b` passed 5/5
-(median 7.72s, range 7.61–7.99s), and `nemotron-3-nano:4b` passed 5/5 (median
-7.16s, range 6.89–21.04s). `ministral-3:3b` passed 4/5 (median 4.26s, range
-4.09–14.59s); its sole failure made the correct edit and passed both visible
-and independent tests, but wrapped the final JSON in a Markdown fence. This
-is a contract failure, so it is not reliable for G1 under this configuration.
-
-Raw artifacts use the `t1-final-report-reminder-*` and `g1-0[2-5]-*` names in
-the existing gitignored `benchmark-data/capability-matrix-2026-09-15-public-2/`
-directory. T1's prompt variant and full system prompt are stored in each T1
-artifact. Held-out T1 and G1 fixtures remain required before any routing
-recommendation.
-
-## Capability matrix Track B — held-out confirmation (2026-09-16)
-
-One attempt per finalist route against fixture `2026-09-16-held-out-1`, which
-renames every identifier the public fixture used (T1:
-`src/runtime.js`/`defaultTimeoutMs` → `src/worker-settings.js`/
-`requestTimeoutMs`; G1: `src/parse-port.js`/`parsePort` →
-`src/port-validator.js`/`validatePort`, with its two test assertions
-reordered) while keeping the same prompts, tool schema, grading contract, and
-generation settings. This checks that the public-2 passes reflected task
-capability, not memorized identifiers.
-
-| Route/config | Result | Wall time |
-|---|---|---:|
-| T1 `qwen3.5:4b`, final-report reminder | PASS | 16.60s |
-| G1 `qwen3.5:4b` | PASS | 6.96s |
-| G1 `nemotron-3-nano:4b` | PASS | 13.10s |
-
-All three passed: each performed genuine search/read/write/test tool calls
-against the renamed files and returned a contract-valid final report. Raw
-artifacts are in the gitignored
-`benchmark-data/capability-matrix-2026-09-16-held-out-1/` directory; full
-detail is in [capability-matrix-results.md](benchmarks/capability-matrix-results.md).
-`ministral-3:3b` was not re-run held-out — its public-2 confirmation already
-showed a hard G1 format failure (1/5) and is excluded below.
+T1's near-miss (`qwen3.5:4b`, missing `timeout_ms:65000`) was fixed by a
+final-report wording reminder and passed 5/5 public-fixture confirmation.
+The three G1 screen passers were confirmed 5x each: `qwen3.5:4b` and
+`nemotron-3-nano:4b` both 5/5, `ministral-3:3b` 4/5 (one Markdown-fenced
+final JSON — a contract failure, excluded from G1 routing). All finalists
+then ran once against a held-out fixture with renamed identifiers (T1 and
+both surviving G1 routes) and passed. Full run-by-run tables, wall times, and
+raw-artifact paths are in
+[capability-matrix-results.md](runs/2026-09-16-capability-matrix-results.md#track-b--public-2-diagnosis-and-confirmation)
+(diagnosis/confirmation) and
+[...#track-b--held-out-confirmation-phase-4](runs/2026-09-16-capability-matrix-results.md#track-b--held-out-confirmation-phase-4)
+(held-out).
 
 ## Capability matrix Track B — routing recommendation (2026-09-16)
 
@@ -249,7 +215,7 @@ Per-category, not a single best model, per the plan's decision rule:
 
 All other categories (extraction, code fix, investigation, retrieval,
 summary, incomplete evidence, instruction conflict) remain screen-only
-results in [capability-matrix-results.md](benchmarks/capability-matrix-results.md)
+results in [capability-matrix-results.md](runs/2026-09-16-capability-matrix-results.md)
 and are not yet promoted to a routing recommendation. Cloud routes stay
 `ON HOLD`.
 
@@ -261,7 +227,7 @@ and settings. All 28 reproduced 5/5 — no crash, timeout, or flip from PASS
 to FAIL. Full per-pair timing and the grader bug this run caught (F1's
 `instanceof TypeError` check failing across the `vm` sandbox realm, fixed to
 `error.name === "TypeError"`) are in
-[capability-matrix-results.md](benchmarks/capability-matrix-results.md#track-a--phase-3-reliability-confirmation-2026-09-16).
+[capability-matrix-results.md](runs/2026-09-16-capability-matrix-results.md#track-a--phase-3-reliability-confirmation-2026-09-16).
 
 This confirms infra-level repeatability under fixed temperature-0/seed-42
 settings, not sampling-level variability or generalization past the public
@@ -274,7 +240,7 @@ renamed identifiers, reordered logs, and relocated defects (same task
 contract as the public fixture). 26/28 pairs generalized; full detail,
 including two grader false negatives found and fixed during grading (not
 model failures), is in
-[capability-matrix-results.md](benchmarks/capability-matrix-results.md#track-a--phase-4-held-out-confirmation-2026-09-16).
+[capability-matrix-results.md](runs/2026-09-16-capability-matrix-results.md#track-a--phase-4-held-out-confirmation-2026-09-16).
 
 | Category | Recommended route | Evidence | Notes |
 |---|---|---|---|
@@ -373,7 +339,7 @@ even though most of the individual bets did not pay off.
 
 Not "is a model's output correct" but "can a local model with only
 Glob/Grep/Read absorb repo-discovery tool calls ahead of Haiku/Sonnet."
-Full writeup: [benchmarks/local-explorer-2026-09-16.md](benchmarks/local-explorer-2026-09-16.md).
+Full writeup: [benchmarks/local-explorer-2026-09-16.md](runs/2026-09-16-local-explorer.md).
 
 Five real exploration questions about this repo's own source, run through a
 throwaway tool-calling harness:
@@ -403,10 +369,10 @@ unset anywhere in the codebase before this), a 180s per-call request
 timeout (`AbortController`, guards a hung generation — the loop had no
 timeout at all before), and a new `think` param (default `false`). Ran
 `qwen3.5:4b` against the ten still-unscored gold questions SE-13..SE-22
-(from [gold-set-cli.ts](../src/super-explorer/gold-set-cli.ts)), once with
+(from [gold-set-cli.ts](../../src/super-explorer/gold-set-cli.ts)), once with
 `think:false` and once with `think:true`, 20s pause between questions, same
 repo/questions/model both times. Raw output:
-[benchmark-data/se13-22-runner/](../benchmark-data/se13-22-runner/) (gitignored).
+[benchmark-data/se13-22-runner/](../../benchmark-data/se13-22-runner/) (gitignored).
 
 | Config | Score | Total wall time (10 Qs) | Notes |
 |---|---|---|---|

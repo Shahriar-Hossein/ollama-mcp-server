@@ -20,7 +20,7 @@ fixture, same SE-01..SE-05 questions:
 | Super Explorer pipeline (one-shot JSON discovery contract) | 0/5, all four models |
 | `local_explorer_task` (tool-calling loop, `max_tool_calls: 24`) | 5/5, three of four |
 
-See [super-explorer/benchmarks.md](super-explorer/benchmarks.md) — the
+See [super-explorer/benchmarks.md](../super-explorer/benchmarks.md) — the
 gate-condition re-test and the Round 2 table. A 0/5→5/5 swing with the model
 held constant means the harness was the bottleneck, not capability. That is
 the case for training a policy instead of knowledge.
@@ -43,7 +43,7 @@ Two supporting points:
   emit one contract-valid extract (4b needs 2,048), and never produced valid
   code or summary output by 4,096 — it burns its completion budget on hidden
   thinking, the worst trait for a loop needing short structured emissions per
-  turn ([benchmarks/32k-context-series.md](benchmarks/32k-context-series.md)).
+  turn ([benchmarks/32k-context-series.md](../benchmarks/runs/2026-09-14-32k-context.md)).
   CLAUDE.md records `qwen3.5:4b` as the only local model confirmed to emit
   real `tool_calls` in this loop; 2b has never been shown to emit one at all.
   Pick the base from the Step 3 sweep, on tool-call fidelity, not size.
@@ -68,7 +68,7 @@ Two supporting points:
       2026-09-18 serial re-run. **Resolved 2026-09-18** (recreated pinned
       fixture, fresh rerun): genuine model-side variance, not fixture drift
       or a prompt change — see
-      [super-explorer/benchmarks.md](super-explorer/benchmarks.md#qwen354b-drift-resolution-2026-09-18-recreated-fixture).
+      [super-explorer/benchmarks.md](../super-explorer/benchmarks.md#qwen354b-drift-resolution-2026-09-18-recreated-fixture).
       1/5 again on a fresh worktree with an unchanged prompt and unchanged
       model digest. Treat 2026-09-16's 5/5 as an outlier; no baseline is
       trustworthy off a single run — this is exactly what the expanded
@@ -77,7 +77,7 @@ Two supporting points:
       and required evidence. **Partial progress 2026-09-18:** SE-06..SE-12
       are now scored (0/7 on `qwen3.5:4b` via the Super Explorer pipeline —
       see
-      [super-explorer/benchmarks.md](super-explorer/benchmarks.md#se-06se-12-via-super-explorer-pipeline-qwen354b-2026-09-18)),
+      [super-explorer/benchmarks.md](../super-explorer/benchmarks.md#se-06se-12-via-super-explorer-pipeline-qwen354b-2026-09-18)),
       bringing the set to SE-01..SE-12 (12 total). **Done 2026-09-18:** added
       SE-13..SE-50 covering every remaining `src/super-explorer/*` module
       (discovery, hybrid retrieval, indexing/knowledge store, structural
@@ -88,7 +88,7 @@ Two supporting points:
       SE-13..SE-22 now have results through `local_explorer_task`'s
       tool-calling loop (`qwen3.5:4b`, widened budgets, `think:false` then
       `think:true`) — 7/10 and 10/10 respectively; see
-      [BENCHMARKS.md](BENCHMARKS.md#local_explorer_task-budget-increase--thinktrue-2026-09-18).
+      [MASTER.md](../benchmarks/MASTER.md#local_explorer_task-budget-increase--thinktrue-2026-09-18).
       Still need the Super Explorer pipeline run for SE-13..22 for an
       apples-to-apples comparison with the SE-06..12 row above, and could
       still grow the set toward the 100 end of the range later.
@@ -112,7 +112,7 @@ already exposes `find_symbol`, `find_callers`, `find_callees`,
 
 - [ ] Expose the structural tools to `local_explorer_task`'s tool loop.
 - [ ] Re-measure all models on the expanded gold set.
-- [ ] Record the delta in [super-explorer/benchmarks.md](super-explorer/benchmarks.md).
+- [ ] Record the delta in [super-explorer/benchmarks.md](../super-explorer/benchmarks.md).
       Some of what the fine-tune would teach may be a wiring change.
 
 ## Step 2 — Deterministic first-tool classifier (no training)

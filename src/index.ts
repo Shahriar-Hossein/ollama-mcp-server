@@ -38,7 +38,7 @@ registerSynthesizeVerifiedAnswer(server);
 registerExploreRepository(server);
 
 // Autonomous shell-executing tools: opt-in only, off by default. See
-// docs/local-claude-worker-experiment-2026-09-14.md for why the cloud model
+// docs/planning/local-claude-worker-experiment.md for why the cloud model
 // approach is used for run_cloud_claude_task.
 if (process.env.CLOUD_CLAUDE_ENABLED === "1") registerRunCloudClaudeTask(server);
 if (process.env.LOCAL_WORKER_ENABLED === "1") registerRunLocalWorkerTask(server);

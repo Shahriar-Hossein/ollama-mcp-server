@@ -2,7 +2,7 @@
 
 Requested because `think:true` isn't an option for this tag (see Traps in the
 master doc) — this checks whether a smaller context budget changes anything
-for the `think:false`-only coder model. Same [fixture](../BENCHMARKS.md#the-fixture),
+for the `think:false`-only coder model. Same [fixture](../MASTER.md#the-fixture),
 `temperature 0`, `seed 42`, `keep_alive:2m`, cold start (nothing resident
 before the run).
 

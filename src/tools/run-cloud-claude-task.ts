@@ -7,7 +7,7 @@ import { ALLOWED_TOOLS_FLAG, CLAUDE_SYSTEM_PROMPT } from "../shell-allowlist.js"
 
 // Runs the full `ollama launch claude` binary (real Claude Code harness)
 // against an Ollama *cloud* model, not local. Local models were tried for
-// this (see docs/local-claude-worker-experiment-2026-09-14.md, Tier 1) and
+// this (see docs/planning/local-claude-worker-experiment.md, Tier 1) and
 // ruled out: the harness needs a large context window (Ollama itself
 // recommends >=64k) to carry CLAUDE.md/skills/system-prompt overhead, and
 // this machine's GPU can't give a local model that much context. Cloud

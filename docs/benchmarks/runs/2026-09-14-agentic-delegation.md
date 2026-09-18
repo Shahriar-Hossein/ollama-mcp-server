@@ -1,7 +1,7 @@
 # Agentic delegation benchmark — 2026-09-14
 
 Can a free model *drive a git task to completion*, as opposed to producing
-correct text? Different question from [BENCHMARKS.md](../BENCHMARKS.md),
+correct text? Different question from [MASTER.md](../MASTER.md),
 which measures single-completion output quality.
 
 Same open-ended task given to three delegation paths, to see which are
@@ -164,7 +164,7 @@ work. Read the transcript before writing the run off.
 Simpler task this time — each model given exactly one file to stage and
 commit, with the commit message already written (no grouping judgment
 required, `max_turns` default of 6). Purpose: check whether `granite4.2:3b`
-(the coding-tier model from [early-trials-2026-09-12-13.md](early-trials-2026-09-12-13.md))
+(the coding-tier model from [early-trials-2026-09-12-13.md](2026-09-12-early-trials.md))
 does any better than `qwen3.5:4b` at the tool-call loop itself.
 
 | Model | Task | Outcome |

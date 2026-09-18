@@ -63,7 +63,7 @@ Theory: `ollama launch claude` runs the *full* Claude Code binary against the
 local model, so every call pays for CLAUDE.md loading (both global and
 project), the full skills catalog, plugin/hook discovery, and MCP config
 negotiation — none of which the raw `/api/generate` benchmarks in
-[the early trials](benchmarks/early-trials-2026-09-12-13.md) had to pay for. That's also the
+[the early trials](../benchmarks/runs/2026-09-12-early-trials.md) had to pay for. That's also the
 likely root cause of the run-2 failure above: the skill catalog includes
 Claude Code's real `/commit` skill (described as "commit, then push"), and
 qwen3.5:4b probably pattern-matched to that instead of just running the

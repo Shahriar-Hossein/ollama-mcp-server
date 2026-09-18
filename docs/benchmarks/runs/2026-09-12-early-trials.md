@@ -1,6 +1,6 @@
 # Early single-prompt trials — 2026-09-12 / 09-13
 
-Superseded by [BENCHMARKS.md](../BENCHMARKS.md), which uses a fixed
+Superseded by [MASTER.md](../MASTER.md), which uses a fixed
 three-task fixture. Kept because this is where the `think:false` fix came
 from and because it's the only evidence for a few tags that later runs
 dropped.

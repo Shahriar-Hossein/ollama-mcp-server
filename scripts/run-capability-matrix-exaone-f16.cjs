@@ -11,7 +11,7 @@
 //
 // Point OLLAMA_F16_HOST at the temporary f16 server (default 127.0.0.1:11435).
 // This script only sends requests; standing up/tearing down the f16 server is
-// the caller's job (see docs/BENCHMARKS.md "f16 KV-cache follow-up").
+// the caller's job (see docs/benchmarks/MASTER.md "f16 KV-cache follow-up").
 const fs = require("node:fs");
 const path = require("node:path");
 

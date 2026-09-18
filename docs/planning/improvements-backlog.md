@@ -29,7 +29,7 @@ Keep this a thin bridge: a few task profiles and a small result envelope are suf
 
 ## 3. Reduce autonomous git scope before increasing turns
 
-The existing [delegation benchmark](benchmarks/agentic-delegation.md) records a real scope failure: a later worker committed a file left staged by an earlier failed worker. Raising the turn budget did not fix task ownership.
+The existing [delegation benchmark](../benchmarks/runs/2026-09-14-agentic-delegation.md) records a real scope failure: a later worker committed a file left staged by an earlier failed worker. Raising the turn budget did not fix task ownership.
 
 Do **not** implement the old document's suggestion to reset or unstage unrelated work automatically. That changes the user's index. Prefer isolated disposable repositories/worktrees for experiments; for real work, explicitly verify allowed paths and index state, refuse unexpected staged changes, and validate the resulting commit's exact file list. A deterministic git operation is often better than asking a model to discover commands repeatedly.
 

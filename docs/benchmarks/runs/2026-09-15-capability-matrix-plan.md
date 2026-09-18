@@ -2,7 +2,7 @@
 
 **Status (2026-09-16):** Phases 1-4 are complete for both tracks. The
 combined per-category routing recommendation lives in
-[BENCHMARKS.md](../BENCHMARKS.md#capability-matrix--combined-routing-recommendation-2026-09-16).
+[BENCHMARKS.md](../MASTER.md#capability-matrix--combined-routing-recommendation-2026-09-16).
 Only open item: cloud candidates stay `ON HOLD` pending an explicit
 cost/privacy/budget decision — see "Candidate models and cloud hold" below.
 
@@ -15,11 +15,11 @@ tools or modify a repository. A pass in one category must not be used as
 evidence for another.
 
 This is a plan, not a result. Measured rows still belong in
-[BENCHMARKS.md](../BENCHMARKS.md); raw requests, responses, grader output and
+[MASTER.md](../MASTER.md); raw requests, responses, grader output and
 hardware samples remain in gitignored `benchmark-data/`.
 
 During this large comparison, append individual attempts to the dedicated
-[capability-matrix results tracker](capability-matrix-results.md). Promote
+[capability-matrix results tracker](2026-09-16-capability-matrix-results.md). Promote
 only settled, decision-relevant summaries from that tracker into
 `BENCHMARKS.md`.
 

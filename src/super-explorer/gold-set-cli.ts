@@ -6,7 +6,7 @@ import { exploreRepository, type ExploreResult } from "./explore.js";
 // `group` splits the set by feature area, not randomly, so a train/test split
 // can hold out whole areas (e.g. everything about hybrid retrieval) rather
 // than individual questions that share an answer with a "trained" sibling.
-// See docs/explorer-finetune-plan.md — "Split the gold set by
+// See docs/planning/explorer-finetune-plan.md — "Split the gold set by
 // repository/feature, not randomly".
 const GOLD_GROUPS: Record<string, string> = {
   "SE-01": "core-wiring",
@@ -126,7 +126,7 @@ const GOLD_CHECKS: Record<string, { files: string[]; phrases: string[] }> = {
   "SE-06": { files: ["src/tools/run-cloud-claude-task.ts", "scripts/validate-cloud-bash.cjs"], phrases: ["pretooluse", "bash", "hook", "validator"] },
   "SE-07": { files: ["src/tools/local-explorer-task.ts"], phrases: ["resolvewithinroot", "rungrep", "runread", "outside"] },
   "SE-08": { files: ["src/tools/local-explorer-task.ts"], phrases: ["toolcallcount", "max_tool_calls", "set", "max_files_read"] },
-  "SE-09": { files: ["src/tools/local-explorer-task.ts", "docs/benchmarks/local-explorer-2026-09-16.md"], phrases: ["qwen3.5:4b", "low confidence"] },
+  "SE-09": { files: ["src/tools/local-explorer-task.ts", "docs/benchmarks/runs/2026-09-16-local-explorer.md"], phrases: ["qwen3.5:4b", "low confidence"] },
   "SE-10": { files: ["scripts/validate-cloud-bash.cjs"], phrases: ["invalid json", "exit 0"] },
   "SE-11": { files: ["src/index.ts", "src/tools/local-explorer-task.ts"], phrases: ["5b0f7d8edecfff3fe2304d8dffc43feff4606412", "feat: add local explorer tool"] },
   "SE-12": { files: ["package.json"], phrases: ["no usable automated test", "error: no test specified", "exit 1"] },

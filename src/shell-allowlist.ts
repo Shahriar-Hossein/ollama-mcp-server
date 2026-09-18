@@ -1,7 +1,7 @@
 // Shared between run-local-worker-task and run-cloud-claude-task so the two
 // agentic tools can't drift into different safety guarantees. Mirrors
 // ~/.local/bin/local-worker and ~/.local/bin/local-claude's allowlists,
-// validated in docs/local-claude-worker-experiment-2026-09-14.md.
+// validated in docs/planning/local-claude-worker-experiment.md.
 export const ALLOWLIST_DESCRIPTION = "git status/diff/log/add/commit/show only";
 
 const ALLOWED_SUBCOMMANDS = ["status", "diff", "log", "add", "commit", "show"];
