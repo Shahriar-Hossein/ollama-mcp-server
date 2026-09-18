@@ -180,6 +180,91 @@ function runRead(
   }
 }
 
+export interface LocalExplorerTaskParams {
+  task: string;
+  cwd?: string;
+  model?: string;
+  max_tool_calls?: number;
+  max_files_read?: number;
+  max_output_chars?: number;
+  num_predict?: number;
+  request_timeout_ms?: number;
+  think?: boolean;
+}
+
+// Core loop, shared by the MCP tool registration below and by any script
+// that wants to drive it directly (e.g. a benchmark runner) without going
+// through the MCP transport.
+export async function runLocalExplorerTask({
+  task,
+  cwd,
+  model = DEFAULT_MODEL,
+  max_tool_calls = 24,
+  max_files_read = 10,
+  max_output_chars = 6000,
+  num_predict = 8192,
+  request_timeout_ms = 180_000,
+  think = false,
+}: LocalExplorerTaskParams): Promise<{ isError?: boolean; text: string }> {
+  const root = resolve(cwd || process.cwd());
+  const filesRead = new Set<string>();
+  const messages: any[] = [
+    { role: "system", content: systemPrompt(max_tool_calls, max_files_read) },
+    { role: "user", content: task },
+  ];
+
+  let toolCallCount = 0;
+  const start = Date.now();
+
+  for (let turn = 0; turn < max_tool_calls + 2; turn++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), request_timeout_ms);
+    let res: Response;
+    try {
+      res = await fetch(`${OLLAMA_HOST}/api/chat`, {
+        method: "POST",
+        body: JSON.stringify({ model, stream: false, think, messages, tools: TOOLS, options: { num_predict } }),
+        signal: controller.signal,
+      });
+    } catch (e: any) {
+      return { isError: true, text: e.name === "AbortError" ? `Ollama call timed out after ${request_timeout_ms}ms.` : `Ollama call failed: ${e.message}` };
+    } finally {
+      clearTimeout(timer);
+    }
+    const data: any = await res.json();
+    const message = data.message;
+    if (!message) {
+      return { isError: true, text: `Ollama returned no message (${res.status}): ${data.error || JSON.stringify(data)}` };
+    }
+    messages.push(message);
+
+    if (!message.tool_calls || message.tool_calls.length === 0) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      return { text: `${message.content}\n\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s]` };
+    }
+
+    for (const call of message.tool_calls) {
+      toolCallCount++;
+      const args = call.function.arguments || {};
+      let result: string;
+      if (toolCallCount > max_tool_calls) {
+        result = "(refused: tool-call budget exhausted, give your FINAL ANSWER now)";
+      } else if (call.function.name === "glob") {
+        result = runGlob(root, args.pattern);
+      } else if (call.function.name === "grep") {
+        result = runGrep(root, args.pattern, args.path, max_output_chars);
+      } else if (call.function.name === "read") {
+        result = runRead(root, args.path, args.start_line, args.end_line, filesRead, max_files_read, max_output_chars);
+      } else {
+        result = `(unknown tool ${call.function.name})`;
+      }
+      messages.push({ role: "tool", content: result, tool_call_id: call.id });
+    }
+  }
+
+  return { isError: true, text: `Gave up after ${max_tool_calls} tool calls without a final answer.` };
+}
+
 export function registerLocalExplorerTask(server: McpServer) {
   server.tool(
     "local_explorer_task",
@@ -193,63 +278,16 @@ export function registerLocalExplorerTask(server: McpServer) {
       task: z.string().describe("The exploration question, e.g. 'find where X is validated and cite the function'."),
       cwd: z.string().optional().describe("Repo root to search in. Defaults to the MCP server's own cwd."),
       model: z.string().default(DEFAULT_MODEL).describe("Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:7b does not - see benchmark doc)."),
-      max_tool_calls: z.number().default(8),
-      max_files_read: z.number().default(5),
-      max_output_chars: z.number().default(3000).describe("Per-tool-result truncation limit."),
+      max_tool_calls: z.number().default(24),
+      max_files_read: z.number().default(10),
+      max_output_chars: z.number().default(6000).describe("Per-tool-result truncation limit."),
+      num_predict: z.number().default(8192).describe("Max output tokens per model turn. Not set by Ollama's own default, so we set one explicitly."),
+      request_timeout_ms: z.number().default(180_000).describe("Per-chat-call timeout, guards against an infinite/hung generation."),
+      think: z.boolean().default(false).describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),
     },
-    async ({ task, cwd, model, max_tool_calls, max_files_read, max_output_chars }) => {
-      const root = resolve(cwd || process.cwd());
-      const filesRead = new Set<string>();
-      const messages: any[] = [
-        { role: "system", content: systemPrompt(max_tool_calls, max_files_read) },
-        { role: "user", content: task },
-      ];
-
-      let toolCallCount = 0;
-      const start = Date.now();
-
-      for (let turn = 0; turn < max_tool_calls + 2; turn++) {
-        const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
-          method: "POST",
-          body: JSON.stringify({ model, stream: false, think: false, messages, tools: TOOLS }),
-        });
-        const data: any = await res.json();
-        const message = data.message;
-        if (!message) {
-          return {
-            isError: true,
-            content: [{ type: "text", text: `Ollama returned no message (${res.status}): ${data.error || JSON.stringify(data)}` }],
-          };
-        }
-        messages.push(message);
-
-        if (!message.tool_calls || message.tool_calls.length === 0) {
-          const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-          return {
-            content: [{ type: "text", text: `${message.content}\n\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s]` }],
-          };
-        }
-
-        for (const call of message.tool_calls) {
-          toolCallCount++;
-          const args = call.function.arguments || {};
-          let result: string;
-          if (toolCallCount > max_tool_calls) {
-            result = "(refused: tool-call budget exhausted, give your FINAL ANSWER now)";
-          } else if (call.function.name === "glob") {
-            result = runGlob(root, args.pattern);
-          } else if (call.function.name === "grep") {
-            result = runGrep(root, args.pattern, args.path, max_output_chars);
-          } else if (call.function.name === "read") {
-            result = runRead(root, args.path, args.start_line, args.end_line, filesRead, max_files_read, max_output_chars);
-          } else {
-            result = `(unknown tool ${call.function.name})`;
-          }
-          messages.push({ role: "tool", content: result, tool_call_id: call.id });
-        }
-      }
-
-      return { isError: true, content: [{ type: "text", text: `Gave up after ${max_tool_calls} tool calls without a final answer.` }] };
+    async (params) => {
+      const result = await runLocalExplorerTask(params);
+      return { isError: result.isError, content: [{ type: "text", text: result.text }] };
     }
   );
 }

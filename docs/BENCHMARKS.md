@@ -394,3 +394,30 @@ to start with it); `qwen3.5:4b` is the only viable local candidate, and only
 paired with a confidence gate that escalates low-confidence answers to
 Haiku rather than trusting them. Screen-only evidence (5 tasks, one repo,
 one run each) — needs the ~20-task scale before any routing default changes.
+
+## `local_explorer_task` budget increase + `think:true` (2026-09-18)
+
+Widened the tool's defaults — `max_tool_calls` 8→24, `max_files_read` 5→10,
+`max_output_chars` 3000→6000, added an explicit `num_predict:8192` (was
+unset anywhere in the codebase before this), a 180s per-call request
+timeout (`AbortController`, guards a hung generation — the loop had no
+timeout at all before), and a new `think` param (default `false`). Ran
+`qwen3.5:4b` against the ten still-unscored gold questions SE-13..SE-22
+(from [gold-set-cli.ts](../src/super-explorer/gold-set-cli.ts)), once with
+`think:false` and once with `think:true`, 20s pause between questions, same
+repo/questions/model both times. Raw output:
+[benchmark-data/se13-22-runner/](../benchmark-data/se13-22-runner/) (gitignored).
+
+| Config | Score | Total wall time (10 Qs) | Notes |
+|---|---|---|---|
+| `think:false` | 7/10 | 290s | SE-13 hallucinated "no such thing in this repo" for a file another question found fine minutes later; SE-17 self-flagged `Confidence: low` after failing to find `hybridRetrieve` (correct gate behavior on a wrong answer); SE-15 was substantively correct but described the retry as a "repair attempt" and claimed "no recovery mechanism", which undersells what actually happens |
+| `think:true` | 10/10 | 586.3s | Same SE-13 question now finds `discovery.ts` and `discover-evidence.ts` directly with real file:line citations, `Confidence: high` |
+
+**Reading it:** `think:true` roughly doubled wall time (29s/question avg vs
+58s/question avg) but fixed every miss from the `think:false` pass,
+including the one case (SE-13) that wasn't just under-confident but
+actively wrong. On this 10-question batch the accuracy gain looks worth the
+time cost for anything where the answer will be trusted downstream; for
+throwaway/low-stakes lookups `think:false` plus the confidence gate is still
+the cheaper default. n=10, one run each — same "needs more scale" caveat as
+every other row in this file before this becomes a hard default.

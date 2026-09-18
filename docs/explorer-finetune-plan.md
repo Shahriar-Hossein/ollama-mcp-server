@@ -83,11 +83,15 @@ Two supporting points:
       (discovery, hybrid retrieval, indexing/knowledge store, structural
       tools, outline/read-symbol, semantic search, synthesis/verification,
       framework adapters, explore orchestration, git history), bringing the
-      set to 50 questions in `src/super-explorer/gold-set-cli.ts`. SE-13..50
-      are not yet scored against any model — only SE-01..12 have run
-      results so far. Still need the same run through `local_explorer_task`'s
-      tool-calling loop for comparison (not done yet), and could still grow
-      toward the 100 end of the range later.
+      set to 50 questions in `src/super-explorer/gold-set-cli.ts`. SE-23..50
+      are not yet scored against any model. **Partial progress 2026-09-18:**
+      SE-13..SE-22 now have results through `local_explorer_task`'s
+      tool-calling loop (`qwen3.5:4b`, widened budgets, `think:false` then
+      `think:true`) — 7/10 and 10/10 respectively; see
+      [BENCHMARKS.md](BENCHMARKS.md#local_explorer_task-budget-increase--thinktrue-2026-09-18).
+      Still need the Super Explorer pipeline run for SE-13..22 for an
+      apples-to-apples comparison with the SE-06..12 row above, and could
+      still grow the set toward the 100 end of the range later.
 - [x] Split the gold set by repository/feature, not randomly — otherwise
       "Where is X called?" trains and "Who calls X?" tests, which is cheating.
       **Done 2026-09-18:** every question in `gold-set-cli.ts` now carries a
