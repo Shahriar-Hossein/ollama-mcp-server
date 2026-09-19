@@ -8,11 +8,12 @@ export async function generate(
   prompt: string,
   system: string,
   format?: "json" | Record<string, unknown>,
-  think = false
+  think = false,
+  modelOptions?: { num_ctx?: number; num_predict?: number }
 ) {
   const response = await axios.post(
     `${OLLAMA_HOST}/api/generate`,
-    { model, prompt, system, stream: false, think, ...(format ? { format } : {}) },
+    { model, prompt, system, stream: false, think, ...(format ? { format } : {}), ...(modelOptions ? { options: modelOptions } : {}) },
     { timeout: REQUEST_TIMEOUT_MS }
   );
   // With think:true and a structured `format`, some models (e.g. qwen3.5) put the

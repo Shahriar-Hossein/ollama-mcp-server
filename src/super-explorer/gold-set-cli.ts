@@ -203,10 +203,20 @@ function idsForGroups(groups: string[]): string[] {
 
 const ALL_GROUPS = [...new Set(Object.values(GOLD_GROUPS))];
 
-const [repositoryRoot, model, ...ids] = process.argv.slice(2);
+// --limit=N and --think=true|false can appear anywhere after repository_root;
+// remaining positional args are model then question-ids, same as before.
+const rawArgs = process.argv.slice(2);
+const flagArgs = rawArgs.filter((arg) => arg.startsWith("--limit=") || arg.startsWith("--think="));
+const positional = rawArgs.filter((arg) => !arg.startsWith("--limit=") && !arg.startsWith("--think="));
+const limitFlag = flagArgs.find((arg) => arg.startsWith("--limit="))?.slice("--limit=".length);
+const thinkFlag = flagArgs.find((arg) => arg.startsWith("--think="))?.slice("--think=".length);
+const limit = limitFlag ? Number(limitFlag) : undefined;
+const think = thinkFlag ? thinkFlag === "true" : undefined;
+
+const [repositoryRoot, model, ...ids] = positional;
 if (!repositoryRoot) {
   throw new Error(
-    "Usage: gold-set:super-explorer <repository-root> [model] [question-id ...]\n" +
+    "Usage: gold-set:super-explorer <repository-root> [model] [question-id ...] [--limit=N] [--think=true|false]\n" +
       "  With no question-ids, runs SE-01 through SE-05.\n" +
       "  Pass 'all' as the only question-id to run every question (SE-01..SE-50).\n" +
       "  Pass 'group:<name>[,<name>...]' to run whole feature groups, e.g.\n" +
@@ -232,7 +242,7 @@ for (const id of selected) {
   process.stderr.write(`\n=== ${id} [${GOLD_GROUPS[id]}]: ${question}\n`);
   const started = Date.now();
   try {
-    const result = await exploreRepository({ repository_root: root, question, model });
+    const result = await exploreRepository({ repository_root: root, question, model, limit, think });
     process.stdout.write(`${JSON.stringify({ id, group: GOLD_GROUPS[id], latency_ms: Date.now() - started, result })}\n`);
     verdicts.push(verdictFor(id, result));
   } catch (error) {

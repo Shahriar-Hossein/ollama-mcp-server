@@ -17,6 +17,34 @@ const claimInputSchema = z.object({ id: z.string().trim().min(1).max(200), claim
 const modelResultSchema = z.object({ id: z.string(), verification_status: z.enum(["SUPPORTED", "CONTRADICTED", "INSUFFICIENT"]), rationale: z.string().trim().min(1).max(1_000), evidence_indexes: z.array(z.number().int().nonnegative()).max(10) });
 const modelResponseSchema = z.object({ results: z.array(modelResultSchema).max(20) }).strict();
 
+const verificationResponseFormat = {
+  type: "object",
+  additionalProperties: false,
+  required: ["results"],
+  properties: {
+    results: {
+      type: "array",
+      minItems: 1,
+      maxItems: 20,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "verification_status", "rationale", "evidence_indexes"],
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 200 },
+          verification_status: { type: "string", enum: ["SUPPORTED", "CONTRADICTED", "INSUFFICIENT"] },
+          rationale: { type: "string", minLength: 1, maxLength: 1_000 },
+          evidence_indexes: { type: "array", maxItems: 10, items: { type: "integer", minimum: 0 } },
+        },
+      },
+    },
+  },
+} as const;
+
+// See discovery.ts: Ollama's runtime default num_ctx (4096) truncates evidence
+// silently once claim/evidence lists get large; set it explicitly.
+const MODEL_OPTIONS = { num_ctx: 16384, num_predict: 8192 };
+
 export type VerificationInputClaim = z.infer<typeof claimInputSchema>;
 export interface VerificationEvidence {
   evidence_kind: "symbol" | "source_range" | "git_commit";
@@ -84,18 +112,44 @@ function parseModelResponse(text: string, claims: VerificationInputClaim[], evid
   return response;
 }
 
+const VERIFICATION_SYSTEM = "You are a strict evidence verifier. Classify only what the supplied repository evidence establishes. Your entire response must be the schema-valid JSON object and nothing else.";
+
+/** Issues verification and, on any output-contract failure, one bounded repair attempt. */
+async function runVerificationPass(
+  model: string,
+  prompt: string,
+  claims: VerificationInputClaim[],
+  evidenceCounts: number[],
+  think = false
+): Promise<{ assessed: z.infer<typeof modelResponseSchema>; calls: number }> {
+  const response = await generate(model, prompt, VERIFICATION_SYSTEM, verificationResponseFormat, think, MODEL_OPTIONS);
+  try {
+    return { assessed: parseModelResponse(response, claims, evidenceCounts), calls: 1 };
+  } catch (firstError) {
+    const requiredIds = claims.map((claim) => claim.id).join(", ");
+    const repairPrompt = `Convert the prior verification response below into the supplied canonical JSON schema. Return exactly ${claims.length} results in this input order with these IDs: ${requiredIds}. Preserve each result's intended status, rationale, and evidence indexes when valid; otherwise use INSUFFICIENT with an empty evidence_indexes array. Do not add a synthesis, new claims, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
+    const repaired = await generate(model, repairPrompt, VERIFICATION_SYSTEM, verificationResponseFormat, think, MODEL_OPTIONS);
+    try {
+      return { assessed: parseModelResponse(repaired, claims, evidenceCounts), calls: 2 };
+    } catch {
+      throw new Error(`Verification model response failed schema validation after one repair attempt: ${firstError instanceof Error ? firstError.message : String(firstError)}`);
+    }
+  }
+}
+
 /** Classifies claims from caller-supplied, materialized evidence; it never produces a user-facing synthesis. */
-export async function verifyClaims(repositoryRoot: string, claimsInput: VerificationInputClaim[], model = DEFAULT_MODEL, think = false): Promise<{ commit_hash: string; results: VerificationResult[] }> {
+export async function verifyClaims(repositoryRoot: string, claimsInput: VerificationInputClaim[], model = DEFAULT_MODEL, think = false): Promise<{ commit_hash: string; results: VerificationResult[]; model_calls: number }> {
   const root = resolve(repositoryRoot);
   const claims = z.array(claimInputSchema).min(1).max(20).parse(claimsInput);
   if (new Set(claims.map((claim) => claim.id)).size !== claims.length) throw new Error("Verification claim IDs must be unique.");
   const index = indexRepository(root);
   const materialized = claims.map((claim) => claim.evidence.map((evidence) => materializeEvidence(root, index.commit_hash, index, evidence)));
   const prompt = `Classify each repository claim using only its numbered evidence. Return JSON only: {"results":[{"id":"input id","verification_status":"SUPPORTED|CONTRADICTED|INSUFFICIENT","rationale":"brief evidence-bound assessment","evidence_indexes":[0]}]}.\n\nSUPPORTED requires direct supplied evidence that establishes the claim. CONTRADICTED requires supplied evidence that directly conflicts with it. Otherwise choose INSUFFICIENT. Do not infer from names, omit results, answer the broader question, or write a final synthesis.\n\n${claims.map((claim, index) => `Claim ${index + 1} (id ${claim.id}): ${claim.claim}\nEvidence:\n${materialized[index].map((evidence, evidenceIndex) => `[${evidenceIndex}] ${evidence.evidence_kind} ${evidence.file ?? evidence.symbol_id ?? evidence.git_commit_hash}\n${evidence.excerpt}`).join("\n")}`).join("\n\n")}`;
-  const assessed = parseModelResponse(await generate(model, prompt, "You are a strict evidence verifier. Classify only what the supplied repository evidence establishes.", undefined, think), claims, materialized.map((evidence) => evidence.length));
+  const verification = await runVerificationPass(model, prompt, claims, materialized.map((evidence) => evidence.length), think);
   return {
     commit_hash: index.commit_hash,
-    results: assessed.results.map((result, index) => {
+    model_calls: verification.calls,
+    results: verification.assessed.results.map((result, index) => {
       const evidence = result.evidence_indexes.map((evidenceIndex) => materialized[index][evidenceIndex]);
       return { id: result.id, claim: claims[index].claim, verification_status: result.verification_status, rationale: result.rationale, resolution_quality: evidence.reduce<ResolutionQuality>((weakest, item) => weakest === "exact" ? item.resolution_quality : weakest, "exact"), evidence };
     }),

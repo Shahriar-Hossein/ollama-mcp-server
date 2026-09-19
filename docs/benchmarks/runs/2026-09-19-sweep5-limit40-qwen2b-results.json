@@ -1,0 +1,427 @@
+[
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-01",
+    "question": "Where is `local_explorer_task` registered, and is it enabled by default?",
+    "elapsed_s": 18,
+    "isError": true,
+    "error": "Discovery model response failed schema validation after one repair attempt: [\n  {\n    \"code\": \"custom\",\n    \"path\": [],\n    \"message\": \"Discovery must provide a hypothesis or a retrieval gap.\"\n  }\n]"
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-02",
+    "question": "Which environment variables gate the autonomous tools, and which tool does each gate?",
+    "elapsed_s": 159.7,
+    "isError": true,
+    "error": "Verification model must return one JSON object with results."
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-03",
+    "question": "What host and timeout do ordinary Ollama HTTP calls use, and which operations share them?",
+    "elapsed_s": 10.2,
+    "isError": true,
+    "error": "Discovery model response failed schema validation after one repair attempt: [\n  {\n    \"code\": \"custom\",\n    \"path\": [],\n    \"message\": \"Discovery must provide a hypothesis or a retrieval gap.\"\n  }\n]"
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-04",
+    "question": "Trace the timeout error shown by `run_ollama_task` to the shared client configuration.",
+    "elapsed_s": 12.3,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "`run_ollama_task` may throw `timeout error` due to a timeout value specified in `OLLAMA_HOST` configuration",
+          "required_evidence": [
+            {
+              "kind": "relationship",
+              "target": "symbol -> symbol:sha256:8bc6bd56642fa92e4a8daa29173aad74a77a23f4c173e261504cd761acea3926",
+              "reason": "variable 'runShellTool' is called inside `registerRunOllamaTask`"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-05",
+    "question": "How does the local worker prevent a model-supplied git command from using shell chaining?",
+    "elapsed_s": 12.3,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The local worker enforces git command parsing by rejecting shell chaining in allowed commands.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function parseAllowedGitCommand",
+              "reason": "This function parses and validates git commands before execution, likely blocking shell chaining."
+            },
+            {
+              "kind": "symbol",
+              "target": "function registerRunLocalWorkerTask",
+              "reason": "Enforced by LOCAL_WORKER_ENABLED environment variable, indicating local worker activation."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "No concrete proof of shell chaining enforcement exists.",
+        "git_history is insufficiently represented for direct evidence."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-06",
+    "question": "What independently validates Bash commands for the cloud Claude worker, and how is it attached?",
+    "elapsed_s": 205.5,
+    "isError": true,
+    "error": "Verification model must return one JSON object with results."
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-07",
+    "question": "Which functions stop a local explorer model from reading outside its requested repository root?",
+    "elapsed_s": 26.3,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "registerLocalExplorerTask functions limit repository access within specified root boundaries.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function registerLocalExplorerTask",
+              "reason": "The function name suggests this is the core entry point for explorer functionality, and it should limit where models can be read from based on a requested repository root."
+            }
+          ]
+        },
+        {
+          "hypothesis": "symbol symbol:sha256:8932c0f1704fce821bf686ee5049c57c575bebee9ac02f54a680df98d46282d7 (variable registerLocalExplorerTask.root) defines the repository root boundary.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "variable registerLocalExplorerTask.root",
+              "reason": "This variable name indicates it's used to define or track the root directory, which is where the local explorer would limit its file access."
+            }
+          ]
+        },
+        {
+          "hypothesis": "function resolveWithinRoot enforces reading within repository boundaries.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function resolveWithinRoot",
+              "reason": "This function likely handles root-specific constraints, so it would enforce boundary limits on file access."
+            }
+          ]
+        },
+        {
+          "hypothesis": "runRead.full() or runRead functions control directory scanning within the requested repository.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function runRead.full",
+              "reason": "This function is likely called to complete read operations for a task, suggesting it enforces root constraints."
+            }
+          ]
+        },
+        {
+          "hypothesis": "listModels or snapshot functions are used within the repository's allowed scope.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function listModels",
+              "reason": "List models might only return data within a repository root if not otherwise specified."
+            },
+            {
+              "kind": "symbol",
+              "target": "function snapshot",
+              "reason": "Snapshots are typically read-only operations that respect the boundary of the repository being scanned."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Function names like 'probe' or 'attempt' in scripts/run-capability-matrix- tracks may not directly limit root boundaries.",
+        "Missing function that implements explicit root enforcement, such as `enforceRootBoundary`.",
+        "Unclear how `MODEL`, `MODELS`, or `TOOLS` variables affect reading outside the repository."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-08",
+    "question": "How are tool-call and distinct-file-read budgets enforced in `local_explorer_task`?",
+    "elapsed_s": 87.3,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "- registerLocalExplorerTask.filesRead is enforced as a bounded repository evidence collector (src/tools/local-explorer-task.ts:8155-8184, src/tools/local-explorer-task.ts:5712-6641)",
+    "cited_claims": [
+      {
+        "id": "hypothesis-1",
+        "claim": "registerLocalExplorerTask.filesRead is enforced as a bounded repository evidence collector",
+        "citations": [
+          "src/tools/local-explorer-task.ts:8155-8184",
+          "src/tools/local-explorer-task.ts:5712-6641"
+        ]
+      }
+    ],
+    "omitted_claim_ids": [],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "registerLocalExplorerTask.filesRead is enforced as a bounded repository evidence collector",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask.filesRead",
+              "reason": "explicitly named in retrieved candidates, suggests role in bounded execution path"
+            },
+            {
+              "kind": "source_range",
+              "target": "relative/path:src/tools/local-explorer-task.ts:start_byte:0:end_byte:2898dbd37d37fb2abb2d03395a337d95515e220e49de322bb2d76f3aee0a1ec7:start_byte:0:end_byte",
+              "reason": "symbol ID and full source location can be used to enforce code-level constraints"
+            }
+          ]
+        },
+        {
+          "hypothesis": "registerLocalExplorerTask.toolCallCount is enforced as a bounded tool execution counter",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask.toolCallCount,",
+              "reason": "explicitly named in retrieved candidates, suggests role in bounded execution path"
+            }
+          ]
+        },
+        {
+          "hypothesis": "runRead is a bounded repository evidence collector that reads distinct files",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "relative/path:src/tools/local-explorer-task.ts:start_byte:65eeababbd0f25994e36269c13cfad5007209f0b54566327fc2faea7d2783f75:start_byte:0:end_byte",
+              "reason": "symbol ID can be used to confirm function boundary and source range enforcement"
+            }
+          ]
+        },
+        {
+          "hypothesis": "runShellTool is enforced as bounded execution path with tool call limits",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "relative/path:src/tools/local-explorer-task.ts:start_byte:0:end_byte",
+              "reason": "symbol ID and full source location can be used to enforce code-level constraints"
+            }
+          ]
+        },
+        {
+          "hypothesis": "registerRunLocalWorkerTask is enforced as bounded repository execution path with local worker guard",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerRunLocalWorkerTask,",
+              "reason": "guarded by process.env.LOCAL_WORKER_ENABLED === \"1\" suggests runtime validation"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "registerLocalExplorerTask.filesRead is enforced as a bounded repository evidence collector",
+          "verification_status": "SUPPORTED",
+          "rationale": "Evidence [0] initializes `filesRead` as a Set<string> which tracks repository files, and Evidence [1] demonstrates the enforcement of this collection by checking `filesRead.size >= maxFilesRead`, establishing bounded behavior.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:2898dbd37d37fb2abb2d03395a337d95515e220e49de322bb2d76f3aee0a1ec7",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 8155,
+              "end_byte": 8184,
+              "excerpt": "filesRead = new Set<string>()"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:20274d698f89d2be4dfab2781c30ef68464d33424194d01e3af868979f0b2384",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 5712,
+              "end_byte": 6641,
+              "excerpt": "function runRead(\n  root: string,\n  path: string,\n  startLine: number | undefined,\n  endLine: number | undefined,\n  filesRead: Set<string>,\n  maxFilesRead: number,\n  maxOutputChars: number\n): string {\n  const full = resolveWithinRoot(root, path);\n  if (full === null) return \"(refused: path escapes repo root)\";\n  if (filesRead.size >= maxFilesRead && !filesRead.has(path)) {\n    return `(refused: file-read budget of ${maxFilesRead} exhausted)`;\n  }\n  filesRead.add(path);\n  try {\n    const content = readFileSync(full, \"utf8\");\n    let lines = content.split(\"\\n\");\n    if (startLine || endLine) {\n      lines = lines.slice((startLine || 1) - 1, endLine || lines.length);\n    }\n    const text = lines.map((l, i) => `${(startLine || 1) + i}\\t${l}`).join(\"\\n\");\n    return text.length > maxOutputChars ? text.slice(0, maxOutputChars) + \"\\n...(truncated)\" : text;\n  } catch (e: any) {\n    return `(read error: ${e.message})`;\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-09",
+    "question": "What is the default model for local exploration, and what evidence justifies treating low-confidence results as untrusted?",
+    "elapsed_s": 10.2,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The default model for local exploration is represented by variable DEFAULT_MODEL in src/tools/local-explorer-task.ts",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "DEFAULT_MODEL in src/tools/local-explorer-task.ts",
+              "reason": "documented as the named reference to the default model for local exploration"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "none"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-10",
+    "question": "If the cloud Bash validation hook receives invalid JSON, does it block the command?",
+    "elapsed_s": 14.1,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "Cloud Bash validation hook blocks command execution when JSON parsing fails.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "BASH_VALIDATOR_HOOK in src/tools/run-cloud-claude-task.ts",
+              "reason": "Function name contains 'validate' but not block logic"
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-cloud-claude-task.ts",
+              "reason": "Contains hook definition location"
+            }
+          ]
+        },
+        {
+          "hypothesis": "Bash validation hook handles JSON via command line options.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerRunCloudClaudeTask.result in src/tools/run-cloud-claude-task.ts",
+              "reason": "Shows function result processing"
+            }
+          ]
+        },
+        {
+          "hypothesis": "Hook uses SHA256 hash to validate integrity of input data.",
+          "required_evidence": [
+            {
+              "kind": "git_history",
+              "target": "c84171e951f3634e605d3e7b65556b772f75dbd2fda3cec32c9ca2324a36010d in scripts/run-capability-matrix-track-b.cjs",
+              "reason": "SHA256 validation hash present"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-11",
+    "question": "Which commit introduced the local explorer tool, and which source files did that introduction add or change?",
+    "elapsed_s": 152.3,
+    "isError": true,
+    "error": "Verification model must return one JSON object with results."
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-12",
+    "question": "Does this repository define a usable automated test command for the server?",
+    "elapsed_s": 20,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 3,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The candidate may contain valid bounded repository evidence",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "bounded_repository_evidence",
+              "reason": "Candidate is in the form of a collection, which implies structured data that can be bounded or bounded"
+            },
+            {
+              "kind": "symbol",
+              "target": "candidate_metadata",
+              "reason": "Metadata indicates a person who can be queried for additional evidence."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "No evidence gathered or targeted"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  }
+]

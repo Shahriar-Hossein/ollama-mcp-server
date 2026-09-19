@@ -700,6 +700,37 @@ necessary to clear the 7/12 timeout failures. Not yet re-run at
 `limit: 40`/120s timeout to confirm — do that before assuming the timeout
 bump is required elsewhere.
 
+**`qwen3.5:2b` at the same settings** (`limit: 40`, `think: true`, 240s
+timeout): **7/12 passed**, zero timeouts — confirms the `keep_alive: "0"`
+fix generalizes across model sizes, not just `4b`. All 5 failures were
+JSON-schema-compliance errors, not infra: 2 discovery-stage ("Discovery
+must provide a hypothesis or a retrieval gap", SE-01/SE-03) and 3
+verification-stage ("Verification model must return one JSON object with
+results", SE-02/SE-06/SE-11). This is the same verification-schema failure
+mode already tracked as an open item below (`verifyClaims` has no
+repair-retry). Raw results:
+[2026-09-19-sweep5-limit40-qwen2b-results.json](../benchmarks/runs/2026-09-19-sweep5-limit40-qwen2b-results.json).
+
+**Limit-cap check**: confirmed via a direct `hybridRetrieve(..., 40,
+"hybrid")` call that all 12 questions filled the full 40-candidate cap
+against this fixture — the ceiling was the binding constraint, not
+candidate availability, so raising it further was expected to change what
+the model sees rather than being a no-op.
+
+**Retry at `limit: 80`** (schema cap raised 40→80 in `explore.ts` /
+`explore-repository.ts`): reran `qwen3.5:2b`'s 5 failures and `qwen3.5:4b`'s
+1 failure (SE-02), same think:true/240s timeout, one model at a time with a
+20s pause between. **All 6 passed** — `qwen3.5:2b` 108.9s/20.3s/20.2s/
+72.3s/53.9s (SE-01/02/03/06/11), `qwen3.5:4b` 69.2s (SE-02). That puts both
+models at a clean **12/12** on this gold set at `limit: 80`. Raw results:
+[2026-09-19-sweep6-retry-limit80-results.json](../benchmarks/runs/2026-09-19-sweep6-retry-limit80-results.json).
+
+Not established: *why* widening the retrieval window fixed schema
+compliance (plausibly more directly-relevant evidence in context reduces
+cases where the model reasons/hedges into a malformed response, but this
+wasn't isolated), and this is a single run on 5-6 questions per model — not
+enough to rule out flakiness before treating `limit: 80` as a new default.
+
 ## Next session
 
 - [x] Re-run `qwen3.5:4b` serially (one question at a time, no parallel
@@ -750,12 +781,10 @@ bump is required elsewhere.
 - [x] Gate-condition expansion (fixes wrong-pick failures like SE-02) — see
   above. Closed as "root cause fixed, gold check still failing on unrelated
   model flakiness," not as "SE-02 passes."
-- [ ] `qwen3.5:4b`'s verification-stage JSON-schema failures (`"Verification
-  model must return exactly one result per claim"` / `"...one JSON object
-  with results"`) are now the most common single failure reason across
-  SE-01/02/04/05 in these runs. `verifyClaims` has no repair-retry the way
-  `discoverEvidence` does — consider adding one, mirroring
-  `runDiscoveryPass`'s one-shot repair prompt.
+- [x] Verification response robustness: `verifyClaims` now supplies an
+  Ollama JSON schema and makes one canonical-schema repair attempt when the
+  initial output fails validation, including a mismatched result count or ID
+  order. `model_calls` and pipeline `tool_calls` include that retry.
 - [ ] The gold-set phrase/file checks require exact lowercase variable names
   in `answer_to_user`; a correct-but-paraphrased answer (e.g. "uses specific
   environment variables to enable execution") fails the check even when the

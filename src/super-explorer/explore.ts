@@ -9,7 +9,7 @@ const inputSchema = z.object({
   repository_root: z.string().min(1),
   question: z.string().trim().min(1).max(2_000),
   model: z.string().optional(),
-  limit: z.number().int().min(1).max(40).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
   mode: z.enum(["lexical", "hybrid"]).optional(),
   think: z.boolean().optional(),
 });
@@ -31,6 +31,8 @@ function evidenceForDiscovery(
   const exactSymbol = (target: string) => index.symbols.find((symbol) => symbol.id === target)
     // Models sometimes copy a symbol ID from the retrieved-candidates list but drop its "symbol:" scheme prefix.
     ?? (!target.startsWith("symbol:") ? index.symbols.find((symbol) => symbol.id === `symbol:${target}`) : undefined)
+    // Or retain only the SHA-256 digest from a `symbol:sha256:` ID.
+    ?? (/^[0-9a-f]{64}$/i.test(target) ? index.symbols.find((symbol) => symbol.id === `symbol:sha256:${target}`) : undefined)
     ?? index.symbols.find((symbol) => symbol.name === target || symbol.qualified_name === target);
   // A model shouldn't have to name every symbol needed to prove a claim about one of them:
   // pull in its direct structural neighbors (callers/callees, and symbols that reference or
@@ -112,13 +114,13 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
       omitted_claim_ids: [],
       tool_calls: discovery.model_calls,
       discovery: discovery.discovery,
-      verification: { commit_hash: discovery.commit_hash, results: [] },
+      verification: { commit_hash: discovery.commit_hash, results: [], model_calls: 0 },
     };
   }
   const verification = await verifyClaims(root, claims, options.model, options.think);
   return {
     ...synthesizeVerifiedClaims({ question: options.question, verification }),
-    tool_calls: discovery.model_calls + 1,
+    tool_calls: discovery.model_calls + verification.model_calls,
     discovery: discovery.discovery,
     verification,
   };

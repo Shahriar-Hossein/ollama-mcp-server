@@ -1,0 +1,452 @@
+[
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-01",
+    "question": "Where is `local_explorer_task` registered, and is it enabled by default?",
+    "elapsed_s": 108.9,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not verify a supported answer from the supplied evidence.",
+    "cited_claims": [],
+    "omitted_claim_ids": [
+      "hypothesis-1"
+    ],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "local_explorer_task is registered in src/tools/local-explorer-task.ts with registerRunLocalWorkerTask as its parent callee",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerRunLocalWorkerTask",
+              "reason": "The retrieved candidate symbol sha256:cb6d225c47c3095f01d7fb77c50f18166d1f1b128d9fec2968a0e30eccef1eea points to function registerRunLocalWorkerTask in src/tools/run-local-worker-task.ts but this is unrelated, so return [] for hypotheses and put each missing lead in retrieval_gaps."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Need evidence that local_explorer_task is registered with its own function registerLocalExplorerTask",
+        "Need to confirm if there's an env var for enabling the task"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "local_explorer_task is registered in src/tools/local-explorer-task.ts with registerRunLocalWorkerTask as its parent callee",
+          "verification_status": "CONTRADICTED",
+          "rationale": "Claim 1 asserts the tool is registered in `src/tools/local-explorer-task.ts`. Evidence [0] explicitly identifies the source file for the function containing registration logic (server tool setup) as `src/tools/run-local-worker-task.ts` and names the function `registerRunLocalWorkerTask`, which contradicts the claimed filename.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:cb6d225c47c3095f01d7fb77c50f18166d1f1b128d9fec2968a0e30eccef1eea",
+              "file": "src/tools/run-local-worker-task.ts",
+              "start_byte": 1794,
+              "end_byte": 3936,
+              "excerpt": "function registerRunLocalWorkerTask(server: McpServer) {\n  server.tool(\n    \"run_local_worker_task\",\n    \"Runs a small, mechanical git task (status/diff/log/add/commit/show only) end-to-end using a local Ollama \" +\n      \"model with its own bash tool loop - no confirmation prompts, verify the result yourself afterward. \" +\n      \"Fast (seconds) but has no safety net beyond the command allowlist. Requires LOCAL_WORKER_ENABLED=1.\",\n    {\n      task: z.string().describe(\"The task to perform, e.g. 'stage and commit src/foo.ts with message X'.\"),\n      cwd: z.string().optional().describe(\"Working directory to run in. Defaults to the MCP server's own cwd.\"),\n      model: z.string().default(\"qwen3.5:4b\").describe(\"Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:3b does not).\"),\n      max_turns: z.number().default(6),\n    },\n    async ({ task, cwd, model, max_turns }) => {\n      const workDir = cwd || process.cwd();\n      const messages: any[] = [\n        { role: \"system\", content: WORKER_SYSTEM_PROMPT },\n        { role: \"user\", content: task },\n      ];\n\n      const start = Date.now();\n      for (let turn = 0; turn < max_turns; turn++) {\n        const res = await fetch(`${OLLAMA_HOST}/api/chat`, {\n          method: \"POST\",\n          body: JSON.stringify({ model, stream: false, think: false, messages, tools: TOOLS }),\n        });\n        const data: any = await res.json();\n        const message = data.message;\n        messages.push(message);\n\n        if (!message.tool_calls || message.tool_calls.length === 0) {\n          const elapsed = ((Date.now() - start) / 1000).toFixed(1);\n          return { content: [{ type: \"text\", text: `${message.content}\\n\\n[done in ${elapsed}s, ${turn + 1} turn(s)]` }] };\n        }\n\n        for (const call of message.tool_calls) {\n          const result = runShellTool(call.function.arguments?.command || \"\", workDir);\n          messages.push({ role: \"tool\", content: result, tool_call_id: call.id });\n        }\n      }\n\n      return { isError: true, content: [{ type: \"text\", text: `Gave up after ${max_turns} turns without a final answer.` }] };\n    }\n  );\n}\n\n// Reached only when: (process.env.LOCAL_WORKER_ENABLED === \"1\")"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-02",
+    "question": "Which environment variables gate the autonomous tools, and which tool does each gate?",
+    "elapsed_s": 20.3,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "AUTO_ENABLED",
+          "required_evidence": [
+            {
+              "kind": "relationship",
+              "target": "src/tools/run-local-worker-task.ts:registerRunLocalWorkerTask",
+              "reason": "The function registerRunLocalWorkerTask is guarded by process.env.LOCAL_WORKER_ENABLED === \"1\", indicating it gates autonomous local worker execution."
+            },
+            {
+              "kind": "relationship",
+              "target": "scripts/run-capability-matrix-track-b.cjs:registerRunCloudClaudeTask",
+              "reason": "The function registerRunCloudClaudeTask is guarded by process.env.CLOUD_CLAUDE_ENABLED === \"1\", indicating it gates autonomous cloud Claude task execution."
+            }
+          ]
+        },
+        {
+          "hypothesis": "TOOLS_ALLOWED",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/shell-allowlist.ts:ALLOWED_SUBCOMMANDS",
+              "reason": "Variable ALLOWED_SUBCOMMANDS is defined in src/shell-allowlist.ts, which gates autonomous tool execution via shell command restrictions."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "No concrete candidate supports the specific mapping of environment variable names to the tools they gate (e.g., none specify which tools are explicitly gated by CLOUD_CLAUDE_ENABLED or LOCAL_WORKER_ENABLED beyond general function naming patterns)."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-03",
+    "question": "What host and timeout do ordinary Ollama HTTP calls use, and which operations share them?",
+    "elapsed_s": 20.2,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "OLLAMA_HTTP_CALLS_USE_TIMEOUT: ordinary Ollama HTTP calls use timeout value REQUEST_TIMEOUT_MS from src/ollama-client.ts",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "REQUEST_TIMEOUT_MS in src/ollama-client.ts",
+              "reason": "candidate 2 specifies variable name and exact file location for timeout value."
+            },
+            {
+              "kind": "relationship",
+              "target": "HOST -> OLLAMA_HOST in scripts/run-capability-matrix-exaone-f16.cjs",
+              "reason": "candidate 8 defines HOST symbol in a run script; OLLAMA_HOST variable uses this host for Ollama HTTP calls."
+            },
+            {
+              "kind": "relationship",
+              "target": "generate.request -> REQUEST_TIMEOUT_MS relationship via OllamaClient generation flow",
+              "reason": "candidate 1 and candidate 6 (generate.response) in src/ollama-client.ts likely use the timeout value configured in request handler flow."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Timeout for Ollama HTTP calls is not directly supported by candidate 2. There may be a discrepancy with script-level timeout settings or runtime defaults.",
+        "The relationship between HOST and REQUEST_TIMEOUT_MS is ambiguous without code path linking the HOST symbol to HTTP client timeout."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-06",
+    "question": "What independently validates Bash commands for the cloud Claude worker, and how is it attached?",
+    "elapsed_s": 72.3,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not verify a supported answer from the supplied evidence.",
+    "cited_claims": [],
+    "omitted_claim_ids": [
+      "hypothesis-1"
+    ],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The cloud Claude worker task registration validates Bash commands through environment variable configuration.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "relative/path:start_byte:end_byte",
+              "reason": "Contains guard condition"
+            },
+            {
+              "kind": "symbol",
+              "target": "symbol:sha256:a31eb15888968d6436ccbf6c941c80bcedfa136907712948883298264b46b41f",
+              "reason": "Registers the Cloud Claude task with environment guard"
+            },
+            {
+              "kind": "symbol",
+              "target": "symbol:sha256:de051749681281473564f72170630af7d8389789cc82d42c4a87a397a1fe8bbf",
+              "reason": "System prompt definition for cloud validation"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "The cloud Claude worker task registration validates Bash commands through environment variable configuration.",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Evidence [0] establishes that the task registration function requires `CLOUD_CLAUDE_ENABLED` env var to execute via `ollama`, but it does not provide logic confirming Bash command validation is achieved through environment variable configuration.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:a31eb15888968d6436ccbf6c941c80bcedfa136907712948883298264b46b41f",
+              "file": "src/tools/run-cloud-claude-task.ts",
+              "start_byte": 1621,
+              "end_byte": 3527,
+              "excerpt": "function registerRunCloudClaudeTask(server: McpServer) {\n  server.tool(\n    \"run_cloud_claude_task\",\n    \"Runs a task end-to-end via `ollama launch claude` (the full Claude Code harness) against a free Ollama cloud \" +\n      \"model, restricted to git status/diff/log/add/commit/show plus Read/Glob/Grep. Verify the result yourself \" +\n      \"afterward - don't trust its own report. Requires CLOUD_CLAUDE_ENABLED=1, an 'ollama signin', and the \" +\n      \"'ollama launch claude' feature installed.\",\n    {\n      task: z.string().describe(\"The task to perform, phrased explicitly (e.g. 'run this exact command yourself, do not delegate').\"),\n      cwd: z.string().optional().describe(\"Working directory to run in. Defaults to the MCP server's own cwd.\"),\n      model: z.string().default(\"nemotron-3-super:cloud\").describe(\"An Ollama cloud model tag (*:cloud). Use list_ollama_models to see what's signed in.\"),\n    },\n    async ({ task, cwd, model }) => {\n      const result = spawnSync(\n        \"ollama\",\n        [\n          \"launch\",\n          \"claude\",\n          \"--model\",\n          model,\n          \"--yes\",\n          \"--\",\n          \"-p\",\n          task,\n          \"--max-turns\",\n          \"8\",\n          \"--system-prompt\",\n          CLAUDE_SYSTEM_PROMPT,\n          \"--allowedTools\",\n          ALLOWED_TOOLS_FLAG,\n          \"--settings\",\n          HOOK_SETTINGS,\n        ],\n        { cwd: cwd || process.cwd(), encoding: \"utf8\", timeout: SPAWN_TIMEOUT_MS }\n      );\n\n      if (result.error) {\n        return { isError: true, content: [{ type: \"text\", text: `Failed to run 'ollama launch claude': ${result.error.message}` }] };\n      }\n      if (result.status !== 0) {\n        return { isError: true, content: [{ type: \"text\", text: `Exited ${result.status}: ${result.stderr || result.stdout}` }] };\n      }\n      return { content: [{ type: \"text\", text: result.stdout || \"(no output)\" }] };\n    }\n  );\n}\n\n// Reached only when: (process.env.CLOUD_CLAUDE_ENABLED === \"1\")"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:2b",
+    "id": "SE-11",
+    "question": "Which commit introduced the local explorer tool, and which source files did that introduction add or change?",
+    "elapsed_s": 53.9,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not verify a supported answer from the supplied evidence.",
+    "cited_claims": [],
+    "omitted_claim_ids": [
+      "hypothesis-1",
+      "hypothesis-2",
+      "hypothesis-3",
+      "hypothesis-4"
+    ],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "Commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 introduced the local explorer tool and added files to src/tools/local-explorer-task.ts",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 added 'feat: add local explorer tool' as indicated in candidate 1"
+            },
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask",
+              "reason": "Commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 introduced local explorer tool, and commit 1 introduces 'local explorer tool' in candidate 1"
+            },
+            {
+              "kind": "git_history",
+              "target": "40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+              "reason": "This commit introduces 'add local explorer tool'"
+            }
+          ]
+        },
+        {
+          "hypothesis": "Symbol registerLocalExplorerTask in src/tools/local-explorer-task.ts was introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask",
+              "reason": "Commit 1 introduces 'local explorer tool'"
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Symbol registerLocalExplorerTask is referenced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6"
+            },
+            {
+              "kind": "relationship",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Symbol registerLocalExplorerTask is introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6"
+            }
+          ]
+        },
+        {
+          "hypothesis": "Variable registerLocalExplorerTask.filesRead in src/tools/local-explorer-task.ts was introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask.filesRead",
+              "reason": "Commit 1 introduces 'local explorer tool'"
+            },
+            {
+              "kind": "git_history",
+              "target": "40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+              "reason": "Commit 1 introduces 'local explorer tool'"
+            }
+          ]
+        },
+        {
+          "hypothesis": "Symbol registerLocalExplorerTask.toolCallCount in src/tools/local-explorer-task.ts was introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask.toolCallCount",
+              "reason": "Commit 1 introduces 'local explorer tool'"
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Symbol registerLocalExplorerTask is referenced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6"
+            },
+            {
+              "kind": "relationship",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Symbol registerLocalExplorerTask.toolCallCount is introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "Commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 introduced the local explorer tool and added files to src/tools/local-explorer-task.ts",
+          "verification_status": "CONTRADICTED",
+          "rationale": "Commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 appears in evidence section, but the code file src/tools/local-explorer-task.ts exists at an earlier commit shown as turn=0. Evidence for function registration is provided from line [3] which shows registerLocalExplorerTask defined at an earlier commit than claimed.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:c98ee6e184774478e6be35b6b49fde706fa065b04783d6422649f4e93d08a1ed",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 4981,
+              "end_byte": 5710,
+              "excerpt": "function runGrep(root: string, pattern: string, path: string | undefined, maxOutputChars: number): string {\n  const searchPath = resolveWithinRoot(root, path || \".\");\n  if (searchPath === null) return \"(refused: path escapes repo root)\";\n  try {\n    const out = execFileSync(\n      \"grep\",\n      [\"-rn\", \"-E\", \"--include=*.*\", pattern, searchPath],\n      { encoding: \"utf8\", timeout: 5000 }\n    );\n    const lines = out.trim().split(\"\\n\").filter((l) => !l.includes(\"/node_modules/\") && !l.includes(\"/.git/\"));\n    const text = lines.slice(0, 50).join(\"\\n\");\n    return text ? (text.length > maxOutputChars ? text.slice(0, maxOutputChars) + \"\\n...(truncated)\" : text) : \"(no matches)\";\n  } catch {\n    return \"(no matches)\";\n  }\n}"
+            }
+          ]
+        },
+        {
+          "id": "hypothesis-2",
+          "claim": "Symbol registerLocalExplorerTask in src/tools/local-explorer-task.ts was introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Evidence section provides code symbol src/tools/local-explorer-task.ts but does not explicitly reference commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 as the source of introduction.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:406352c19ee5c87b931b8ca506cd152df86801f4ad450215d4d58e0333cac863",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 4677,
+              "end_byte": 4979,
+              "excerpt": "function runGlob(root: string, pattern: string): string {\n  const regex = globToRegExp(pattern.replace(/^\\.?\\//, \"\"));\n  const all: string[] = [];\n  walk(root, root, all);\n  const matches = all.filter((p) => regex.test(p)).slice(0, 100);\n  return matches.length ? matches.join(\"\\n\") : \"(no matches)\";\n}"
+            }
+          ]
+        },
+        {
+          "id": "hypothesis-3",
+          "claim": "Variable registerLocalExplorerTask.filesRead in src/tools/local-explorer-task.ts was introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Evidence section shows runRead function with filesRead variable introduced, but does not explicitly confirm commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 was the introduction date.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "git_commit",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "git_commit_hash": "40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+              "excerpt": "40363b402004eb4ab9cb447f5cdae2e89cdd76d6\nAdd run_cloud_claude_task tool and related changes\n\n"
+            }
+          ]
+        },
+        {
+          "id": "hypothesis-4",
+          "claim": "Symbol registerLocalExplorerTask.toolCallCount in src/tools/local-explorer-task.ts was introduced in commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Evidence section shows toolCallCount variable introduced, but does not explicitly reference commit 40363b402004eb4ab9cb447f5cdae2e89cdd76d6 as the introduction date.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:2478f0327f9fbefbd5c1e7d7505aec76ee56de559a291317c09d205df84b475d",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 6650,
+              "end_byte": 10172,
+              "excerpt": "function registerLocalExplorerTask(server: McpServer) {\n  server.tool(\n    \"local_explorer_task\",\n    \"Delegates read-only repo discovery (find files, grep symbols, read code, trace how something works) to a \" +\n      \"local Ollama model with a Glob/Grep/Read tool loop, bounded on tool calls/files/output. Returns a FINAL \" +\n      \"ANSWER with files, symbols, cited evidence, and a self-reported confidence. Per \" +\n      \"docs/benchmarks/local-explorer-2026-09-16.md: treat 'low' confidence as a signal to redo the search \" +\n      \"yourself or with a stronger model rather than trusting it - qwen3.5:4b's own hallucination in that pilot \" +\n      \"was correctly self-flagged low confidence. Never trusted blindly for anything you'll act on directly.\",\n    {\n      task: z.string().describe(\"The exploration question, e.g. 'find where X is validated and cite the function'.\"),\n      cwd: z.string().optional().describe(\"Repo root to search in. Defaults to the MCP server's own cwd.\"),\n      model: z.string().default(DEFAULT_MODEL).describe(\"Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:7b does not - see benchmark doc).\"),\n      max_tool_calls: z.number().default(8),\n      max_files_read: z.number().default(5),\n      max_output_chars: z.number().default(3000).describe(\"Per-tool-result truncation limit.\"),\n    },\n    async ({ task, cwd, model, max_tool_calls, max_files_read, max_output_chars }) => {\n      const root = resolve(cwd || process.cwd());\n      const filesRead = new Set<string>();\n      const messages: any[] = [\n        { role: \"system\", content: systemPrompt(max_tool_calls, max_files_read) },\n        { role: \"user\", content: task },\n      ];\n\n      let toolCallCount = 0;\n      const start = Date.now();\n\n      for (let turn = 0; turn < max_tool_calls + 2; turn++) {\n        const res = await fetch(`${OLLAMA_HOST}/api/chat`, {\n          method: \"POST\",\n          body: JSON.stringify({ model, stream: false, think: false, messages, tools: TOOLS }),\n        });\n        const data: any = await res.json();\n        const message = data.message;\n        messages.push(message);\n\n        if (!message.tool_calls || message.tool_calls.length === 0) {\n          const elapsed = ((Date.now() - start) / 1000).toFixed(1);\n          return {\n            content: [{ type: \"text\", text: `${message.content}\\n\\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s]` }],\n          };\n        }\n\n        for (const call of message.tool_calls) {\n          toolCallCount++;\n          const args = call.function.arguments || {};\n          let result: string;\n          if (toolCallCount > max_tool_calls) {\n            result = \"(refused: tool-call budget exhausted, give your FINAL ANSWER now)\";\n          } else if (call.function.name === \"glob\") {\n            result = runGlob(root, args.pattern);\n          } else if (call.function.name === \"grep\") {\n            result = runGrep(root, args.pattern, args.path, max_output_chars);\n          } else if (call.function.name === \"read\") {\n            result = runRead(root, args.path, args.start_line, args.end_line, filesRead, max_files_read, max_output_chars);\n          } else {\n            result = `(unknown tool ${call.function.name})`;\n          }\n          messages.push({ role: \"tool\", content: result, tool_call_id: call.id });\n        }\n      }\n\n      return { isError: true, content: [{ type: \"text\", text: `Gave up after ${max_tool_calls} tool calls without a final answer.` }] };\n    }\n  );\n}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-02",
+    "question": "Which environment variables gate the autonomous tools, and which tool does each gate?",
+    "elapsed_s": 69.2,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The autonomous tool registry is gated by process environment variables that must be set to '1' for the corresponding tools to initialize.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-cloud-claude-task.ts:registerRunCloudClaudeTask",
+              "reason": "This evidence verifies if registerRunCloudClaudeTask function is guarded by a specific environment variable check."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The tool registry exposes two distinct gating variables that control access to Cloud Claude and Local Worker tasks respectively.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-cloud-claude-task.ts:registerRunCloudClaudeTask",
+              "reason": "This evidence confirms the first gating environment variable for the Cloud Claude tool."
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-local-worker-task.ts:registerRunLocalWorkerTask",
+              "reason": "This evidence confirms the second gating environment variable for the Local Worker tool."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The Cloud Claude task gateway checks process.env.CLOUD_CLAUDE_ENABLED and sets registerRunCloudClaudeTask to undefined or throws an error if it is not equal to '1'.",
+          "required_evidence": [
+            {
+              "kind": "relationship",
+              "target": "src/tools/run-cloud-claude-task.ts:registerRunCloudClaudeTask -> process.env.CLOUD_CLAUDE_ENABLED",
+              "reason": "This relationship tracks the actual environment variable dependency for the function."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The Local Worker task gateway checks process.env.LOCAL_WORKER_ENABLED and sets registerRunLocalWorkerTask to undefined or throws an error if it is not equal to '1'.",
+          "required_evidence": [
+            {
+              "kind": "relationship",
+              "target": "src/tools/run-local-worker-task.ts:registerRunLocalWorkerTask -> process.env.LOCAL_WORKER_ENABLED",
+              "reason": "This relationship tracks the actual environment variable dependency for the function."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Need to confirm if registerListOllamaTask in src/tools/list-ollama-models.ts has any gate defined.",
+        "Need to check if registerSummarizeOutput in src/tools/summarize-output.ts has any gate defined.",
+        "Need to verify if registerRunOllamaTask in src/tools/run-ollama-task.ts has any gate defined."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  }
+]
