@@ -1,5 +1,12 @@
 # Super Explorer — initial benchmark set
 
+> **Evidence correction (2026-09-19):** the sweep4/sweep5 reported 11/12 and
+> 7/12 counts match non-error responses, not correct answers. All six sweep6
+> limit-80 retries have empty cited claims and abstain. The historical “clean
+> 12/12” answer-quality claim below is withdrawn; it also combined different
+> retrieval limits. Preserve the artifacts. See the [project assessment and
+> reproducible reanalysis](../planning/project-reality-check-2026-09-19.md#the-most-serious-finding-successful-requests-were-reported-as-successful-answers).
+
 This is the first, deliberately small gold set for the repository. It tests
 the exploration work this server actually needs: locating symbols, following
 registration and configuration paths, checking a security boundary, finding a

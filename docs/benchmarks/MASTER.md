@@ -1,5 +1,11 @@
 # Local worker benchmarks — master record
 
+For the current assessment of evidence strength, deployment gaps, and the
+separate Super Explorer score correction, see the
+[2026-09-19 project review](../planning/project-reality-check-2026-09-19.md).
+The routing tables below describe tested fixture families, not general
+reliability guarantees.
+
 All measured numbers from the Ollama worker benchmarking series. Raw
 requests, responses and VRAM logs are **not** in git — see
 [README.md](README.md) for where they live and why.

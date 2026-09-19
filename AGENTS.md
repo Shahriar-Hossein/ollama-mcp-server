@@ -23,13 +23,13 @@ This is the canonical instructions file for this repo — other agent configs
   embedding model resident (its default 5min keep_alive) while the much
   larger generation model loaded next, and the two competed for GPU memory.
   This was the actual cause of `qwen3.5:4b` Super Explorer timeouts diagnosed
-  as "CPU spillover," not the model's own resource needs. After the fix,
-  both `qwen3.5:4b` and `qwen3.5:2b` reached a clean 12/12 on the SE-01..12
-  gold set via the Super Explorer pipeline at `limit: 80` (the `limit`
-  schema cap in `explore.ts`/`explore-repository.ts` was raised 20→40→80
-  over this session, following retrieval-window failures, not GPU
-  contention) — see
-  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md),
+  as "CPU spillover," not the model's own resource needs. The subsequent
+  reported 12/12 for both Qwen sizes is withdrawn by the 2026-09-19 audit:
+  the saved limit-80 retry answers all abstain with no cited claims. The
+  reported counts measured non-error responses, not correct answers, and
+  combined limit-40 results with limit-80 retries. Do not use them for routing.
+  See [the evidence audit](docs/planning/project-reality-check-2026-09-19.md)
+  and [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md),
   "Embedder GPU contention fix + limit/timeout sweep" (2026-09-19).
 - `src/shell-allowlist.ts` — the command allowlist and system prompts shared
   by both autonomous tools. Both must stay in sync with this file, not drift
