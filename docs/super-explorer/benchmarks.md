@@ -413,6 +413,67 @@ repair-retry (see below).
 | Super Explorer + `nemotron-3-super:cloud` (gate-condition expansion) | 0/5 | Regressed from 2/5 (Gemma-protocol trial above) to discovery-schema failures on SE-01/02/03 this run — likely sampling variance, not a regression from this change (no pipeline code touches discovery's schema handling). |
 | Super Explorer + `gemma4:31b-cloud` (gate-condition expansion) | 0/5 | Matches its earlier 2/5-class profile qualitatively, but SE-02 itself now fails earlier (discovery schema) rather than later. |
 
+## `num_ctx` fix: 10-model `local_explorer_task` sweep (2026-09-18/19)
+
+Prior sessions ran `local_explorer_task` without ever setting Ollama's
+`num_ctx` option, so every call fell back to Ollama's own runtime default
+(4096 tokens) regardless of a model's actual context window. With a ~450-tok
+system prompt plus up to 24 tool-call results at up to 6000 chars each, a
+handful of file reads could silently evict earlier tool output from context
+— a plausible cause for confident-but-wrong answers seen in earlier trials.
+Fix applied in [`src/tools/local-explorer-task.ts`](../../src/tools/local-explorer-task.ts):
+`num_ctx` is now an explicit param, default `16384`, wired into the
+`options` object alongside `num_predict`. Budgets were widened to match
+(`max_tool_calls` 24→32, `max_files_read` 10→14, `max_output_chars`
+6000→8000, `request_timeout_ms` 180s→240s) since context is no longer the
+limiter.
+
+Ran SE-01 through SE-12 (`think: false`) against every local, non-coder,
+non-embedding, non-7B model available (`qwen3.5:0.8b`, `qwen3.5:2b`,
+`qwen3.5:4b`, `granite4.1:3b`, `granite4.2:3b`, `nemotron-3-nano:4b`,
+`exaone-deep:2.4b`, `deepseek-r1:1.5b`, `gemma4:e2b`, `ministral-3:3b`) — one
+model loaded at a time, `ollama stop` between switches, no pause needed
+between repeated calls to an already-loaded model (per
+[[feedback-sequential-model-benchmarks]]). Ran against a `git worktree`
+pinned to the gold fixture revision (`f1a75a1`) via a standalone script
+importing `runLocalExplorerTask` directly, since editing the tool's source
+doesn't affect an already-running MCP server process. Scored by an automated
+keyword check against each question's required symbols/values (stricter
+than a human grader in some cases, e.g. penalizing a correct claim phrased
+without the literal identifier — spot-checked failing "high confidence"
+answers by hand and they were genuine misses, not scoring artifacts).
+
+| Model | Passed | Avg time/question | Notes |
+|---|---:|---:|---|
+| `qwen3.5:4b` | 8/12 | 33.6s | Best result of the sweep. Failures: SE-01 (missed the `src/index.ts` unconditional-registration half), SE-03, SE-10, SE-11. |
+| `granite4.2:3b` | 7/12 | 382.0s | Large jump from 0/5 across three prior Super Explorer-pipeline trials (see above) — but ~11x slower per question than `qwen3.5:4b`, and 3 questions (SE-01, SE-03, SE-12) burned the full 32-call budget without answering. |
+| `qwen3.5:2b` | 6/12 | 18.2s | Reasonable accuracy for its size; missed SE-01/02/03/08/11. |
+| `ministral-3:3b` | 6/12 | 34.3s | SE-02 gave up after 32 tool calls; otherwise comparable to `qwen3.5:2b`. |
+| `gemma4:e2b` | 3/12 | 12.0s | Fast but shallow; several "low confidence" self-flags were correctly self-aware. |
+| `qwen3.5:0.8b` | 1/12 | 7.1s | Too small to hold the task structure; mostly non-answers. |
+| `granite4.1:3b` | 0/12 | 15.6s | Confidently wrong throughout — e.g. SE-01 answered "high confidence" citing only the function definition, never checking `src/index.ts` for the registration/enablement half the question asked for. |
+| `nemotron-3-nano:4b` | 0/12 | 7.0s | Fabricates rather than calling tools — e.g. SE-03 answered "high confidence" citing `src/types.ts`/`src/request.ts`, files that don't exist in this repo, with 0 tool calls made. |
+| `deepseek-r1:1.5b` | 0/12 | 5.2s | Doesn't engage the tool loop; answers are empty/near-empty with 0 tool calls. |
+| `exaone-deep:2.4b` | 0/12 | 0.0s | **Not usable at all** — Ollama rejects every call with `does not support tools` (HTTP 400). Route nothing here. |
+
+**Net effect of the `num_ctx` fix:** inconclusive as an isolated variable
+(budgets changed at the same time, and there's no same-config "before"
+baseline for most of these models), but `granite4.2:3b` going from 0/5 to
+7/12 on the same gold set is the strongest signal that the earlier context
+eviction was masking real capability — worth a controlled `num_ctx`-only
+A/B on `granite4.2:3b` and `qwen3.5:4b` if this needs isolating further.
+`qwen3.5:4b` remains the routing default: best accuracy and a sane latency
+profile. `granite4.2:3b` is a viable fallback only when latency doesn't
+matter. `exaone-deep:2.4b`, `deepseek-r1:1.5b`, and `nemotron-3-nano:4b`
+should not be routed to this tool loop at all — two fail to engage it and
+one lacks tool-calling support outright.
+
+| Explorer | Questions passed | Outcome |
+|---|---:|---|
+| `local_explorer_task` + `qwen3.5:4b` (`num_ctx=16384` fix) | 8/12 | Best of the sweep; remains the default. |
+| `local_explorer_task` + `granite4.2:3b` (`num_ctx=16384` fix) | 7/12 | Large improvement over pre-fix trials, but ~11x slower per question. |
+| `local_explorer_task` + 8 other local, non-coder, non-7B models | 0-6/12 each | See per-model table above; three models (`exaone-deep:2.4b`, `deepseek-r1:1.5b`, `nemotron-3-nano:4b`) should not be routed here. |
+
 ## `local_explorer_task` tool-calling-loop comparison (2026-09-18)
 
 Prompted by the cloud re-test above showing every cloud model stuck at 0/5

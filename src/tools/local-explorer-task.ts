@@ -188,6 +188,7 @@ export interface LocalExplorerTaskParams {
   max_files_read?: number;
   max_output_chars?: number;
   num_predict?: number;
+  num_ctx?: number;
   request_timeout_ms?: number;
   think?: boolean;
 }
@@ -203,6 +204,7 @@ export async function runLocalExplorerTask({
   max_files_read = 10,
   max_output_chars = 6000,
   num_predict = 8192,
+  num_ctx = 16384,
   request_timeout_ms = 180_000,
   think = false,
 }: LocalExplorerTaskParams): Promise<{ isError?: boolean; text: string }> {
@@ -223,7 +225,7 @@ export async function runLocalExplorerTask({
     try {
       res = await fetch(`${OLLAMA_HOST}/api/chat`, {
         method: "POST",
-        body: JSON.stringify({ model, stream: false, think, messages, tools: TOOLS, options: { num_predict } }),
+        body: JSON.stringify({ model, stream: false, think, messages, tools: TOOLS, options: { num_predict, num_ctx } }),
         signal: controller.signal,
       });
     } catch (e: any) {
@@ -282,6 +284,7 @@ export function registerLocalExplorerTask(server: McpServer) {
       max_files_read: z.number().default(10),
       max_output_chars: z.number().default(6000).describe("Per-tool-result truncation limit."),
       num_predict: z.number().default(8192).describe("Max output tokens per model turn. Not set by Ollama's own default, so we set one explicitly."),
+      num_ctx: z.number().default(16384).describe("Context window size. Ollama's own runtime default (4096) is too small for this tool loop - a handful of file reads can evict earlier tool results from context, so we set one explicitly."),
       request_timeout_ms: z.number().default(180_000).describe("Per-chat-call timeout, guards against an infinite/hung generation."),
       think: z.boolean().default(false).describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),
     },

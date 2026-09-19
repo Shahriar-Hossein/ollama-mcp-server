@@ -75,6 +75,21 @@ See [README.md](README.md) for the project pitch and setup.
   Explorer pipeline) still gets 5/5. See
   [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md) for
   full detail.
+- `local_explorer_task` never set Ollama's `num_ctx` option, so every call
+  silently ran at Ollama's runtime default (4096 tokens) regardless of the
+  model's real context window — a handful of tool-call results could evict
+  earlier evidence from context before the model ever saw it. Fixed by
+  adding an explicit `num_ctx` param (default 16384). In the 10-model
+  SE-01..12 rerun after the fix, `granite4.2:3b` went from 0/5 (pre-fix,
+  Super Explorer pipeline) to 7/12 (post-fix, same gold set) — though at
+  ~11x `qwen3.5:4b`'s latency per question, so it's a fallback, not a
+  routing default. `qwen3.5:4b` stayed the best (8/12). Do not route to
+  `exaone-deep:2.4b` (rejects all calls with "does not support tools"),
+  `deepseek-r1:1.5b`, or `nemotron-3-nano:4b` (both fail to engage the tool
+  loop — `nemotron-3-nano:4b` fabricates file paths that don't exist in the
+  repo rather than calling tools). See
+  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md),
+  "`num_ctx` fix: 10-model `local_explorer_task` sweep".
 
 ## Why this project exists
 
