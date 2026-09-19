@@ -9,8 +9,9 @@ const inputSchema = z.object({
   repository_root: z.string().min(1),
   question: z.string().trim().min(1).max(2_000),
   model: z.string().optional(),
-  limit: z.number().int().min(1).max(20).optional(),
+  limit: z.number().int().min(1).max(40).optional(),
   mode: z.enum(["lexical", "hybrid"]).optional(),
+  think: z.boolean().optional(),
 });
 
 export interface ExploreResult extends SynthesisResult {
@@ -95,7 +96,7 @@ function evidenceForDiscovery(
 export async function exploreRepository(input: z.input<typeof inputSchema>): Promise<ExploreResult> {
   const options = inputSchema.parse(input);
   const root = resolve(options.repository_root);
-  const discovery = await discoverEvidence(root, options.question, { model: options.model, limit: options.limit, mode: options.mode });
+  const discovery = await discoverEvidence(root, options.question, { model: options.model, limit: options.limit, mode: options.mode, think: options.think });
   const index = indexRepository(root);
   if (index.commit_hash !== discovery.commit_hash) throw new Error("Repository changed between discovery and evidence materialization.");
   const claims: VerificationInputClaim[] = discovery.discovery.hypotheses.flatMap((hypothesis, hypothesisIndex) => {
@@ -114,7 +115,7 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
       verification: { commit_hash: discovery.commit_hash, results: [] },
     };
   }
-  const verification = await verifyClaims(root, claims, options.model);
+  const verification = await verifyClaims(root, claims, options.model, options.think);
   return {
     ...synthesizeVerifiedClaims({ question: options.question, verification }),
     tool_calls: discovery.model_calls + 1,

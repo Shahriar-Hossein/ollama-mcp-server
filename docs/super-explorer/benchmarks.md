@@ -474,6 +474,48 @@ one lacks tool-calling support outright.
 | `local_explorer_task` + `granite4.2:3b` (`num_ctx=16384` fix) | 7/12 | Large improvement over pre-fix trials, but ~11x slower per question. |
 | `local_explorer_task` + 8 other local, non-coder, non-7B models | 0-6/12 each | See per-model table above; three models (`exaone-deep:2.4b`, `deepseek-r1:1.5b`, `nemotron-3-nano:4b`) should not be routed here. |
 
+## Budget/think A-B on `qwen3.5:4b`/`qwen3.5:2b` (2026-09-19)
+
+Follow-up to the 10-model sweep above, narrowed to the two `qwen3.5` sizes,
+testing two variables against the same SE-01..12 gold set: wider loop
+budgets with `think` off, then `think` on with budgets cut back down.
+`num_ctx`/`num_predict` held at 16384/8192 throughout. Ran via a standalone
+script importing `runLocalExplorerTask` directly against a git worktree
+pinned to the same fixture revision (`f1a75a1`), one model loaded at a time.
+
+- **Phase 1** — `think: false`, budgets widened from the prior sweep's 32
+  tool calls/14 files to 48/20 (timeout 300s).
+- **Phase 2** — `think: true`, same `num_ctx`/`num_predict`, budgets cut to
+  16 tool calls/8 files (timeout 360s, since thinking mode is slower per
+  turn).
+
+| Model | Phase | Passed | Avg time/question | Notes |
+|---|---|---:|---:|---|
+| `qwen3.5:4b` | 1 (think off, 48/20) | 8/12 | 30.9s | Failures: SE-01 (missed the unconditional-vs-conditional contrast), SE-02 (cited `.env.example` instead of the `src/index.ts` gate), SE-06 (didn't describe how the validator hook attaches), SE-11 (fabricated a "commit hash" that was actually the session's scratchpad directory name). |
+| `qwen3.5:4b` | 2 (think on, 16/8) | 10/12 | 65.8s | Best single-model result across all sweeps to date. Failures: SE-08 (stated wrong hardcoded default budget values — 8/5 instead of the real 24/10 — while the core enforcement mechanism was described correctly), SE-11 (empty response after 207s, likely ran out of turns mid-answer). |
+| `qwen3.5:2b` | 1 (think off, 48/20) | 5/12 | 22.3s | Failures: SE-01 (no clear citation), SE-02 (misstated which value enables the gate), SE-05 (described the mechanism vaguely, never cited `SHELL_METACHARACTERS`), SE-06 (refused, claimed it couldn't access files outside the repo root), SE-08 (lost the thread entirely — thought the file was Python), SE-10 (gave up after the full 48-call budget), SE-11 (fabricated a doc-based origin story instead of a commit hash). |
+| `qwen3.5:2b` | 2 (think on, 16/8) | 7/12 | 37.5s | Improved over phase 1 despite the tighter budget. Failures: SE-01/SE-07 (gave up after 16 calls), SE-08 (same wrong-default-values issue as `4b`), SE-10 (hedged without confirming, didn't find the file), SE-11 (same fabricated-origin failure as phase 1). |
+
+**Takeaways:**
+- For both model sizes, `think: true` with a *smaller* tool-call/file
+  budget outperformed `think: false` with a *larger* one — `qwen3.5:4b` went
+  8/12 → 10/12, `qwen3.5:2b` went 5/12 → 7/12 — at roughly 2x the
+  per-question latency. Widening the budget alone did not help; the models
+  weren't running out of calls in phase 1, they were reasoning worse.
+  Latency cost may not be worth it for `2b` (still below `4b`'s think-off
+  score), but for `4b` this is the best result recorded for this gold set —
+  worth considering as the default if the latency hit is acceptable for the
+  routing use case.
+- SE-11 (commit-history question) failed in 3 of 4 runs, twice via outright
+  fabrication (treating an unrelated path/story as the commit) rather than
+  self-flagged low confidence — this tool loop has no `git log` access, so
+  it structurally cannot answer SE-11 correctly and should not be routed
+  commit-history questions at all.
+- SE-08 failed in phase 2 for both models on the same failure shape (correct
+  mechanism, wrong hardcoded literal default values) — a new failure mode
+  not seen in the num_ctx sweep above, possibly `think` mode encouraging the
+  model to state specifics it's less sure of.
+
 ## `local_explorer_task` tool-calling-loop comparison (2026-09-18)
 
 Prompted by the cloud re-test above showing every cloud model stuck at 0/5
@@ -614,6 +656,49 @@ Not yet done: re-running SE-06..12 through `local_explorer_task`'s
 tool-calling loop (which scored 5/5 on SE-01..05) to see if the same
 questions clear there — that comparison is the actual apples-to-apples test
 `docs/planning/explorer-finetune-plan.md`'s Step 0 gold-set expansion needs.
+
+## Embedder GPU contention fix + limit/timeout sweep (2026-09-19)
+
+The Budget/think A-B sweep above (`local_explorer_task`, no embedder in its
+loop) got `qwen3.5:4b` to 10/12. A parallel run of the **Super Explorer
+pipeline** on the same gold set (`limit: 20`, `think: true`, default 120s
+`OLLAMA_TIMEOUT_MS`) went the other way — 7/12 questions hit `timeout of
+120000ms exceeded`, all in the 143-178s range (well past 120s but not
+runaway). `qwen3.5:2b` on the same run mostly worked (10/12; see raw results
+in [2026-09-19-sweep3-limit20-results.json](../benchmarks/runs/2026-09-19-sweep3-limit20-results.json)).
+
+Root cause: `hybridRetrieve()` calls `embed()` (against
+`nomic-embed-text-v2-moe`) before discovery's `generate()` call runs, but
+neither call ever set `keep_alive`, so Ollama used its 5-minute default.
+`ollama ps` during a run showed both models resident at once —
+`nomic-embed-text-v2-moe` pinned at 100% GPU, `qwen3.5:4b` split
+19%/81% CPU/GPU — because the embedder was still occupying GPU memory when
+the much larger generation model tried to load, forcing part of it onto
+CPU. The calls are sequential in code (`discovery.ts` fully `await`s
+`hybridRetrieve()` before calling `generate()`), so this isn't concurrent
+execution — it's GPU memory residency contention between two models that
+happen to run back-to-back.
+
+**Fix**: `embed()` in `src/ollama-client.ts` now sends `keep_alive: "0"`,
+unloading the embedding model immediately after each call so it's gone by
+the time the generation model loads.
+
+**Re-verification**: reran the same SE-01..12 gold set, `qwen3.5:4b` only,
+with the `limit` schema cap raised 20→40 (`explore.ts`,
+`explore-repository.ts`) and `OLLAMA_TIMEOUT_MS` doubled to 240000 (both
+bumped together, not to isolate which mattered — see caveat below):
+**11/12 completed**, all in 24.8-92.9s — comfortably under even the old
+120s timeout, let alone the new 240s one. The one failure (SE-02) was a
+24.8s discovery-schema validation error ("Discovery must provide a
+hypothesis or a retrieval gap"), not a timeout. Raw results:
+[2026-09-19-sweep4-limit40-qwen4b-results.json](../benchmarks/runs/2026-09-19-sweep4-limit40-qwen4b-results.json).
+
+**Caveat — timeout bump not isolated**: since every question finished well
+under the *original* 120s timeout, the `keep_alive: "0"` fix looks
+sufficient on its own; the `limit`/timeout doubling likely wasn't
+necessary to clear the 7/12 timeout failures. Not yet re-run at
+`limit: 40`/120s timeout to confirm — do that before assuming the timeout
+bump is required elsewhere.
 
 ## Next session
 

@@ -85,14 +85,14 @@ function parseModelResponse(text: string, claims: VerificationInputClaim[], evid
 }
 
 /** Classifies claims from caller-supplied, materialized evidence; it never produces a user-facing synthesis. */
-export async function verifyClaims(repositoryRoot: string, claimsInput: VerificationInputClaim[], model = DEFAULT_MODEL): Promise<{ commit_hash: string; results: VerificationResult[] }> {
+export async function verifyClaims(repositoryRoot: string, claimsInput: VerificationInputClaim[], model = DEFAULT_MODEL, think = false): Promise<{ commit_hash: string; results: VerificationResult[] }> {
   const root = resolve(repositoryRoot);
   const claims = z.array(claimInputSchema).min(1).max(20).parse(claimsInput);
   if (new Set(claims.map((claim) => claim.id)).size !== claims.length) throw new Error("Verification claim IDs must be unique.");
   const index = indexRepository(root);
   const materialized = claims.map((claim) => claim.evidence.map((evidence) => materializeEvidence(root, index.commit_hash, index, evidence)));
   const prompt = `Classify each repository claim using only its numbered evidence. Return JSON only: {"results":[{"id":"input id","verification_status":"SUPPORTED|CONTRADICTED|INSUFFICIENT","rationale":"brief evidence-bound assessment","evidence_indexes":[0]}]}.\n\nSUPPORTED requires direct supplied evidence that establishes the claim. CONTRADICTED requires supplied evidence that directly conflicts with it. Otherwise choose INSUFFICIENT. Do not infer from names, omit results, answer the broader question, or write a final synthesis.\n\n${claims.map((claim, index) => `Claim ${index + 1} (id ${claim.id}): ${claim.claim}\nEvidence:\n${materialized[index].map((evidence, evidenceIndex) => `[${evidenceIndex}] ${evidence.evidence_kind} ${evidence.file ?? evidence.symbol_id ?? evidence.git_commit_hash}\n${evidence.excerpt}`).join("\n")}`).join("\n\n")}`;
-  const assessed = parseModelResponse(await generate(model, prompt, "You are a strict evidence verifier. Classify only what the supplied repository evidence establishes."), claims, materialized.map((evidence) => evidence.length));
+  const assessed = parseModelResponse(await generate(model, prompt, "You are a strict evidence verifier. Classify only what the supplied repository evidence establishes.", undefined, think), claims, materialized.map((evidence) => evidence.length));
   return {
     commit_hash: index.commit_hash,
     results: assessed.results.map((result, index) => {

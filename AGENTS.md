@@ -17,8 +17,15 @@ This is the canonical instructions file for this repo — other agent configs
   `local_explorer_task` is registered unconditionally: it's read-only
   (Glob/Grep/Read only, no shell command ever runs), so it doesn't need the
   same opt-in gate.
-- `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`)
-  and host/timeout config.
+- `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
+  `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
+  embedding model unloads right after each call — without it, Ollama kept the
+  embedding model resident (its default 5min keep_alive) while the much
+  larger generation model loaded next, and the two competed for GPU memory.
+  This was the actual cause of `qwen3.5:4b` Super Explorer timeouts diagnosed
+  as "CPU spillover," not the model's own resource needs — see
+  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md),
+  "Embedder GPU contention fix" (2026-09-19).
 - `src/shell-allowlist.ts` — the command allowlist and system prompts shared
   by both autonomous tools. Both must stay in sync with this file, not drift
   into separate allowlists. `parseAllowedGitCommand` tokenizes and rejects

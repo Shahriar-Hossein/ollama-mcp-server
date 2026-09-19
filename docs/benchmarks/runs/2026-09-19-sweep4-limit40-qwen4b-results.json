@@ -1,0 +1,870 @@
+[
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-01",
+    "question": "Where is `local_explorer_task` registered, and is it enabled by default?",
+    "elapsed_s": 37.9,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "local_explorer_task is registered at src/tools/local-explorer-task.ts",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "2478f0327f9fbefbd5c1e7d7505aec76ee56de559a291317c09d205df84b475d",
+              "reason": "Direct symbol match for registerLocalExplorerTask function in src/tools/local-explorer-task.ts"
+            }
+          ]
+        },
+        {
+          "hypothesis": "local_explorer_task is guarded by process.env.LOCAL_WORKER_ENABLED === \"1\"",
+          "required_evidence": [
+            {
+              "kind": "relationship",
+              "target": "symbol:sha256:cb6d225c47c3095f01d7fb77c50f18166d1f1b128d9fec2968a0e30eccef1eea -> symbol:sha256:2478f0327f9fbefbd5c1e7d7505aec76ee56de559a291317c09d205df84b475d",
+              "reason": "The symbol for registerRunLocalWorkerTask is guarded by this condition, which may indicate shared registration pattern"
+            }
+          ]
+        },
+        {
+          "hypothesis": "local_explorer_task has default enabled state defined in process.env.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts:0:0-999999:999999",
+              "reason": "Full file content could reveal default configuration state"
+            }
+          ]
+        },
+        {
+          "hypothesis": "registerLocalExplorerTask variable has concrete value assignment in the codebase.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "a31eb15888968d6436ccbf6c941c80bcedfa136907712948883298264b46b41f",
+              "reason": "Similar variable structure for related task might provide pattern"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "No direct evidence of default enabled state found in retrieved candidates",
+        "No explicit guard condition for registerLocalExplorerTask symbol was listed",
+        "Full file content not available to determine configuration defaults"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-02",
+    "question": "Which environment variables gate the autonomous tools, and which tool does each gate?",
+    "elapsed_s": 24.8,
+    "isError": true,
+    "error": "Discovery model response failed schema validation after one repair attempt: [\n  {\n    \"code\": \"custom\",\n    \"path\": [],\n    \"message\": \"Discovery must provide a hypothesis or a retrieval gap.\"\n  }\n]"
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-03",
+    "question": "What host and timeout do ordinary Ollama HTTP calls use, and which operations share them?",
+    "elapsed_s": 40.2,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The Ollama HTTP client uses a host variable from src/ollama-client.ts with a default or overridden value that defines the target server endpoint.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "variable OLLAMA_HOST in src/ollama-client.ts",
+              "reason": "Identifies the host configuration variable used by ordinary HTTP calls."
+            },
+            {
+              "kind": "symbol",
+              "target": "variable REQUEST_TIMEOUT_MS in src/ollama-client.ts",
+              "reason": "Identifies the timeout variable used for Ollama HTTP request operations."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The generate and listModels operations share the same host and timeout configuration defined in src/ollama-client.ts.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function generate in src/ollama-client.ts",
+              "reason": "Identifies the operation that may use shared HTTP configuration."
+            },
+            {
+              "kind": "relationship",
+              "target": "generate.response -> REQUEST_TIMEOUT_MS in src/ollama-client.ts",
+              "reason": "Shows connection between generate function and timeout variable."
+            },
+            {
+              "kind": "symbol",
+              "target": "variable listModels.response in src/ollama-client.ts",
+              "reason": "Identifies the operation that may share the same HTTP configuration."
+            },
+            {
+              "kind": "relationship",
+              "target": "listModels.response -> REQUEST_TIMEOUT_MS in src/ollama-client.ts",
+              "reason": "Shows connection between listModels function and timeout variable."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The registerRunOllamaTask and generate operations reference the same host and timeout variables from Ollama configuration.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "function registerRunOllamaTask in src/tools/run-ollama-task.ts",
+              "reason": "Identifies task registration function that may reference host and timeout."
+            },
+            {
+              "kind": "relationship",
+              "target": "registerRunOllamaTask.message -> OLLAMA_HOST in src/ollama-client.ts",
+              "reason": "Shows connection between runOllamaTask message and host variable."
+            },
+            {
+              "kind": "symbol",
+              "target": "variable generate.response in src/ollama-client.ts",
+              "reason": "Confirms that generate response uses shared Ollama configuration."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The script HOST variable in scripts/run-capability-matrix-exaone-f16.cjs shares the same value as the src/ollama-client.ts HOST variable for Ollama HTTP calls.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "variable HOST in scripts/run-capability-matrix-exaone-f16.cjs",
+              "reason": "Identifies alternative host configuration that may mirror the client variable."
+            },
+            {
+              "kind": "relationship",
+              "target": "HOST in src/ollama-client.ts -> OLLAMA_HOST in src/ollama-client.ts",
+              "reason": "Confirms shared reference between two HOST variables."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Missing exact value for REQUEST_TIMEOUT_MS to verify timeout duration for HTTP calls.",
+        "Missing proof that host configuration in scripts/ is identical to the src/ollama-client.ts OLLAMA_HOST variable."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-04",
+    "question": "Trace the timeout error shown by `run_ollama_task` to the shared client configuration.",
+    "elapsed_s": 92.9,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not verify a supported answer from the supplied evidence.",
+    "cited_claims": [],
+    "omitted_claim_ids": [
+      "hypothesis-1"
+    ],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The REQUEST_TIMEOUT_MS variable defined in src/ollama-client.ts is used as a shared timeout configuration for all Ollama-related tasks.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "REQUEST_TIMEOUT_MS",
+              "reason": "This candidate confirms the existence and location of the shared timeout configuration"
+            },
+            {
+              "kind": "relationship",
+              "target": "registerRunOllamaTask -> REQUEST_TIMEOUT_MS",
+              "reason": "This would demonstrate that the run_ollama_task function uses the shared client's timeout"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Evidence linking registerRunOllamaTask directly to REQUEST_TIMEOUT_MS variable usage"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "The REQUEST_TIMEOUT_MS variable defined in src/ollama-client.ts is used as a shared timeout configuration for all Ollama-related tasks.",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Evidence defines REQUEST_TIMEOUT_MS in scripts/run-capability-matrix-track-b.cjs, not src/ollama-client.ts. Usage is demonstrated in specific benchmark scripts only, insufficient to establish configuration for all Ollama-related tasks.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:cce6676f562770db79f289dfec82fc6bdb7a5a75ead887ffd7b744de578f1abc",
+              "file": "scripts/run-capability-matrix-track-b.cjs",
+              "start_byte": 534,
+              "end_byte": 562,
+              "excerpt": "REQUEST_TIMEOUT_MS = 120_000"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:68ce2459616b29c44488a45fc2a79e0a13e1d73310aa17f8e54223998754ce51",
+              "file": "scripts/run-capability-matrix-track-b.cjs",
+              "start_byte": 15905,
+              "end_byte": 16283,
+              "excerpt": "response = await fetch(\"http://127.0.0.1:11434/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: KEEP_ALIVE }) })"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:12bc102ac130fc57f80d07673749a09e62f974fe536822308bde6aaafb93a57d",
+              "file": "scripts/run-capability-matrix-track-b.cjs",
+              "start_byte": 17960,
+              "end_byte": 18497,
+              "excerpt": "artifact = { fixture: `${fixtureId} v${fixtureVersion}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: MAX_TURNS, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, prompt: fixture.prompt, system_prompt: systemPrompt, prompt_variant: finalReportReminder && fixtureId === \"T1\" ? \"t1-final-report-reminder\" : \"baseline\", repository: { retained_path: keepFixture ? root : undefined, pre, post }, tool_calls: calls, turns, final_response: finalResponse, grade: result }"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:85c1ab6f88ee3718ffcdc0a297c12a84c452a5be5d68587a3e7d3e8987623d9f",
+              "file": "scripts/run-capability-matrix-track-b.cjs",
+              "start_byte": 19444,
+              "end_byte": 19822,
+              "excerpt": "response = await fetch(\"http://127.0.0.1:11434/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: KEEP_ALIVE }) })"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:3e86c9049cc48baf8ea803baeffe0e7e52db040a3dea6bc871cb43e6966d0d3e",
+              "file": "scripts/run-capability-matrix-track-b.cjs",
+              "start_byte": 18591,
+              "end_byte": 20904,
+              "excerpt": "async function probe(fixtureVersion, fixture, model, debug) {\n  const fixtureId = \"T1\";\n  const root = createRepository(fixture);\n  const pre = snapshot(root, fixture);\n  if (!pre.clean || pre.git_status_error || !pre.head) throw new Error(\"fixture baseline verification failed\");\n  debug(\"fixture_created_and_baseline_verified\", { fixture: \"probe\", root, head: pre.head, clean: pre.clean });\n  const messages = [\n    { role: \"system\", content: \"You are a benchmark coding agent. Use only the supplied tools.\" },\n    { role: \"user\", content: `Call read_file once for ${Object.keys(fixture.files).find((file) => file.startsWith(\"src/\"))}. Do not answer until after the tool result.` },\n  ];\n  let responseStatus, rawResponse, error;\n  try {\n    const started = Date.now();\n    debug(\"chat_request_started\", { turn: 1, endpoint: \"/api/chat\" });\n    const response = await fetch(\"http://127.0.0.1:11434/api/chat\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), body: JSON.stringify({ model, stream: false, think: false, messages, tools: toolDefinitions(fixture), options: { temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024 }, keep_alive: KEEP_ALIVE }) });\n    responseStatus = { status: response.status, ok: response.ok, wall_time_ms: Date.now() - started };\n    debug(\"chat_response_status\", { turn: 1, ...responseStatus });\n    const body = await response.text();\n    try { rawResponse = JSON.parse(body); } catch { rawResponse = { non_json_body: clipped(body) }; }\n    if (!response.ok || rawResponse.error) throw new Error(rawResponse.error || `HTTP ${response.status}`);\n    for (const call of rawResponse.message?.tool_calls || []) debug(\"parsed_tool_call\", { turn: 1, name: call.function?.name, arguments: callArguments(call), id: call.id });\n  } catch (caught) { error = caught.message; }\n  const post = snapshot(root, fixture);\n  fs.rmSync(root, { recursive: true, force: true });\n  return { fixture: `tool-call-probe using ${fixtureId} v${fixtureVersion}`, model, config: { think: false, temperature: 0, seed: 42, num_ctx: 16384, num_predict: 1024, max_turns: 1, request_timeout_ms: REQUEST_TIMEOUT_MS, keep_alive: KEEP_ALIVE }, repository: { pre, post }, response_status: responseStatus, raw_response: rawResponse, error };\n}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-05",
+    "question": "How does the local worker prevent a model-supplied git command from using shell chaining?",
+    "elapsed_s": 30.2,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The local worker prevents shell chaining by restricting git commands to a whitelist of allowed tokens",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "src/shell-allowlist.ts:parseAllowedGitCommand",
+              "reason": "to check if the function validates shell chaining by examining token usage"
+            },
+            {
+              "kind": "relationship",
+              "target": "src/tools/run-local-worker-task.ts:runShellTool -> src/shell-allowlist.ts:parseAllowedGitCommand",
+              "reason": "to verify if runShellTool invokes parseAllowedGitCommand before executing commands"
+            }
+          ]
+        },
+        {
+          "hypothesis": "The local worker prevents shell chaining by not providing a shell environment to git commands",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-local-worker-task.ts:registerRunLocalWorkerTask",
+              "reason": "to check how git commands are executed without shell chaining"
+            },
+            {
+              "kind": "symbol",
+              "target": "src/shell-allowlist.ts:WORKER_SYSTEM_PROMPT",
+              "reason": "to verify if system prompts restrict command execution environment"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "No evidence found in retrieved candidates about shell chaining protection mechanisms for git commands in the local worker"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-06",
+    "question": "What independently validates Bash commands for the cloud Claude worker, and how is it attached?",
+    "elapsed_s": 78.4,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "- The bash command validation is performed by the BASH_VALIDATOR_HOOK referenced in src/tools/run-cloud-claude-task.ts (src/tools/run-cloud-claude-task.ts:1354-1441, src/tools/run-cloud-claude-task.ts:1449-1611)",
+    "cited_claims": [
+      {
+        "id": "hypothesis-1",
+        "claim": "The bash command validation is performed by the BASH_VALIDATOR_HOOK referenced in src/tools/run-cloud-claude-task.ts",
+        "citations": [
+          "src/tools/run-cloud-claude-task.ts:1354-1441",
+          "src/tools/run-cloud-claude-task.ts:1449-1611"
+        ]
+      }
+    ],
+    "omitted_claim_ids": [],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The bash command validation is performed by the BASH_VALIDATOR_HOOK referenced in src/tools/run-cloud-claude-task.ts",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "BASH_VALIDATOR_HOOK",
+              "reason": "To confirm the hook exists and its role in validating commands"
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "The bash command validation is performed by the BASH_VALIDATOR_HOOK referenced in src/tools/run-cloud-claude-task.ts",
+          "verification_status": "SUPPORTED",
+          "rationale": "Evidence [0] defines BASH_VALIDATOR_HOOK as a path to validate-cloud-bash.cjs, and evidence [2] shows this variable is invoked via node in a hook configuration specifically for the Bash matcher.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:2400202665ba21e8c5930d0048eb3b18ea8b66e1a93e18442841d839e8f6c2b4",
+              "file": "src/tools/run-cloud-claude-task.ts",
+              "start_byte": 1354,
+              "end_byte": 1441,
+              "excerpt": "BASH_VALIDATOR_HOOK = join(__dirname, \"..\", \"..\", \"scripts\", \"validate-cloud-bash.cjs\")"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:413ef092859e2557c48212918834973bcfb3734c70d547d9d11e2f7e56835ee8",
+              "file": "src/tools/run-cloud-claude-task.ts",
+              "start_byte": 1449,
+              "end_byte": 1611,
+              "excerpt": "HOOK_SETTINGS = JSON.stringify({\n  hooks: {\n    PreToolUse: [{ matcher: \"Bash\", hooks: [{ type: \"command\", command: `node \"${BASH_VALIDATOR_HOOK}\"` }] }],\n  },\n})"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-07",
+    "question": "Which functions stop a local explorer model from reading outside its requested repository root?",
+    "elapsed_s": 41.6,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The local explorer model is prevented from reading outside its repository root by enforcing path resolution checks within the request processing logic.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "2898dbd37d37fb2abb2d03395a337d95515e220e49de322bb2d76f3aee0a1ec7",
+              "reason": "This symbol represents the registerLocalExplorerTask.filesRead variable which likely tracks or validates file access scope within the root."
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts:2400-2800",
+              "reason": "This range likely contains the core path resolution and validation logic for enforcing repository root boundaries during file access."
+            }
+          ]
+        },
+        {
+          "hypothesis": "Repository root protection is implemented through a dedicated function that resolves relative paths against the configured root directory before allowing file operations.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "5083a2f1ff87b986fe26cb8ae2f7caa26ecfec8bc30e1e7b0cba2510847cf27b",
+              "reason": "This symbol represents the resolveWithinRoot function which appears designed to validate paths within repository bounds."
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts:2650-2950",
+              "reason": "This range likely contains the implementation of resolveWithinRoot that performs root-relative path validation."
+            }
+          ]
+        },
+        {
+          "hypothesis": "Path scope enforcement occurs through runtime task state variables that track read operations and validate them against the defined repository root.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "8932c0f1704fce821bf686ee5049c57c575bebee9ac02f54a680df98d46282d7",
+              "reason": "This symbol represents the root variable that establishes the repository root boundary for local explorer operations."
+            },
+            {
+              "kind": "symbol",
+              "target": "2478f0327f9fbefbd5c1e7d7505aec76ee559a291317c09d205df84b475d",
+              "reason": "This symbol represents registerLocalExplorerTask which manages task execution including scope enforcement logic."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The repository root boundary is enforced through a combination of read operation tracking and path validation before file operations complete.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "724d739f073c6ae3baa2afca40b827b72ef257354683a536915c215ae2c5ac12",
+              "reason": "This symbol represents runRead.full which appears to manage the file reading operation flow with root validation."
+            },
+            {
+              "kind": "symbol",
+              "target": "d5d3e9bf2309fe0396dca0144667e1495ddce25692458cc2e3702e5116153f92",
+              "reason": "This symbol represents registerLocalExplorerTask.messages which tracks message state including root validation notifications."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "No direct source_range evidence available to verify the exact line numbers for resolveWithinRoot or path validation logic",
+        "Missing symbol candidates for core boundary enforcement mechanisms beyond registerLocalExplorerTask root variable",
+        "No relationship evidence connecting read operations to repository root validation functions"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-08",
+    "question": "How are tool-call and distinct-file-read budgets enforced in `local_explorer_task`?",
+    "elapsed_s": 70.7,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "- File-read budgets are enforced by monitoring file reads through variables tracking read operations. (src/tools/local-explorer-task.ts:8155-8184, src/tools/local-explorer-task.ts:5712-6641, src/tools/local-explorer-task.ts:6650-10172)",
+    "cited_claims": [
+      {
+        "id": "hypothesis-2",
+        "claim": "File-read budgets are enforced by monitoring file reads through variables tracking read operations.",
+        "citations": [
+          "src/tools/local-explorer-task.ts:8155-8184",
+          "src/tools/local-explorer-task.ts:5712-6641",
+          "src/tools/local-explorer-task.ts:6650-10172"
+        ]
+      }
+    ],
+    "omitted_claim_ids": [],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The tool-call budget for `local_explorer_task` is enforced by tracking the number of tool calls made during execution.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts:registerLocalExplorerTask.toolCallCount:variable-usage-patterns",
+              "reason": "The retrieved candidate #3 is a symbol that explicitly tracks tool call count, suggesting it may be used to enforce the budget."
+            }
+          ]
+        },
+        {
+          "hypothesis": "File-read budgets are enforced by monitoring file reads through variables tracking read operations.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "registerLocalExplorerTask.filesRead",
+              "reason": "The retrieved candidate #2 is a variable that tracks files read, which is the primary mechanism for enforcing a file-read budget."
+            }
+          ]
+        },
+        {
+          "hypothesis": "Budget enforcement involves validation against an allowlist of permitted tools.",
+          "required_evidence": [
+            {
+              "kind": "relationship",
+              "target": "ALLOWED_TOOLS_FLAG -> registerLocalExplorerTask.toolCallCount",
+              "reason": "The retrieved candidate #31 shows an ALLOWED_TOOLS_FLAG variable that would be used to validate tool usage against a budget."
+            }
+          ]
+        },
+        {
+          "hypothesis": "Budget limits are enforced at the worker level rather than at the task level.",
+          "required_evidence": [
+            {
+              "kind": "adapter_fact",
+              "target": "registerRunLocalWorkerTask.messages",
+              "reason": "The retrieved candidate #27 and #10 suggest worker-level implementation details."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": []
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-2",
+          "claim": "File-read budgets are enforced by monitoring file reads through variables tracking read operations.",
+          "verification_status": "SUPPORTED",
+          "rationale": "Code initializes a Set to track file reads, checks if size exceeds maxFilesRead within runRead logic, and refuses further reads when the budget is exhausted.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:2898dbd37d37fb2abb2d03395a337d95515e220e49de322bb2d76f3aee0a1ec7",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 8155,
+              "end_byte": 8184,
+              "excerpt": "filesRead = new Set<string>()"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:20274d698f89d2be4dfab2781c30ef68464d33424194d01e3af868979f0b2384",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 5712,
+              "end_byte": 6641,
+              "excerpt": "function runRead(\n  root: string,\n  path: string,\n  startLine: number | undefined,\n  endLine: number | undefined,\n  filesRead: Set<string>,\n  maxFilesRead: number,\n  maxOutputChars: number\n): string {\n  const full = resolveWithinRoot(root, path);\n  if (full === null) return \"(refused: path escapes repo root)\";\n  if (filesRead.size >= maxFilesRead && !filesRead.has(path)) {\n    return `(refused: file-read budget of ${maxFilesRead} exhausted)`;\n  }\n  filesRead.add(path);\n  try {\n    const content = readFileSync(full, \"utf8\");\n    let lines = content.split(\"\\n\");\n    if (startLine || endLine) {\n      lines = lines.slice((startLine || 1) - 1, endLine || lines.length);\n    }\n    const text = lines.map((l, i) => `${(startLine || 1) + i}\\t${l}`).join(\"\\n\");\n    return text.length > maxOutputChars ? text.slice(0, maxOutputChars) + \"\\n...(truncated)\" : text;\n  } catch (e: any) {\n    return `(read error: ${e.message})`;\n  }\n}"
+            },
+            {
+              "evidence_kind": "symbol",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "symbol_id": "symbol:sha256:2478f0327f9fbefbd5c1e7d7505aec76ee56de559a291317c09d205df84b475d",
+              "file": "src/tools/local-explorer-task.ts",
+              "start_byte": 6650,
+              "end_byte": 10172,
+              "excerpt": "function registerLocalExplorerTask(server: McpServer) {\n  server.tool(\n    \"local_explorer_task\",\n    \"Delegates read-only repo discovery (find files, grep symbols, read code, trace how something works) to a \" +\n      \"local Ollama model with a Glob/Grep/Read tool loop, bounded on tool calls/files/output. Returns a FINAL \" +\n      \"ANSWER with files, symbols, cited evidence, and a self-reported confidence. Per \" +\n      \"docs/benchmarks/local-explorer-2026-09-16.md: treat 'low' confidence as a signal to redo the search \" +\n      \"yourself or with a stronger model rather than trusting it - qwen3.5:4b's own hallucination in that pilot \" +\n      \"was correctly self-flagged low confidence. Never trusted blindly for anything you'll act on directly.\",\n    {\n      task: z.string().describe(\"The exploration question, e.g. 'find where X is validated and cite the function'.\"),\n      cwd: z.string().optional().describe(\"Repo root to search in. Defaults to the MCP server's own cwd.\"),\n      model: z.string().default(DEFAULT_MODEL).describe(\"Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:7b does not - see benchmark doc).\"),\n      max_tool_calls: z.number().default(8),\n      max_files_read: z.number().default(5),\n      max_output_chars: z.number().default(3000).describe(\"Per-tool-result truncation limit.\"),\n    },\n    async ({ task, cwd, model, max_tool_calls, max_files_read, max_output_chars }) => {\n      const root = resolve(cwd || process.cwd());\n      const filesRead = new Set<string>();\n      const messages: any[] = [\n        { role: \"system\", content: systemPrompt(max_tool_calls, max_files_read) },\n        { role: \"user\", content: task },\n      ];\n\n      let toolCallCount = 0;\n      const start = Date.now();\n\n      for (let turn = 0; turn < max_tool_calls + 2; turn++) {\n        const res = await fetch(`${OLLAMA_HOST}/api/chat`, {\n          method: \"POST\",\n          body: JSON.stringify({ model, stream: false, think: false, messages, tools: TOOLS }),\n        });\n        const data: any = await res.json();\n        const message = data.message;\n        messages.push(message);\n\n        if (!message.tool_calls || message.tool_calls.length === 0) {\n          const elapsed = ((Date.now() - start) / 1000).toFixed(1);\n          return {\n            content: [{ type: \"text\", text: `${message.content}\\n\\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s]` }],\n          };\n        }\n\n        for (const call of message.tool_calls) {\n          toolCallCount++;\n          const args = call.function.arguments || {};\n          let result: string;\n          if (toolCallCount > max_tool_calls) {\n            result = \"(refused: tool-call budget exhausted, give your FINAL ANSWER now)\";\n          } else if (call.function.name === \"glob\") {\n            result = runGlob(root, args.pattern);\n          } else if (call.function.name === \"grep\") {\n            result = runGrep(root, args.pattern, args.path, max_output_chars);\n          } else if (call.function.name === \"read\") {\n            result = runRead(root, args.path, args.start_line, args.end_line, filesRead, max_files_read, max_output_chars);\n          } else {\n            result = `(unknown tool ${call.function.name})`;\n          }\n          messages.push({ role: \"tool\", content: result, tool_call_id: call.id });\n        }\n      }\n\n      return { isError: true, content: [{ type: \"text\", text: `Gave up after ${max_tool_calls} tool calls without a final answer.` }] };\n    }\n  );\n}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-09",
+    "question": "What is the default model for local exploration, and what evidence justifies treating low-confidence results as untrusted?",
+    "elapsed_s": 47.7,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [],
+      "retrieval_gaps": [
+        "default model value in local explorer tool implementation",
+        "confidence thresholds used in capability matrix results documentation"
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-10",
+    "question": "If the cloud Bash validation hook receives invalid JSON, does it block the command?",
+    "elapsed_s": 61.6,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not verify a supported answer from the supplied evidence.",
+    "cited_claims": [],
+    "omitted_claim_ids": [
+      "hypothesis-1",
+      "hypothesis-2",
+      "hypothesis-3"
+    ],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The cloud Bash validation hook blocks commands when it receives invalid JSON.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "symbol symbol:sha256:b6f1b8a7c290356d1c4b1b1822778a37385d9c0d03d8e1d5a19c8b9d3c1f0e0c",
+              "reason": "The hook implementation details for JSON validation logic."
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-cloud-claude-task.ts:120:400",
+              "reason": "The source code containing the parsing and blocking logic."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The cloud Bash validation hook blocks commands if the JSON payload does not match an expected schema or is malformed.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "symbol symbol:sha256:2400202665ba21e8c5930d0048eb3b18ea8b66e1a93e18442841d839e8f6c2b4",
+              "reason": "The hook implementation details for JSON validation logic."
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-cloud-claude-task.ts:120:400",
+              "reason": "The source code containing the parsing and blocking logic."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The cloud Bash validation hook does not block commands if it receives invalid JSON.",
+          "required_evidence": [
+            {
+              "kind": "symbol",
+              "target": "symbol symbol:sha256:2400202665ba21e8c5930d0048eb3b18ea8b66e1a93e18442841d839e8f6c2b4",
+              "reason": "The hook implementation details for JSON validation logic."
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/run-cloud-claude-task.ts:120:400",
+              "reason": "The source code containing the parsing and blocking logic."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "Missing evidence for whether the hook blocks invalid JSON.",
+        "Missing evidence for the hook's specific blocking behavior on JSON validation failure."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "The cloud Bash validation hook blocks commands when it receives invalid JSON.",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Supplied evidence snippet contains only imports and a partial comment without logic regarding JSON validation or command blocking behavior.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "source_range",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "file": "src/tools/run-cloud-claude-task.ts",
+              "start_byte": 120,
+              "end_byte": 400,
+              "excerpt": "\"node:child_process\";\nimport { fileURLToPath } from \"node:url\";\nimport { dirname, join } from \"node:path\";\nimport { ALLOWED_TOOLS_FLAG, CLAUDE_SYSTEM_PROMPT } from \"../shell-allowlist.js\";\n\n// Runs the full `ollama launch claude` binary (real Claude Code harness)\n// against an Ol"
+            }
+          ]
+        },
+        {
+          "id": "hypothesis-2",
+          "claim": "The cloud Bash validation hook blocks commands if the JSON payload does not match an expected schema or is malformed.",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Supplied evidence snippet contains only imports and a partial comment without logic regarding JSON validation or command blocking behavior.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "source_range",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "file": "src/tools/run-cloud-claude-task.ts",
+              "start_byte": 120,
+              "end_byte": 400,
+              "excerpt": "\"node:child_process\";\nimport { fileURLToPath } from \"node:url\";\nimport { dirname, join } from \"node:path\";\nimport { ALLOWED_TOOLS_FLAG, CLAUDE_SYSTEM_PROMPT } from \"../shell-allowlist.js\";\n\n// Runs the full `ollama launch claude` binary (real Claude Code harness)\n// against an Ol"
+            }
+          ]
+        },
+        {
+          "id": "hypothesis-3",
+          "claim": "The cloud Bash validation hook does not block commands if it receives invalid JSON.",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Supplied evidence snippet contains only imports and a partial comment without logic regarding JSON validation or command blocking behavior.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "source_range",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "file": "src/tools/run-cloud-claude-task.ts",
+              "start_byte": 120,
+              "end_byte": 400,
+              "excerpt": "\"node:child_process\";\nimport { fileURLToPath } from \"node:url\";\nimport { dirname, join } from \"node:path\";\nimport { ALLOWED_TOOLS_FLAG, CLAUDE_SYSTEM_PROMPT } from \"../shell-allowlist.js\";\n\n// Runs the full `ollama launch claude` binary (real Claude Code harness)\n// against an Ol"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-11",
+    "question": "Which commit introduced the local explorer tool, and which source files did that introduction add or change?",
+    "elapsed_s": 71,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "- Commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 introduced the local explorer tool. (git:5b0f7d8edecfff3fe2304d8dffc43feff4606412)",
+    "cited_claims": [
+      {
+        "id": "hypothesis-1",
+        "claim": "Commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 introduced the local explorer tool.",
+        "citations": [
+          "git:5b0f7d8edecfff3fe2304d8dffc43feff4606412"
+        ]
+      }
+    ],
+    "omitted_claim_ids": [
+      "hypothesis-3"
+    ],
+    "tool_calls": 2,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "Commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 introduced the local explorer tool.",
+          "required_evidence": [
+            {
+              "kind": "git_history",
+              "target": "5b0f7d8edecfff3fe2304d8dffc43feff4606412",
+              "reason": "commit message explicitly states \"feat: add local explorer tool\""
+            }
+          ]
+        },
+        {
+          "hypothesis": "The introduction commit modified src/tools/local-explorer-task.ts.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Symbol definitions for registerLocalExplorerTask exist in this file."
+            }
+          ]
+        },
+        {
+          "hypothesis": "The local explorer tool was added in commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 along with related functionality in src/tools/local-explorer-task.ts.",
+          "required_evidence": [
+            {
+              "kind": "git_history",
+              "target": "5b0f7d8edecfff3fe2304d8dffc43feff4606412",
+              "reason": "commit message explicitly states \"feat: add local explorer tool\""
+            },
+            {
+              "kind": "source_range",
+              "target": "src/tools/local-explorer-task.ts",
+              "reason": "Symbol definitions for registerLocalExplorerTask exist in this file."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "exact commit hash that modified src/tools/local-explorer-task.ts during the feature introduction phase needs to be confirmed via source_range byte offsets or git diff.",
+        "the exact list of files added or changed by commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 requires direct source_range target validation."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": [
+        {
+          "id": "hypothesis-1",
+          "claim": "Commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 introduced the local explorer tool.",
+          "verification_status": "SUPPORTED",
+          "rationale": "Evidence [0] contains the exact commit hash and message 'feat: add local explorer tool'.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "git_commit",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "git_commit_hash": "5b0f7d8edecfff3fe2304d8dffc43feff4606412",
+              "excerpt": "5b0f7d8edecfff3fe2304d8dffc43feff4606412\nfeat: add local explorer tool\n\n"
+            }
+          ]
+        },
+        {
+          "id": "hypothesis-3",
+          "claim": "The local explorer tool was added in commit 5b0f7d8edecfff3fe2304d8dffc43feff4606412 along with related functionality in src/tools/local-explorer-task.ts.",
+          "verification_status": "INSUFFICIENT",
+          "rationale": "Evidence [0] confirms commit hash but does not list file paths or verify src/tools/local-explorer-task.ts.",
+          "resolution_quality": "exact",
+          "evidence": [
+            {
+              "evidence_kind": "git_commit",
+              "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+              "resolution_quality": "exact",
+              "git_commit_hash": "5b0f7d8edecfff3fe2304d8dffc43feff4606412",
+              "excerpt": "5b0f7d8edecfff3fe2304d8dffc43feff4606412\nfeat: add local explorer tool\n\n"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "model": "qwen3.5:4b",
+    "id": "SE-12",
+    "question": "Does this repository define a usable automated test command for the server?",
+    "elapsed_s": 28.4,
+    "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+    "answer_to_user": "I could not materialize evidence for a supported answer.",
+    "cited_claims": [],
+    "omitted_claim_ids": [],
+    "tool_calls": 1,
+    "discovery": {
+      "hypotheses": [
+        {
+          "hypothesis": "The repository defines an automated test command.",
+          "required_evidence": [
+            {
+              "kind": "source_range",
+              "target": "config/package.json",
+              "reason": "Scripts section in package.json may define test commands."
+            }
+          ]
+        }
+      ],
+      "retrieval_gaps": [
+        "The exact content of config/package.json scripts to verify if any test command is defined.",
+        "Symbol lookup for symbol:sha256:46d69d680ee56b8efe719c4c042646ca31aa1d99281d9c2163eee93f9494b9cf to verify server variable definition.",
+        "Symbol lookup for symbol:sha256:c1a97c53cb97f2b77d4495c66872ddb2757dd95272c6fa10fa51bdae156421f0 to verify selfTest function."
+      ]
+    },
+    "verification": {
+      "commit_hash": "f1a75a19d1708e36f60bba0de76714acc2343492",
+      "results": []
+    }
+  }
+]

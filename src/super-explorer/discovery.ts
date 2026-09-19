@@ -178,14 +178,15 @@ function buildDiscoveryPrompt(question: string, retrieval: HybridRetrievalResult
 /** Issues the discovery prompt and, on schema failure, one repair attempt. Returns null if both fail. */
 async function runDiscoveryPass(
   model: string,
-  prompt: string
+  prompt: string,
+  think = false
 ): Promise<{ plan: DiscoveryPlan; calls: number } | { error: unknown; calls: number }> {
-  const response = await generate(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat);
+  const response = await generate(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
   try {
     return { plan: parseDiscoveryModelResponse(response), calls: 1 };
   } catch (firstError) {
     const repairPrompt = `Convert the prior discovery response below into the supplied canonical JSON schema. Preserve its intended hypotheses and evidence targets; do not add claims, conclusions, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
-    const repaired = await generate(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat);
+    const repaired = await generate(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
     try {
       return { plan: parseDiscoveryModelResponse(repaired), calls: 2 };
     } catch {
@@ -202,7 +203,7 @@ async function runDiscoveryPass(
 export async function discoverEvidence(
   repositoryRoot: string,
   question: string,
-  options: { model?: string; limit?: number; mode?: RetrievalMode } = {}
+  options: { model?: string; limit?: number; mode?: RetrievalMode; think?: boolean } = {}
 ): Promise<DiscoveryResult> {
   const root = resolve(repositoryRoot);
   const trimmedQuestion = question.trim();
@@ -210,9 +211,10 @@ export async function discoverEvidence(
   const limit = options.limit ?? 10;
   const mode = options.mode ?? "hybrid";
   const model = options.model ?? DEFAULT_MODEL;
+  const think = options.think ?? false;
 
   const retrieval = await hybridRetrieve(root, trimmedQuestion, limit, mode);
-  const first = await runDiscoveryPass(model, buildDiscoveryPrompt(trimmedQuestion, retrieval));
+  const first = await runDiscoveryPass(model, buildDiscoveryPrompt(trimmedQuestion, retrieval), think);
   if ("error" in first) {
     throw new Error(`Discovery model response failed schema validation after one repair attempt: ${first.error instanceof Error ? first.error.message : String(first.error)}`);
   }
@@ -225,7 +227,7 @@ export async function discoverEvidence(
   const gapQuery = `${trimmedQuestion} ${first.plan.retrieval_gaps.join(" ")}`;
   const gapRetrieval = await hybridRetrieve(root, gapQuery, limit, mode);
   const mergedRetrieval = mergeRetrievalResults(retrieval, gapRetrieval, limit * 2);
-  const second = await runDiscoveryPass(model, buildDiscoveryPrompt(trimmedQuestion, mergedRetrieval));
+  const second = await runDiscoveryPass(model, buildDiscoveryPrompt(trimmedQuestion, mergedRetrieval), think);
   const totalCalls = first.calls + second.calls;
   if ("error" in second) {
     return { commit_hash: retrieval.commit_hash, question: trimmedQuestion, retrieval, discovery: first.plan, model_calls: totalCalls };
