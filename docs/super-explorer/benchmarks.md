@@ -731,6 +731,24 @@ cases where the model reasons/hedges into a malformed response, but this
 wasn't isolated), and this is a single run on 5-6 questions per model — not
 enough to rule out flakiness before treating `limit: 80` as a new default.
 
+**Post citation-repair check (2026-09-19)**: a clean, serial rerun of
+`qwen3.5:4b` on SE-01 and SE-03 failed both questions in every tested cell.
+Raw logs were deliberately retained only in temporary storage; the measured
+summary is:
+
+| limit | think | score | SE-01 | SE-03 |
+|---:|:---:|:---:|---:|---:|
+| 80 | false | 0/2 | 224.9s | 114.2s |
+| 80 | true | 0/2 | 17.5s | 30.8s |
+| 100 | false | 0/2 | 41.4s | 78.4s |
+| 100 | true | 0/2 | 22.1s | 21.9s |
+
+This does not support treating the earlier `limit:80` 12/12 result as a
+reproducible reliability claim. `think:false` also hit a verification-result
+ordering/schema failure on SE-03 at both limits. `think:true` avoided that
+error but still omitted required evidence and answer details, so increasing
+the retrieval limit is not the next fix to pursue.
+
 ## Next session
 
 - [x] Re-run `qwen3.5:4b` serially (one question at a time, no parallel
