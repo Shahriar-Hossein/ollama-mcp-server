@@ -3,7 +3,7 @@ import { Store } from './storage.js';
 import { QualityService } from './service.js';
 import { markdown, validateReview } from './reviewer.js';
 
-const help = `quality scan|status|review [next]|work|findings|show ID|accept ID|reject ID
+const help = `quality scan|status|review [next]|work|findings|show ID|accept ID|reject ID|rename-reports
   --cwd PATH       Target repository (default current directory)
   --count N        Maximum attempts; review defaults to one, --file to all eligible
   --file PATH      Restrict reviews to one relative source path
@@ -19,7 +19,7 @@ async function main() {
   const {values,positionals} = parseArgs({allowPositionals:true,options:{cwd:{type:'string'},count:{type:'string'},file:{type:'string'},symbol:{type:'string'},model:{type:'string'},'num-ctx':{type:'string'},force:{type:'boolean'},severity:{type:'string'},help:{type:'boolean'}}});
   if (values.help || !positionals.length) { console.log(help); return; }
   const [command,arg] = positionals;
-  if (!['scan','status','review','work','findings','show','accept','reject'].includes(command)) throw new Error('Unknown command');
+  if (!['scan','status','review','work','findings','show','accept','reject','rename-reports'].includes(command)) throw new Error('Unknown command');
   if (positionals.length > 2 || (arg && !(command === 'review' && arg === 'next') && !['show','accept','reject'].includes(command))) throw new Error('Unexpected positional argument');
   if (['show','accept','reject'].includes(command) && !arg) throw new Error('Review ID required');
   const count = values.count === undefined ? undefined : Number(values.count);
@@ -37,6 +37,7 @@ async function main() {
   try {
     if (command === 'scan') print(service.scan());
     else if (command === 'status') print(service.status());
+    else if (command === 'rename-reports') print(service.renameReports());
     else if (command === 'findings') print(service.findings(values.severity,count));
     else if (command === 'show') {
       const row = service.show(arg);

@@ -21,6 +21,7 @@ npm run quality -- findings --severity high --cwd /path/to/repo
 npm run quality -- show REVIEW_ID --cwd /path/to/repo
 npm run quality -- accept REVIEW_ID --cwd /path/to/repo
 npm run quality -- reject REVIEW_ID --cwd /path/to/repo
+npm run quality -- rename-reports --cwd /path/to/repo
 ```
 
 Other review modes:
@@ -85,7 +86,10 @@ these tests.
 - `storage.ts`: SQLite transactions, process lock and safe report creation.
 
 Only `<target>/.quality-review/` is written: `state.db`, SQLite's transient
-journal, and `reports/<generated-UUID>.md`. Add that directory to your ignore
+journal, and reports named `<function>-<model>-<repeat>.md` (for example,
+`runRead-qwen2.5-coder%3A7b-1.md`). The repeat number is per function and
+model, in review order. `rename-reports` migrates existing report filenames
+and their SQLite references. Add that directory to your ignore
 rules manually if desired; the CLI never edits `.gitignore`.
 
 Symbols retain repository, file, logical name/type, lines, hashes, timestamps,

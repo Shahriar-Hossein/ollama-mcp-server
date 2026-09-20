@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { constants, fstatSync, lstatSync, mkdirSync, openSync, closeSync, realpathSync, readFileSync, writeFileSync } from 'node:fs';
+import { constants, fstatSync, lstatSync, mkdirSync, openSync, closeSync, realpathSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export class Store {
@@ -60,13 +60,16 @@ export class Store {
     });
   }
   unlock() { this.db.prepare('DELETE FROM worker_lock WHERE pid=?').run(process.pid); }
-  report(id: string, text: string) {
-    if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('Unsafe report ID');
+  private reportFile(name: string) {
+    if (!/^[A-Za-z0-9._%-]+\.md$/.test(name)) throw new Error('Unsafe report filename');
     this.checkDirectory();
     const directory = join(this.directory, 'reports');
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     if (lstatSync(directory).isSymbolicLink() || realpathSync(directory) !== directory) throw new Error('Unsafe reports directory');
-    const path = join(directory, `${id}.md`);
+    return join(directory, name);
+  }
+  report(name: string, text: string) {
+    const path = this.reportFile(name);
     // Exclusive creation prevents overwriting symlinks or hard links supplied by the repository.
     try { writeFileSync(path, text, { flag: 'wx', mode: 0o600 }); }
     catch (error: any) {
@@ -74,7 +77,20 @@ export class Store {
       const stat = lstatSync(path);
       if (!stat.isFile() || stat.nlink !== 1 || stat.size > 200_000 || readFileSync(path, 'utf8') !== text) throw new Error('Unsafe or conflicting report file');
     }
-    return `reports/${id}.md`;
+    return `reports/${name}`;
+  }
+  renameReport(previous: string, name: string) {
+    if (!previous.startsWith('reports/')) throw new Error('Unsafe report path');
+    const previousName = previous.slice('reports/'.length);
+    const from = this.reportFile(previousName);
+    const to = this.reportFile(name);
+    if (from === to) return previous;
+    const stat = lstatSync(from);
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > 200_000) throw new Error('Unsafe report file');
+    try { lstatSync(to); throw new Error('Conflicting report filename'); }
+    catch (error: any) { if (error.code !== 'ENOENT') throw error; }
+    renameSync(from,to);
+    return `reports/${name}`;
   }
   close() { this.db.close(); }
 }

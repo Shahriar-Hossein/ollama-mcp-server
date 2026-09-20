@@ -5,6 +5,10 @@ import { readSymbols, scanFiles, sourcePath, type SymbolInput } from './scanner.
 import { buildContext, callModel, DEFAULT_MODEL, markdown, PROMPT_VERSION, validateReview, type ModelCall } from './reviewer.js';
 
 type Row = SymbolInput & {current_status:string; retries:number};
+function reportPart(value: string) { return encodeURIComponent(value); }
+export function reportFilename(qualifiedName: string, model: string, number: number) {
+  return `${reportPart(qualifiedName)}-${reportPart(model)}-${number}.md`;
+}
 export class QualityService {
   constructor(readonly store: Store) {}
   private upsert(symbol: SymbolInput) {
@@ -35,11 +39,27 @@ export class QualityService {
     } finally { this.store.unlock(); }
   }
   recoverReports() {
-    for (const row of this.store.db.prepare("SELECT * FROM reviews WHERE verdict='finding' AND report_path IS NULL").iterate()) {
+    for (const row of this.store.db.prepare("SELECT r.*,s.qualified_name FROM reviews r JOIN symbols s ON s.id=r.symbol_id WHERE r.verdict='finding' AND r.report_path IS NULL").iterate()) {
       const id = String(row.id);
-      const path = this.store.report(id,markdown(id,JSON.parse(String(row.input_json)),String(row.model),String(row.created_at),validateReview(String(row.result_json)),Number(row.num_ctx) || 32768));
+      const path = this.store.report(this.nameFor(id,String(row.symbol_id),String(row.model),String(row.qualified_name)),markdown(id,JSON.parse(String(row.input_json)),String(row.model),String(row.created_at),validateReview(String(row.result_json)),Number(row.num_ctx) || 32768));
       this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,id);
     }
+  }
+  renameReports() {
+    this.store.lock();
+    try {
+      let renamed = 0;
+      for (const row of this.store.db.prepare('SELECT r.id,r.symbol_id,r.model,r.report_path,s.qualified_name FROM reviews r JOIN symbols s ON s.id=r.symbol_id ORDER BY r.rowid').iterate()) {
+        if (!row.report_path) continue;
+        const name = this.nameFor(String(row.id),String(row.symbol_id),String(row.model),String(row.qualified_name));
+        const path = this.store.renameReport(String(row.report_path),name);
+        if (path !== row.report_path) {
+          this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,row.id);
+          renamed++;
+        }
+      }
+      return {renamed};
+    } finally { this.store.unlock(); }
   }
   status() {
     const counts: Record<string, number> = {pending:0,reviewed:0,stale:0,failed:0,ignored:0};
@@ -107,12 +127,16 @@ export class QualityService {
           this.store.db.prepare("UPDATE symbols SET current_status='reviewed',last_reviewed_at=?,last_reviewed_hash=?,retries=0,retry_after=0,error=NULL WHERE id=?").run(date,symbol.content_hash,row.id);
         });
         completed++;
-        const path = this.store.report(id,markdown(id,input,model,date,result,numCtx));
+        const path = this.store.report(this.nameFor(id,row.id,model,symbol.qualified_name),markdown(id,input,model,date,result,numCtx));
         this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,id);
         options.onResult?.({id,symbol: symbol.qualified_name,verdict:result.verdict});
       }
       return {attempted,completed};
     } finally { this.store.db.exec('DROP TABLE IF EXISTS attempted'); this.store.unlock(); }
+  }
+  private nameFor(id: string, symbolId: string, model: string, qualifiedName: string) {
+    const number = Number(this.store.db.prepare('SELECT count(*) AS count FROM reviews WHERE symbol_id=? AND model=? AND rowid<=(SELECT rowid FROM reviews WHERE id=?)').get(symbolId,model,id)?.count);
+    return reportFilename(qualifiedName,model,number);
   }
   private fail(id: string, error: unknown) {
     this.store.db.prepare("UPDATE symbols SET current_status=CASE WHEN EXISTS (SELECT 1 FROM reviews WHERE symbol_id=symbols.id AND reviewed_hash=symbols.content_hash) THEN 'reviewed' ELSE 'failed' END,retries=retries+1,retry_after=?,error=? WHERE id=?").run(Date.now()+60_000,String(error).slice(0,2000),id);

@@ -91,6 +91,16 @@ test('review passes an explicit context window to the model call', async t => {
   assert.match(String(store.db.prepare('SELECT report_path FROM reviews').get()?.report_path),/^reports\//);
 });
 
+test('reports use readable per-function and per-model sequence names', async t => {
+  const root = setup(t), store = new Store(root), service = new QualityService(store);
+  t.after(()=>store.close()); service.scan();
+  await service.review({symbol:'alpha',model:'qwen2.5-coder:7b'},async()=>clean);
+  await service.review({symbol:'alpha',model:'qwen2.5-coder:7b',force:true},async()=>clean);
+  const paths = store.db.prepare('SELECT report_path FROM reviews ORDER BY rowid').all().map((row:any)=>row.report_path);
+  assert.deepEqual(paths,['reports/alpha-qwen2.5-coder%3A7b-1.md','reports/alpha-qwen2.5-coder%3A7b-2.md']);
+  assert.deepEqual(service.renameReports(),{renamed:0});
+});
+
 test('malformed results, finite retries, outage stop, lock, atomic scan and report recovery', async t => {
   const root = setup(t), store = new Store(root), service = new QualityService(store);
   t.after(()=>store.close()); service.scan();
@@ -129,7 +139,7 @@ test('reject traversal, source/storage/report symlinks and hard links; skip depe
   assert.equal(symbols(store).length,5);
   assert.throws(()=>store.report('../../outside','bad'),/Unsafe/);
   symlinkSync(root,join(root,'.quality-review','reports'));
-  assert.throws(()=>store.report('00000000-0000-0000-0000-000000000000','bad'),/Unsafe/);
+  assert.throws(()=>store.report('safe.md','bad'),/Unsafe/);
   store.close();
   const root2 = mkdtempSync(join(tmpdir(),'quality-unsafe-')); t.after(()=>rmSync(root2,{recursive:true,force:true}));
   symlinkSync(root,join(root2,'.quality-review')); assert.throws(()=>new Store(root2),/Unsafe/);
