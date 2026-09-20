@@ -48,14 +48,15 @@ This is the canonical instructions file for this repo — other agent configs
   standalone `.cjs` file (no build step) so it can't import the TS module.
 - `src/tools/*.ts` — one file per MCP tool.
 - `src/tools/local-explorer-task.ts` — read-only repo-discovery worker
-  (glob/grep/read tool loop against a local Ollama model), promoted from the
+  (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
   pilot in `docs/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
   `qwen3.5:4b` — it's the only local model confirmed to reliably emit real
   `tool_calls` in this loop; `qwen2.5-coder:7b` fabricates confidently
   instead of calling tools at all, don't route it here. Every `read`/`grep`
   path is checked against the repo root before touching disk (see
   `resolveWithinRoot`) since the path comes from model output, not the
-  caller. Treat a `Confidence: low` final answer as "redo this yourself or
+  caller. `ast_grep` invokes only the fixed executable with validated argv
+  (never a shell), and accepts TypeScript/JavaScript only. Treat a `Confidence: low` final answer as "redo this yourself or
   escalate," never as a result to act on directly — that's the one signal
   the pilot showed actually tracked correctness.
 - `docs/` — see [docs/README.md](docs/README.md) for the full index. Start
@@ -91,7 +92,7 @@ See [README.md](README.md) for the project pitch and setup.
   silently ran at Ollama's runtime default (4096 tokens) regardless of the
   model's real context window — a handful of tool-call results could evict
   earlier evidence from context before the model ever saw it. Fixed by
-  adding an explicit `num_ctx` param (default 16384). In the 10-model
+  adding an explicit `num_ctx` param (now default 32768; it was 16384 in the 10-model benchmark). In the 10-model
   SE-01..12 rerun after the fix, `granite4.2:3b` went from 0/5 (pre-fix,
   Super Explorer pipeline) to 7/12 (post-fix, same gold set) — though at
   ~11x `qwen3.5:4b`'s latency per question, so it's a fallback, not a
@@ -113,6 +114,7 @@ Claude's own quota is spent only on work that actually benefits from it.
 ## Development workflow
 
 - No build/lint/typecheck pipeline exists yet — just `npm start` to run it.
+- For a benchmark that can outlive this command interface's ~30-second attachment window, launch one detached `setsid nohup flock -n` supervisor with stdout/stderr redirected to an ignored `benchmark-data/` log. Poll that log and its final artifact; do not retry while its lock is held. Before starting the next model, confirm the prior artifact is complete and the lock-owning process is gone.
 - Keep changes minimal; this is meant to stay a thin bridge, not grow into a
   framework.
 - If you change the default model, check `ollama list` first — don't assume

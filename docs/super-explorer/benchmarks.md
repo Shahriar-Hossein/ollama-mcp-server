@@ -429,11 +429,16 @@ system prompt plus up to 24 tool-call results at up to 6000 chars each, a
 handful of file reads could silently evict earlier tool output from context
 — a plausible cause for confident-but-wrong answers seen in earlier trials.
 Fix applied in [`src/tools/local-explorer-task.ts`](../../src/tools/local-explorer-task.ts):
-`num_ctx` is now an explicit param, default `16384`, wired into the
+`num_ctx` became an explicit param with a sweep default of `16384`, wired into the
 `options` object alongside `num_predict`. Budgets were widened to match
 (`max_tool_calls` 24→32, `max_files_read` 10→14, `max_output_chars`
 6000→8000, `request_timeout_ms` 180s→240s) since context is no longer the
 limiter.
+
+The values above describe the 2026-09-18/19 sweep. The current production
+defaults are 50 tool calls, 8,000 characters per tool result, an 8,192-token
+per-turn output cap, and a 32,768-token context; they require a fresh
+benchmark before any performance claim is made.
 
 Ran SE-01 through SE-12 (`think: false`) against every local, non-coder,
 non-embedding, non-7B model available (`qwen3.5:0.8b`, `qwen3.5:2b`,

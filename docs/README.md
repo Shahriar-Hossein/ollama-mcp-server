@@ -9,6 +9,12 @@ Top-level index. Find the folder that answers your question below, then open
 | [planning/](planning/README.md) | Strategy docs, open proposals, and past design experiments |
 | [super-explorer/](super-explorer/README.md) | Separate subsystem: repo indexing, retrieval, and knowledge-store design |
 
+## Root documents
+
+- [Cost-aware agent workflow](cost-aware-agent-workflow.md) — how to use
+  local/cloud workers without delegating final judgment, review, or commit
+  acceptance.
+
 Each doc already has its own `##` headers — `grep -n '^#' <file>` to jump
 straight to a section instead of reading the whole thing.
 

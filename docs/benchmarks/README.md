@@ -25,6 +25,7 @@ numbers behind one specific series.
 | [2026-09-15-capability-matrix-plan.md](runs/2026-09-15-capability-matrix-plan.md) | Planned fixtures and measurement rules for task-specific model routing |
 | [2026-09-16-capability-matrix-results.md](runs/2026-09-16-capability-matrix-results.md) | Measured results for the plan above, by task (extraction, groupBy, evidence-boundary, conflict, bug-investigation, retrieval, summary) |
 | [2026-09-16-local-explorer.md](runs/2026-09-16-local-explorer.md) | Can a local model absorb repo-discovery tool calls ahead of Haiku/Sonnet (not: is its single-completion output correct) |
+| [2026-09-19-explorer-scout-comparison.md](runs/2026-09-19-explorer-scout-comparison.md) | Scout comparison and Qwen's clean 50-call, thinking-enabled rerun; raw outputs remain in ignored `benchmark-data/explorer-scout/` |
 
 ## The rule for benchmark work
 

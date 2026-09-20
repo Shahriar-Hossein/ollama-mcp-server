@@ -18,6 +18,7 @@
     "verify:super-explorer": "tsx src/super-explorer/verification-cli.ts",
     "synthesize:super-explorer": "tsx src/super-explorer/synthesis-cli.ts",
     "benchmark:super-explorer": "tsx src/super-explorer/baseline-benchmark-cli.ts",
+    "benchmark:explorer-scout": "tsx scripts/run-explorer-scout-benchmark.ts",
     "explore:super-explorer": "tsx src/super-explorer/explore-cli.ts",
     "gold-set:super-explorer": "tsx src/super-explorer/gold-set-cli.ts",
     "start": "tsx --env-file-if-exists=.env src/index.ts",

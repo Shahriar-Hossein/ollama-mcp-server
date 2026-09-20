@@ -13,14 +13,31 @@ import { OLLAMA_HOST } from "../ollama-client.js";
 // before changing the default model or the confidence-gate framing below.
 //
 // Unlike run_local_worker_task/run_cloud_claude_task, this tool only reads -
-// no shell command ever runs unvalidated. Still capped hard on tool calls,
-// files read, and output size so a confused model can't turn "explore the
-// repo" into "read everything."
+// its fixed local executables are invoked with argv, never through a shell.
+// Still capped hard on tool calls, files read, and output size so a confused
+// model can't turn "explore the repo" into "read everything."
 
 const DEFAULT_MODEL = "qwen3.5:4b";
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build"]);
+const AST_GREP_LANGUAGES = new Set(["TypeScript", "JavaScript"]);
 
 const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "ast_grep",
+      description: "Search TypeScript or JavaScript by syntax shape, ignoring comments and strings. Use $NAME for one syntax node and $$$ARGS for zero or more nodes. Returns matching file:line:text.",
+      parameters: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "A valid TypeScript or JavaScript ast-grep pattern, e.g. 'process.env.$NAME'." },
+          language: { type: "string", enum: ["TypeScript", "JavaScript"] },
+          path: { type: "string", description: "Directory or file to search. Defaults to repo root." },
+        },
+        required: ["pattern", "language"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -63,11 +80,12 @@ const TOOLS = [
 ];
 
 function systemPrompt(maxToolCalls: number, maxFilesRead: number): string {
-  return `You are a fast, cheap repo-exploration worker. You have three read-only tools: glob, grep, read.
-Your job: find the exact files/functions relevant to the user's question and report concise evidence.
+  return `You are a fast, cheap repo-exploration worker. You have four read-only tools: glob, grep, ast_grep, read.
+Your job: find the exact files/functions relevant to the user's question and report concise evidence. Keep the final answer short; the parent caller needs the useful citations, not a long narrative.
 Rules:
 - You get at most ${maxToolCalls} tool calls total and may read at most ${maxFilesRead} files. Budget them.
 - Never guess a file exists - use glob/grep to confirm before reading. Guessing paths instead of grepping for a real term wastes your budget and produces wrong answers.
+- Use ast_grep for TypeScript/JavaScript code shapes (calls, declarations, property access); use grep for text, documentation, config, or a regex search.
 - When done, reply with a FINAL ANSWER in this exact format and nothing else:
 FINAL ANSWER:
 Files: <comma-separated relative paths>
@@ -152,6 +170,33 @@ function runGrep(root: string, pattern: string, path: string | undefined, maxOut
   }
 }
 
+function runAstGrep(root: string, pattern: string, language: string, path: string | undefined, maxOutputChars: number): string {
+  const searchPath = resolveWithinRoot(root, path || ".");
+  if (searchPath === null) return "(refused: path escapes repo root)";
+  if (!AST_GREP_LANGUAGES.has(language)) return "(refused: language must be TypeScript or JavaScript)";
+  if (!pattern.trim() || pattern.length > 2_000) return "(refused: pattern must contain 1 to 2000 characters)";
+  try {
+    const out = execFileSync(
+      "ast-grep",
+      ["run", "--lang", language, "--pattern", pattern, "--json=stream", searchPath],
+      { encoding: "utf8", timeout: 5000, maxBuffer: 128 * 1024 }
+    );
+    const lines: string[] = [];
+    for (const raw of out.trim().split("\n")) {
+      if (!raw) continue;
+      const match = JSON.parse(raw) as { file: string; lines: string; range: { start: { line: number; column: number } } };
+      lines.push(`${match.file}:${match.range.start.line}:${match.range.start.column}: ${match.lines}`);
+      if (lines.length === 50) break;
+    }
+    const text = lines.join("\n");
+    return text ? (text.length > maxOutputChars ? text.slice(0, maxOutputChars) + "\n...(truncated)" : text) : "(no matches)";
+  } catch (error: any) {
+    if (error.status === 1) return "(no matches)";
+    const detail = String(error.stderr || error.message).trim();
+    return `(ast-grep error: ${detail.slice(0, maxOutputChars)})`;
+  }
+}
+
 function runRead(
   root: string,
   path: string,
@@ -200,11 +245,11 @@ export async function runLocalExplorerTask({
   task,
   cwd,
   model = DEFAULT_MODEL,
-  max_tool_calls = 24,
+  max_tool_calls = 50,
   max_files_read = 10,
-  max_output_chars = 6000,
+  max_output_chars = 8_000,
   num_predict = 8192,
-  num_ctx = 16384,
+  num_ctx = 32_768,
   request_timeout_ms = 180_000,
   think = false,
 }: LocalExplorerTaskParams): Promise<{ isError?: boolean; text: string }> {
@@ -255,6 +300,8 @@ export async function runLocalExplorerTask({
         result = runGlob(root, args.pattern);
       } else if (call.function.name === "grep") {
         result = runGrep(root, args.pattern, args.path, max_output_chars);
+      } else if (call.function.name === "ast_grep") {
+        result = runAstGrep(root, args.pattern, args.language, args.path, max_output_chars);
       } else if (call.function.name === "read") {
         result = runRead(root, args.path, args.start_line, args.end_line, filesRead, max_files_read, max_output_chars);
       } else {
@@ -271,7 +318,7 @@ export function registerLocalExplorerTask(server: McpServer) {
   server.tool(
     "local_explorer_task",
     "Delegates read-only repo discovery (find files, grep symbols, read code, trace how something works) to a " +
-      "local Ollama model with a Glob/Grep/Read tool loop, bounded on tool calls/files/output. Returns a FINAL " +
+      "local Ollama model with a Glob/Grep/AST-grep/Read tool loop, bounded on tool calls/files/output. Returns a FINAL " +
       "ANSWER with files, symbols, cited evidence, and a self-reported confidence. Per " +
       "docs/benchmarks/runs/2026-09-16-local-explorer.md: treat 'low' confidence as a signal to redo the search " +
       "yourself or with a stronger model rather than trusting it - qwen3.5:4b's own hallucination in that pilot " +
@@ -280,11 +327,11 @@ export function registerLocalExplorerTask(server: McpServer) {
       task: z.string().describe("The exploration question, e.g. 'find where X is validated and cite the function'."),
       cwd: z.string().optional().describe("Repo root to search in. Defaults to the MCP server's own cwd."),
       model: z.string().default(DEFAULT_MODEL).describe("Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:7b does not - see benchmark doc)."),
-      max_tool_calls: z.number().default(24),
+      max_tool_calls: z.number().default(50),
       max_files_read: z.number().default(10),
-      max_output_chars: z.number().default(6000).describe("Per-tool-result truncation limit."),
+      max_output_chars: z.number().default(8_000).describe("Per-tool-result truncation limit."),
       num_predict: z.number().default(8192).describe("Max output tokens per model turn. Not set by Ollama's own default, so we set one explicitly."),
-      num_ctx: z.number().default(16384).describe("Context window size. Ollama's own runtime default (4096) is too small for this tool loop - a handful of file reads can evict earlier tool results from context, so we set one explicitly."),
+      num_ctx: z.number().default(32_768).describe("Context window size. Ollama's own runtime default (4096) is too small for this tool loop - a handful of file reads can evict earlier tool results from context, so we set one explicitly."),
       request_timeout_ms: z.number().default(180_000).describe("Per-chat-call timeout, guards against an infinite/hung generation."),
       think: z.boolean().default(false).describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),
     },
