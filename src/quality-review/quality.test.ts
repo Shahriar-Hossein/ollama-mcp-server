@@ -81,11 +81,22 @@ test('symbol filter reviews only the selected function', async t => {
   assert.deepEqual(seen,['beta']);
 });
 
+test('review passes an explicit context window to the model call', async t => {
+  const root = setup(t), store = new Store(root), service = new QualityService(store);
+  t.after(()=>store.close()); service.scan();
+  let received: number | undefined;
+  await service.review({numCtx:8192},async (_model,_input,numCtx)=>{ received=numCtx; return clean; });
+  assert.equal(received,8192);
+  assert.equal(store.db.prepare('SELECT num_ctx FROM reviews').get()?.num_ctx,8192);
+  assert.match(String(store.db.prepare('SELECT report_path FROM reviews').get()?.report_path),/^reports\//);
+});
+
 test('malformed results, finite retries, outage stop, lock, atomic scan and report recovery', async t => {
   const root = setup(t), store = new Store(root), service = new QualityService(store);
   t.after(()=>store.close()); service.scan();
   assert.throws(()=>validateReview('no json'));
   assert.deepEqual(validateReview('{}').verdict,'skip');
+  assert.equal(validateReview(JSON.stringify({verdict:'skip',severity:'low'})).verdict,'skip');
   assert.deepEqual(validateReview(JSON.stringify({findings:['Avoid duplicate work']})).issues,[{category:'other',description:'Avoid duplicate work',reasoning:'',suggested_change:''}]);
   assert.deepEqual(validateReview(JSON.stringify({verdict:'finding',severity:'high',confidence:0.95,issues:[{what_is_wrong:'Missing bound',why:'Error text is unbounded',suggested_code:'Limit it'}]})),{verdict:'finding',severity:'high',confidence:'high',title:'Model-raised concern',summary:'Inspect the issue details and raw model response.',issues:[{category:'other',description:'Missing bound',reasoning:'Error text is unbounded',suggested_change:'Limit it'}],suggested_code:null,assumptions:[],needs_broader_context:false});
   await service.review({count:2},async()=>'{');

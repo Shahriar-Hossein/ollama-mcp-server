@@ -37,7 +37,7 @@ export class QualityService {
   recoverReports() {
     for (const row of this.store.db.prepare("SELECT * FROM reviews WHERE verdict='finding' AND report_path IS NULL").iterate()) {
       const id = String(row.id);
-      const path = this.store.report(id,markdown(id,JSON.parse(String(row.input_json)),String(row.model),String(row.created_at),validateReview(String(row.result_json))));
+      const path = this.store.report(id,markdown(id,JSON.parse(String(row.input_json)),String(row.model),String(row.created_at),validateReview(String(row.result_json)),Number(row.num_ctx) || 32768));
       this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,id);
     }
   }
@@ -62,7 +62,7 @@ export class QualityService {
     this.show(id);
     this.store.db.prepare('UPDATE reviews SET human_status=? WHERE id=?').run(decision,id);
   }
-  async review(options: {count?:number; file?:string; symbol?:string; model?:string; force?:boolean; stopped?:()=>boolean; onResult?:(result:unknown)=>void} = {}, modelCall: ModelCall = callModel) {
+  async review(options: {count?:number; file?:string; symbol?:string; model?:string; numCtx?:number; force?:boolean; stopped?:()=>boolean; onResult?:(result:unknown)=>void} = {}, modelCall: ModelCall = callModel) {
     const model = options.model ?? DEFAULT_MODEL;
     const file = options.file ? relative(this.store.root,sourcePath(this.store.root,options.file)) : null;
     const count = options.count ?? (file ? Infinity : 1);
@@ -91,7 +91,7 @@ export class QualityService {
         } catch (error) { this.fail(row.id,error); options.onResult?.({id:row.id,error:String(error)}); attempted++; continue; }
         attempted++;
         let raw: string;
-        try { raw = await modelCall(model,input); }
+        try { raw = await modelCall(model,input,options.numCtx); }
         catch (error) {
           this.fail(row.id,error);
           // A transport/model-service error stops this batch instead of poisoning the queue.
@@ -101,15 +101,14 @@ export class QualityService {
         try { result = validateReview(raw); }
         catch (error) { this.fail(row.id,error); options.onResult?.({id:row.id,error:String(error)}); continue; }
         const id = randomUUID(), date = new Date().toISOString();
+        const numCtx = options.numCtx ?? 32768;
         this.store.transaction(() => {
-          this.store.db.prepare(`INSERT INTO reviews(id,symbol_id,reviewed_hash,model,prompt_version,verdict,severity,confidence,summary,created_at,input_json,result_json,raw_response) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,row.id,symbol.content_hash,model,PROMPT_VERSION,result.verdict,result.severity,result.confidence,result.summary,date,JSON.stringify(input),JSON.stringify(result),raw);
+          this.store.db.prepare(`INSERT INTO reviews(id,symbol_id,reviewed_hash,model,prompt_version,verdict,severity,confidence,summary,created_at,input_json,result_json,raw_response,num_ctx) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,row.id,symbol.content_hash,model,PROMPT_VERSION,result.verdict,result.severity,result.confidence,result.summary,date,JSON.stringify(input),JSON.stringify(result),raw,numCtx);
           this.store.db.prepare("UPDATE symbols SET current_status='reviewed',last_reviewed_at=?,last_reviewed_hash=?,retries=0,retry_after=0,error=NULL WHERE id=?").run(date,symbol.content_hash,row.id);
         });
         completed++;
-        if (result.verdict === 'finding') {
-          const path = this.store.report(id,markdown(id,input,model,date,result));
-          this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,id);
-        }
+        const path = this.store.report(id,markdown(id,input,model,date,result,numCtx));
+        this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,id);
         options.onResult?.({id,symbol: symbol.qualified_name,verdict:result.verdict});
       }
       return {attempted,completed};

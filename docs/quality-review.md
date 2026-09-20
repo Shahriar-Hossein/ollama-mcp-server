@@ -30,6 +30,7 @@ npm run quality -- review next --cwd /path/to/repo
 npm run quality -- review --file src/Foo.ts --cwd /path/to/repo
 npm run quality -- review --file src/Foo.ts --count 3 --cwd /path/to/repo
 npm run quality -- review --file src/Foo.ts --symbol parseConfig --cwd /path/to/repo
+npm run quality -- review --file src/Foo.ts --symbol parseConfig --model qwen2.5-coder:7b --num-ctx 8192 --force --cwd /path/to/repo
 npm run quality -- work --model qwen3.5:4b --cwd /path/to/repo
 npm run quality -- review next --force --cwd /path/to/repo
 ```
@@ -52,7 +53,9 @@ A hard kill preserves committed results; the unfinished request may run again.
 The default is `qwen2.5-coder:3b`, matching `run_ollama_task`. Override it with
 `--model`. The CLI loads this project's `.env`, and reuses `OLLAMA_HOST` and
 `OLLAMA_TIMEOUT_MS` through `src/ollama-client.ts` (120 seconds by default).
-It does not pull models. Check your installed models before choosing one.
+It does not pull models. Check your installed models before choosing one. Use
+`--num-ctx N` to set the Ollama context window for a run (the default is
+32,768 tokens); this is useful for repeatable model comparisons.
 
 Each request includes one target function, file/language/name/line metadata,
 and up to 4,000 characters of local import/type/interface declarations.
@@ -88,16 +91,16 @@ rules manually if desired; the CLI never edits `.gitignore`.
 Symbols retain repository, file, logical name/type, lines, hashes, timestamps,
 status, retry count/reason/deadline and an active/archive flag. Reviews retain
 input snapshots, raw/validated model output, model tag, prompt version,
-reviewed hash, result metadata, report path, timestamp and human decision.
+reviewed hash, result metadata, model context window, report path, timestamp and human decision.
 This preserves material for later training-data curation without adding any
 training functionality. Model tags are recorded, not resolved model digests.
 
 The validated response and queue transition commit together immediately with
-SQLite `synchronous=FULL`. Markdown follows that commit. On the next review
-invocation, missing report references are recovered from SQLite without another
-model call. `show` also works when Markdown creation failed. Existing conflicting
-report files cause an error instead of being overwritten. Clean results stay
-in SQLite only.
+SQLite `synchronous=FULL`. Markdown for every completed response, including a
+clean `skip`, follows that commit. On the next review invocation, missing
+finding-report references are recovered from SQLite without another model call.
+`show` also works when Markdown creation failed. Existing conflicting report
+files cause an error instead of being overwritten.
 
 A PID lock prevents concurrent scans/workers. Dead-process locks are reclaimed;
 a live or reused PID fails closed. Use this on a local filesystem in a single

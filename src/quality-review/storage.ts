@@ -32,10 +32,14 @@ export class Store {
         id TEXT PRIMARY KEY, symbol_id TEXT NOT NULL, reviewed_hash TEXT NOT NULL, model TEXT NOT NULL,
         prompt_version TEXT NOT NULL, verdict TEXT, severity TEXT, confidence TEXT, summary TEXT,
         report_path TEXT, created_at TEXT NOT NULL, human_status TEXT NOT NULL DEFAULT 'pending',
-        input_json TEXT NOT NULL, result_json TEXT NOT NULL, raw_response TEXT NOT NULL);
+        input_json TEXT NOT NULL, result_json TEXT NOT NULL, raw_response TEXT NOT NULL,
+        num_ctx INTEGER NOT NULL DEFAULT 32768);
       CREATE TABLE IF NOT EXISTS worker_lock (id INTEGER PRIMARY KEY CHECK(id=1), pid INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS queue ON symbols(active,current_status,file,id);
       CREATE INDEX IF NOT EXISTS history ON reviews(symbol_id,reviewed_hash);`);
+    if (!(this.db.prepare("SELECT 1 FROM pragma_table_info('reviews') WHERE name='num_ctx'").get())) {
+      this.db.exec('ALTER TABLE reviews ADD COLUMN num_ctx INTEGER NOT NULL DEFAULT 32768');
+    }
   }
   checkDirectory() {
     if (lstatSync(this.directory).isSymbolicLink() || realpathSync(this.directory) !== this.directory) throw new Error('Unsafe storage directory');
