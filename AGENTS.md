@@ -46,6 +46,11 @@ This is the canonical instructions file for this repo — other agent configs
   core.editor=...` flag injection) — this hook re-validates independently.
   Keep its allowlist in sync with `shell-allowlist.ts` by hand; it's a
   standalone `.cjs` file (no build step) so it can't import the TS module.
+- `src/quality-review/` — separate CLI (`npm run quality -- ...`), with no MCP
+  registration. Target sources are read-only; all output stays under the
+  target's `.quality-review/`. Uses existing JS/TS tree-sitter parsers, built-in
+  SQLite, and the shared Ollama client. Run `npm run test:quality` for fixture
+  tests. See [docs/quality-review.md](docs/quality-review.md).
 - `src/tools/*.ts` — one file per MCP tool.
 - `src/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
@@ -113,7 +118,9 @@ Claude's own quota is spent only on work that actually benefits from it.
 
 ## Development workflow
 
-- No build/lint/typecheck pipeline exists yet — just `npm start` to run it.
+- No build/lint pipeline is required. `npm start` runs the MCP server;
+  `npm run test:quality` tests the separate quality CLI, and `npx tsc --noEmit`
+  checks TypeScript.
 - For a benchmark that can outlive this command interface's ~30-second attachment window, launch one detached `setsid nohup flock -n` supervisor with stdout/stderr redirected to an ignored `benchmark-data/` log. Poll that log and its final artifact; do not retry while its lock is held. Before starting the next model, confirm the prior artifact is complete and the lock-owning process is gone.
 - Keep changes minimal; this is meant to stay a thin bridge, not grow into a
   framework.

@@ -11,6 +11,9 @@ Top-level index. Find the folder that answers your question below, then open
 
 ## Root documents
 
+- [Quality reviewer](quality-review.md) — CLI commands, read-only storage,
+  symbol discovery, queue policy and verification.
+
 - [Cost-aware agent workflow](cost-aware-agent-workflow.md) — how to use
   local/cloud workers without delegating final judgment, review, or commit
   acceptance.

@@ -45,6 +45,23 @@ for how these two were benchmarked and why local-worker is the recommended
 default. **Always verify what either one did via `git log`/`git status`** —
 neither should be trusted on its own report.
 
+## CLI quality reviewer
+
+A separate, read-only CLI reviews one function per Ollama request and saves
+progress in the target repository's `.quality-review/` directory. No build is
+needed; use Node 22.13+.
+
+```bash
+npm run quality -- scan --cwd /path/to/repo
+npm run quality -- review --count 10 --cwd /path/to/repo
+npm run quality -- findings --cwd /path/to/repo
+```
+
+Review suggestions manually; accept/reject only records a decision. Supports
+JavaScript/TypeScript today. MCP integration comes later. See the
+[quality reviewer guide](docs/quality-review.md) for commands, model configuration,
+queue behavior and safety limits.
+
 ## Benchmarks
 
 Model and config measurements live in
