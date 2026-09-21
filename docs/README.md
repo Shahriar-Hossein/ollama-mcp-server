@@ -4,6 +4,8 @@ For the supported setup and feature flags, start with the
 [project README](../README.md). The supported surface is the basic Ollama MCP
 tools, Quality Review, and lean deterministic Explorer. Advanced Explorer and
 autonomous capabilities are preserved but disabled by default.
+Supported repository code is in `src/explorer/`; parked work is collected under
+`src/experimental/` so it does not dominate the normal source tree.
 
 Use this index for implementation detail and historical research. Historical
 benchmark documents describe the configuration at the time of each run, not
@@ -11,9 +13,9 @@ the current default tool surface.
 
 | Folder | What's in it |
 |---|---|
-| [benchmarks/](benchmarks/README.md) | Model/config measurements: the master recommendation, per-task classification, and every individual run |
-| [planning/](planning/README.md) | Strategy docs, open proposals, and past design experiments |
-| [super-explorer/](super-explorer/README.md) | Explorer core plus experimental retrieval, verification, and knowledge-store design |
+| [experimental/benchmarks/](experimental/benchmarks/README.md) | Historical model/config measurements and individual runs |
+| [experimental/planning/](experimental/planning/README.md) | Parked strategy documents and past design experiments |
+| [experimental/super-explorer/](experimental/super-explorer/README.md) | Advanced retrieval, verification, and knowledge-store research |
 
 ## Root documents
 

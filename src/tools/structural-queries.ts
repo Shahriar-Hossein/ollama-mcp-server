@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { findCallees, findCallers, findReferences, findSymbol } from "../super-explorer/structural-tools.js";
+import { findCallees, findCallers, findReferences, findSymbol } from "../explorer/structural-tools.js";
 
 const repositoryRoot = z.string().describe("Absolute path to the Git repository root to explore.");
 const symbolId = z.string().describe("Stable indexed symbol ID returned by outline_file or find_symbol.");

@@ -6,7 +6,7 @@
 // wrapping (bash -c '...'), git flag injection (git -c core.editor=...), or
 // absolute-path invocation. This hook re-validates the raw command text
 // independently of --allowedTools. Keep the allowed-subcommand list in sync
-// with src/shell-allowlist.ts.
+// with src/experimental/workers/shell-allowlist.ts.
 const ALLOWED_SUBCOMMANDS = ["status", "diff", "log", "add", "commit", "show"];
 const SHELL_METACHARACTERS = /[;&|`\n<>]|\$\(/;
 

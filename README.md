@@ -43,6 +43,10 @@ retrieve likely symbols, read focused source, and summarize the evidence. Use
 `mode: "lexical"` for the narrow symbol baseline. `mode: "hybrid"` is available
 only when semantic search and Git-history intelligence are enabled.
 
+The supported implementation is isolated in `src/explorer/`. Advanced and
+autonomous code is parked under `src/experimental/` and is not imported during
+default startup.
+
 Deterministic CLI entry points remain available, for example:
 
 ```bash

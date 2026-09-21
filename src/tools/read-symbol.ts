@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { readSymbol } from "../super-explorer/read-symbol.js";
+import { readSymbol } from "../explorer/read-symbol.js";
 
 export function registerReadSymbol(server: McpServer) {
   server.tool(

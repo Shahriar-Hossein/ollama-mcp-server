@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { outlineFile } from "../super-explorer/outline-file.js";
+import { outlineFile } from "../explorer/outline-file.js";
 
 export function registerOutlineFile(server: McpServer) {
   server.tool(

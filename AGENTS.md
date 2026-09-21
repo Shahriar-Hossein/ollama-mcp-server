@@ -21,6 +21,12 @@ This is the canonical instructions file for this repo — other agent configs
   dependencies. Experimental groups default off. The full Explorer requires
   the verification pipeline. A group-specific flag overrides the experimental
   master flag.
+- `src/explorer/` — the supported deterministic repository index, outlines,
+  symbol reads, structural queries, basic retrieval, and their CLIs.
+- `src/experimental/` — advanced Explorer pipelines, adapters, benchmarks,
+  optional MCP tools, and autonomous workers. Default startup does not import
+  this tree. Keep new work out unless an experimental feature is explicitly
+  resumed.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
   `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
   embedding model unloads right after each call — without it, Ollama kept the
@@ -32,10 +38,10 @@ This is the canonical instructions file for this repo — other agent configs
   the saved limit-80 retry answers all abstain with no cited claims. The
   reported counts measured non-error responses, not correct answers, and
   combined limit-40 results with limit-80 retries. Do not use them for routing.
-  See [the evidence audit](docs/planning/project-reality-check-2026-09-19.md)
-  and [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md),
+  See [the evidence audit](docs/experimental/planning/project-reality-check-2026-09-19.md)
+  and [docs/experimental/super-explorer/benchmarks.md](docs/experimental/super-explorer/benchmarks.md),
   "Embedder GPU contention fix + limit/timeout sweep" (2026-09-19).
-- `src/shell-allowlist.ts` — the command allowlist and system prompts shared
+- `src/experimental/workers/shell-allowlist.ts` — the command allowlist and system prompts shared
   by both autonomous tools. Both must stay in sync with this file, not drift
   into separate allowlists. `parseAllowedGitCommand` tokenizes and rejects
   shell metacharacters rather than regex-prefix-matching the raw string — a
@@ -56,9 +62,9 @@ This is the canonical instructions file for this repo — other agent configs
   SQLite, and the shared Ollama client. Run `npm run test:quality` for fixture
   tests. See [docs/quality-review.md](docs/quality-review.md).
 - `src/tools/*.ts` — one file per MCP tool.
-- `src/tools/local-explorer-task.ts` — read-only repo-discovery worker
+- `src/experimental/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
-  pilot in `docs/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
+  pilot in `docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
   `qwen3.5:4b` — it's the only local model confirmed to reliably emit real
   `tool_calls` in this loop; `qwen2.5-coder:7b` fabricates confidently
   instead of calling tools at all, don't route it here. Every `read`/`grep`
@@ -87,7 +93,7 @@ See [README.md](README.md) for the project pitch and setup.
   in its response — it inherits `REQUEST_TIMEOUT_MS` from
   `src/ollama-client.ts` (120s default) for every model. If a benchmark needs
   latency numbers or a different deadline per model, use the CLI runner
-  (`src/super-explorer/explore-cli.ts`) instead of the MCP tool.
+  (`src/experimental/explorer/explore-cli.ts`) instead of the MCP tool.
 - On the SE-01..SE-05 gold set, `granite4.2:3b` still fails to produce a
   verifier-supported answer through the Super Explorer pipeline (0/5,
   consistent across three separate trials) — it retrieves relevant evidence
@@ -96,7 +102,7 @@ See [README.md](README.md) for the project pitch and setup.
   fails env-var-gating and registration-contrast questions). A Haiku
   `Explore` subagent run directly against the same fixture (no Super
   Explorer pipeline) still gets 5/5. See
-  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md) for
+  [docs/experimental/super-explorer/benchmarks.md](docs/experimental/super-explorer/benchmarks.md) for
   full detail.
 - `local_explorer_task` never set Ollama's `num_ctx` option, so every call
   silently ran at Ollama's runtime default (4096 tokens) regardless of the
@@ -111,7 +117,7 @@ See [README.md](README.md) for the project pitch and setup.
   `deepseek-r1:1.5b`, or `nemotron-3-nano:4b` (both fail to engage the tool
   loop — `nemotron-3-nano:4b` fabricates file paths that don't exist in the
   repo rather than calling tools). See
-  [docs/super-explorer/benchmarks.md](docs/super-explorer/benchmarks.md),
+  [docs/experimental/super-explorer/benchmarks.md](docs/experimental/super-explorer/benchmarks.md),
   "`num_ctx` fix: 10-model `local_explorer_task` sweep".
 
 ## Why this project exists
@@ -142,7 +148,7 @@ Claude's own quota is spent only on work that actually benefits from it.
   execute shell commands autonomously.
 - Quality Review and default Explorer operations must remain read-only toward
   target sources. Experimental MCP tools must not register when disabled.
-- Keep the allowlists in `src/shell-allowlist.ts` and
+- Keep the allowlists in `src/experimental/workers/shell-allowlist.ts` and
   `scripts/validate-cloud-bash.cjs` synchronized manually — the standalone
   CJS validator can't import the TypeScript module.
 - `parseAllowedGitCommand` must tokenize input and reject shell
@@ -172,7 +178,7 @@ For repo-discovery sub-tasks specifically, prefer deterministic
 `hybrid_retrieve` (`basic` mode), `outline_file`, `read_symbol`, and structural
 queries. If the experimental `local_explorer_task` is explicitly available,
 its routing behavior follows the pilot in
-`docs/benchmarks/runs/2026-09-16-local-explorer.md`:
+`docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`:
 
 - If it returns `Confidence: high` or `medium` with real file:line citations,
   use it as-is.

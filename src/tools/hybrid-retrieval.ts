@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { hybridRetrieve } from "../super-explorer/hybrid-retrieval.js";
+import { hybridRetrieve } from "../explorer/retrieval.js";
 
 export function registerHybridRetrieval(server: McpServer, advancedRetrievalEnabled = false) {
   server.tool(

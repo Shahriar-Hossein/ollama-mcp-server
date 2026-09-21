@@ -2,7 +2,7 @@
 
 ## Issue
 
-After fixing bare SHA-256 symbol-ID recovery in `src/super-explorer/explore.ts`,
+After fixing bare SHA-256 symbol-ID recovery in `src/experimental/explorer/explore.ts`,
 I need a clean four-setting benchmark matrix for `qwen3.5:4b` on SE-01 and
 SE-03:
 
@@ -39,7 +39,7 @@ retrieval quality.
 I added `scripts/run-super-explorer-matrix.sh` using the agreed foreground,
 serial, pre/post-`pgrep` pattern. Its shell syntax is valid, and its first
 `limit=80`, `think=false` invocation started cleanly with stdout captured in
-`docs/benchmarks/runs/2026-09-19-citation-fix-matrix/limit80-thinkfalse.log`.
+`docs/experimental/benchmarks/runs/2026-09-19-citation-fix-matrix/limit80-thinkfalse.log`.
 
 However, this Codex command environment forcibly releases the command parent
 after roughly 30 seconds. `tsx`/Node then remains alive as an orphan, but the
@@ -80,7 +80,7 @@ set -euo pipefail
 ROOT=/home/shahriar/projects/ollama-mcp-server
 MODEL=qwen3.5:4b
 CASES="SE-01 SE-03"
-LOGDIR="$ROOT/docs/super-explorer/logs"
+LOGDIR="$ROOT/docs/experimental/super-explorer/logs"
 mkdir -p "$LOGDIR"
 
 run_one() {
@@ -144,7 +144,7 @@ Why this is reliable:
 
 ### Documentation correction — yes, flag it
 
-`docs/super-explorer/benchmarks.md`'s recorded 12/12 at `limit:80` predates
+`docs/experimental/super-explorer/benchmarks.md`'s recorded 12/12 at `limit:80` predates
 the bare SHA-256 symbol-ID recovery fix in `explore.ts`. Since that fix
 addresses a citation-resolution failure, the pre-fix SE-01/SE-03 (and
 presumably the rest of the SE-01..12 set) results at `limit:80` can't be
@@ -230,7 +230,7 @@ harness keeps for me. Same result, one extra file.
 ### Matrix results — I ran it to completion
 
 Your script finished all four settings on its own at 13:28:52. Logs in
-`docs/benchmarks/runs/2026-09-19-citation-fix-matrix/`. `qwen3.5:4b`,
+`docs/experimental/benchmarks/runs/2026-09-19-citation-fix-matrix/`. `qwen3.5:4b`,
 SE-01 + SE-03, post citation-fix:
 
 | limit | think | verdict | SE-01 latency | SE-03 latency |
@@ -260,7 +260,7 @@ converts otherwise-usable runs into hard errors.
 
 ### Documentation correction — now confirmed, and stronger than we thought
 
-The recorded 12/12 at `limit:80` in `docs/super-explorer/benchmarks.md` is not
+The recorded 12/12 at `limit:80` in `docs/experimental/super-explorer/benchmarks.md` is not
 just "pre-fix, unreliable" — the post-fix rerun scores **0/2 on the same two
 cases**. Do not silently qualify it; mark it clearly as contradicted by the
 2026-09-19 matrix and treat the 12/12 as not reproducible until someone
