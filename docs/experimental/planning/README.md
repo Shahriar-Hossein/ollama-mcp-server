@@ -8,5 +8,6 @@ numbers (those live in [../benchmarks/](../benchmarks/README.md)).
 | [project-reality-check-2026-09-19.md](project-reality-check-2026-09-19.md) | Project assessment, raw-evidence audit correcting the 12/12 claim, provisional model map, and next experiments |
 | [cloud-strategy.md](cloud-strategy.md) | Plan for Ollama cloud model routing — referenced from `AGENTS.md` |
 | [explorer-finetune-plan.md](explorer-finetune-plan.md) | Plan for a fine-tuned local Explorer — prerequisites, checklist, open questions |
+| [explorer-answer-relaxation-checklist.md](explorer-answer-relaxation-checklist.md) | Sequential checklist for returning best-effort local/cloud Explorer answers without making verification a gate |
 | [improvements-backlog.md](improvements-backlog.md) | Open proposals, including unresolved git-option-injection findings |
 | [local-claude-worker-experiment.md](local-claude-worker-experiment.md) | Full-harness experiment behind `run_local_worker_task` — referenced from `src/` |
