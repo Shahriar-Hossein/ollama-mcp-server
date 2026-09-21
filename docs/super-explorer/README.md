@@ -1,7 +1,12 @@
 # Super Explorer
 
-Design spec and delivery roadmap. For the plain-language version of what this
-is and why, read [overview.md](overview.md) first.
+Design spec, implementation notes, and historical results. The supported core
+is deterministic indexing, outlines, symbol reads, structural queries, and
+`hybrid_retrieve` in `basic` mode. Semantic search, discovery/verification,
+persistent knowledge, framework adapters, and the complete pipeline are
+experimental and disabled by default; see the [project README](../../README.md)
+for their feature flags. For the original plain-language design, read
+[overview.md](overview.md).
 
 ## Files in this directory
 

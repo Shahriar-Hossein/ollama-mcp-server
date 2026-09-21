@@ -39,7 +39,7 @@ export class QualityService {
     } finally { this.store.unlock(); }
   }
   recoverReports() {
-    for (const row of this.store.db.prepare("SELECT r.*,s.qualified_name FROM reviews r JOIN symbols s ON s.id=r.symbol_id WHERE r.verdict='finding' AND r.report_path IS NULL").iterate()) {
+    for (const row of this.store.db.prepare("SELECT r.*,s.qualified_name FROM reviews r JOIN symbols s ON s.id=r.symbol_id WHERE r.report_path IS NULL").iterate()) {
       const id = String(row.id);
       const path = this.store.report(this.nameFor(id,String(row.symbol_id),String(row.model),String(row.qualified_name)),markdown(id,JSON.parse(String(row.input_json)),String(row.model),String(row.created_at),validateReview(String(row.result_json)),Number(row.num_ctx) || 32768));
       this.store.db.prepare('UPDATE reviews SET report_path=? WHERE id=?').run(path,id);

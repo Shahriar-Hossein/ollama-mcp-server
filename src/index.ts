@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { loadFeatures } from "./config/features.js";
 import { registerRunOllamaTask } from "./tools/run-ollama-task.js";
 import { registerListOllamaModels } from "./tools/list-ollama-models.js";
 import { registerSummarizeOutput } from "./tools/summarize-output.js";
@@ -21,27 +22,31 @@ const server = new McpServer({
   name: "ollama-subagent-bridge",
   version: "1.0.0",
 });
+const features = loadFeatures();
 
+// Supported core: basic Ollama delegation and deterministic repository intelligence.
 registerRunOllamaTask(server);
 registerListOllamaModels(server);
 registerSummarizeOutput(server);
-registerLocalExplorerTask(server);
 registerOutlineFile(server);
 registerReadSymbol(server);
 registerStructuralQueries(server);
-registerSemanticSearch(server);
-registerHybridRetrieval(server);
-registerSaveKnowledgeUpdates(server);
-registerDiscoverEvidence(server);
-registerVerifyClaims(server);
-registerSynthesizeVerifiedAnswer(server);
-registerExploreRepository(server);
+registerHybridRetrieval(server, features.semanticSearch && features.gitHistory);
 
-// Autonomous shell-executing tools: opt-in only, off by default. See
-// docs/planning/local-claude-worker-experiment.md for why the cloud model
-// approach is used for run_cloud_claude_task.
-if (process.env.CLOUD_CLAUDE_ENABLED === "1") registerRunCloudClaudeTask(server);
-if (process.env.LOCAL_WORKER_ENABLED === "1") registerRunLocalWorkerTask(server);
+// Experimental: present in the repository, but absent from the default MCP surface.
+if (features.localExplorerTask) registerLocalExplorerTask(server);
+if (features.semanticSearch) registerSemanticSearch(server);
+if (features.knowledgeStore) registerSaveKnowledgeUpdates(server);
+if (features.verificationPipeline) {
+  registerDiscoverEvidence(server, features.semanticSearch && features.gitHistory);
+  registerVerifyClaims(server);
+  registerSynthesizeVerifiedAnswer(server);
+}
+if (features.fullExplorer) registerExploreRepository(server, features.semanticSearch && features.gitHistory);
+
+// Autonomous and Git-writing: independently opt-in; never enabled by ENABLE_EXPERIMENTAL.
+if (features.cloudClaudeWorker) registerRunCloudClaudeTask(server);
+if (features.localWorker) registerRunLocalWorkerTask(server);
 
 async function run() {
   const transport = new StdioServerTransport();

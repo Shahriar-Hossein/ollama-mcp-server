@@ -102,7 +102,8 @@ training functionality. Model tags are recorded, not resolved model digests.
 The validated response and queue transition commit together immediately with
 SQLite `synchronous=FULL`. Markdown for every completed response, including a
 clean `skip`, follows that commit. On the next review invocation, missing
-finding-report references are recovered from SQLite without another model call.
+report references for both findings and clean skips are recovered from SQLite
+without another model call.
 `show` also works when Markdown creation failed. Existing conflicting report
 files cause an error instead of being overwritten.
 

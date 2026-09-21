@@ -15,7 +15,7 @@ const RRF_WEIGHT: Record<RetrievalSource, number> = {
   conditional: 3,
 };
 
-export type RetrievalMode = "lexical" | "hybrid";
+export type RetrievalMode = "lexical" | "basic" | "hybrid";
 export type RetrievalSource = "lexical" | "semantic" | "structural" | "documentation" | "history" | "configuration" | "conditional";
 
 /**
@@ -270,41 +270,44 @@ export async function hybridRetrieve(repositoryRoot: string, query: string, limi
   const lexical = lexicalSearch(root, queryTerms(trimmedQuery), index);
   if (mode === "lexical") return { commit_hash: index.commit_hash, mode, query: trimmedQuery, results: mergeRankings([{ source: "lexical", candidates: lexical }], limit, index) };
 
-  const semantic = await semanticSearch(root, trimmedQuery, 100, model);
-  if (semantic.commit_hash !== index.commit_hash) throw new Error("Semantic index commit does not match the structural index.");
+  const semantic = mode === "hybrid" ? await semanticSearch(root, trimmedQuery, 100, model) : undefined;
+  if (semantic && semantic.commit_hash !== index.commit_hash) throw new Error("Semantic index commit does not match the structural index.");
   const byId = new Map(index.symbols.map((symbol) => [symbol.id, symbol]));
+  const rankings: Array<{ source: RetrievalSource; candidates: RankedCandidate[] }> = [
+    { source: "lexical", candidates: lexical },
+    { source: "structural", candidates: structuralSearch(queryTerms(trimmedQuery), index) },
+    {
+      source: "documentation",
+      candidates: hasAnyTerm(queryTerms(trimmedQuery), ["confidence", "documentation", "document", "pilot", "benchmark"])
+        ? documentSearch(root, queryTerms(trimmedQuery)) : [],
+    },
+    {
+      source: "configuration",
+      candidates: hasAnyTerm(queryTerms(trimmedQuery), ["package", "script"])
+        || hasAllTerms(queryTerms(trimmedQuery), ["test", "command"])
+        ? packageScriptSearch(root, queryTerms(trimmedQuery)) : [],
+    },
+    {
+      source: "history",
+      candidates: mode === "hybrid" && hasAnyTerm(queryTerms(trimmedQuery), ["commit", "introduced", "history", "change"])
+        ? historySearch(root, queryTerms(trimmedQuery)) : [],
+    },
+    {
+      source: "conditional",
+      candidates: hasAnyTerm(queryTerms(trimmedQuery), GUARD_TRIGGER_WORDS)
+        ? conditionalSearch(queryTerms(trimmedQuery), index) : [],
+    },
+  ];
+  if (semantic) {
+    rankings.splice(1, 0, { source: "semantic", candidates: semantic.results.flatMap((result): RankedCandidate[] => {
+      const symbol = byId.get(result.symbol.id);
+      return symbol ? [{ candidate: { id: symbol.id, kind: "symbol", symbol }, score: result.score }] : [];
+    }) });
+  }
   return {
     commit_hash: index.commit_hash,
     mode,
     query: trimmedQuery,
-    results: mergeRankings([
-      { source: "lexical", candidates: lexical },
-      { source: "semantic", candidates: semantic.results.flatMap((result) => {
-        const symbol = byId.get(result.symbol.id);
-        return symbol ? [{ candidate: { id: symbol.id, kind: "symbol", symbol }, score: result.score }] : [];
-      }) },
-      { source: "structural", candidates: structuralSearch(queryTerms(trimmedQuery), index) },
-      {
-        source: "documentation",
-        candidates: hasAnyTerm(queryTerms(trimmedQuery), ["confidence", "documentation", "document", "pilot", "benchmark"])
-          ? documentSearch(root, queryTerms(trimmedQuery)) : [],
-      },
-      {
-        source: "configuration",
-        candidates: hasAnyTerm(queryTerms(trimmedQuery), ["package", "script"])
-          || hasAllTerms(queryTerms(trimmedQuery), ["test", "command"])
-          ? packageScriptSearch(root, queryTerms(trimmedQuery)) : [],
-      },
-      {
-        source: "history",
-        candidates: hasAnyTerm(queryTerms(trimmedQuery), ["commit", "introduced", "history", "change"])
-          ? historySearch(root, queryTerms(trimmedQuery)) : [],
-      },
-      {
-        source: "conditional",
-        candidates: hasAnyTerm(queryTerms(trimmedQuery), GUARD_TRIGGER_WORDS)
-          ? conditionalSearch(queryTerms(trimmedQuery), index) : [],
-      },
-    ], limit, index),
+    results: mergeRankings(rankings, limit, index),
   };
 }

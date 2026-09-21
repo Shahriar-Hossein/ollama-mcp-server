@@ -121,6 +121,10 @@ test('malformed results, finite retries, outage stop, lock, atomic scan and repo
   assert.equal(symbols(store).filter(s=>s.current_status==='reviewed').length,1);
   store.db.prepare('UPDATE reviews SET report_path=NULL WHERE id=?').run(row.id);
   service.recoverReports(); assert.ok(service.show(String(row.id)).report_path);
+  await service.review({symbol:'beta',force:true},async()=>clean);
+  const skipped = store.db.prepare("SELECT * FROM reviews WHERE verdict='skip' ORDER BY rowid DESC LIMIT 1").get() as any;
+  store.db.prepare('UPDATE reviews SET report_path=NULL WHERE id=?').run(skipped.id);
+  service.recoverReports(); assert.ok(service.show(String(skipped.id)).report_path);
   store.lock(); const other = new Store(root);
   assert.throws(()=>new QualityService(other).scan(),/owns the queue/); other.close(); store.unlock();
   const before = JSON.stringify(symbols(store));

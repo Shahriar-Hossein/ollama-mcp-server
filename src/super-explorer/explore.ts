@@ -10,7 +10,7 @@ const inputSchema = z.object({
   question: z.string().trim().min(1).max(2_000),
   model: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
-  mode: z.enum(["lexical", "hybrid"]).optional(),
+  mode: z.enum(["lexical", "basic", "hybrid"]).optional(),
   think: z.boolean().optional(),
 });
 

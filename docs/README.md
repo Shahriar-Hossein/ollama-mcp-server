@@ -1,13 +1,19 @@
-# docs/
+# Documentation
 
-Top-level index. Find the folder that answers your question below, then open
-*that* folder's own `README.md` — don't read files directly from here.
+For the supported setup and feature flags, start with the
+[project README](../README.md). The supported surface is the basic Ollama MCP
+tools, Quality Review, and lean deterministic Explorer. Advanced Explorer and
+autonomous capabilities are preserved but disabled by default.
+
+Use this index for implementation detail and historical research. Historical
+benchmark documents describe the configuration at the time of each run, not
+the current default tool surface.
 
 | Folder | What's in it |
 |---|---|
 | [benchmarks/](benchmarks/README.md) | Model/config measurements: the master recommendation, per-task classification, and every individual run |
 | [planning/](planning/README.md) | Strategy docs, open proposals, and past design experiments |
-| [super-explorer/](super-explorer/README.md) | Separate subsystem: repo indexing, retrieval, and knowledge-store design |
+| [super-explorer/](super-explorer/README.md) | Explorer core plus experimental retrieval, verification, and knowledge-store design |
 
 ## Root documents
 

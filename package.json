@@ -23,6 +23,7 @@
     "gold-set:super-explorer": "tsx src/super-explorer/gold-set-cli.ts",
     "start": "tsx --env-file-if-exists=.env src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:features": "node --import tsx --test src/config/*.test.ts",
     "quality": "node --env-file-if-exists=.env --import tsx src/quality-review/cli.ts",
     "test:quality": "node --import tsx --test src/quality-review/*.test.ts"
   },

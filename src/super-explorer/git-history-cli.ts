@@ -1,3 +1,4 @@
+import { loadFeatures } from "../config/features.js";
 import {
   gitBlameSymbol,
   gitFindFileIntroduction,
@@ -6,6 +7,7 @@ import {
   gitFindSymbolIntroduction,
 } from "./git-history.js";
 
+if (!loadFeatures().gitHistory) throw new Error("Git-history intelligence is disabled; set ENABLE_GIT_HISTORY=1.");
 const [operation, repositoryRoot, target, limitArgument] = process.argv.slice(2);
 if (!operation || !repositoryRoot || !target) {
   throw new Error("Usage: git-history:super-explorer <file-introduction|symbol-introduction|file-recent-changes|symbol-recent-changes|blame-symbol> <repository-root> <file-or-symbol-id> [limit]");

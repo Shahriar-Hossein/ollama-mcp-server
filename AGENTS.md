@@ -1,9 +1,9 @@
 # ollama-mcp-server
 
-MCP server exposing tools (`run_ollama_task`, `list_ollama_models`,
-`summarize_output`, `local_explorer_task`, and two opt-in autonomous tools)
-that talk to a local Ollama instance. No build step — `npm start` runs it via
-tsx over stdio. Keep it a thin bridge, not a general-purpose framework.
+MCP server exposing basic Ollama delegation plus deterministic repository
+intelligence. Quality Review is a separate primary CLI. Advanced Explorer and
+autonomous tools are opt-in. No build step — `npm start` runs it via tsx over
+stdio. Keep it a thin bridge, not a general-purpose framework.
 
 This is the canonical instructions file for this repo — other agent configs
 (e.g. `CLAUDE.md`) import it rather than duplicating it, to avoid drift.
@@ -11,12 +11,16 @@ This is the canonical instructions file for this repo — other agent configs
 ## Repository structure
 
 - `src/index.ts` — wiring only: creates the server, registers tools. Keep it
-  lean as more tools are added. `run_local_worker_task`/`run_cloud_claude_task`
-  are only registered when `LOCAL_WORKER_ENABLED=1`/`CLOUD_CLAUDE_ENABLED=1`
-  are set — don't remove that gate, they execute shell commands autonomously.
-  `local_explorer_task` is registered unconditionally: it's read-only
-  (Glob/Grep/Read only, no shell command ever runs), so it doesn't need the
-  same opt-in gate.
+  lean as more tools are added. Default registrations are the three basic
+  Ollama tools plus deterministic outline/read/structural/basic-retrieval
+  Explorer tools. Advanced tools use the centralized flags in
+  `src/config/features.ts`. `run_local_worker_task`/`run_cloud_claude_task`
+  remain independently gated by `LOCAL_WORKER_ENABLED=1` and
+  `CLOUD_CLAUDE_ENABLED=1`; `ENABLE_EXPERIMENTAL` must never enable them.
+- `src/config/features.ts` — validates feature flags and enforces feature
+  dependencies. Experimental groups default off. The full Explorer requires
+  the verification pipeline. A group-specific flag overrides the experimental
+  master flag.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
   `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
   embedding model unloads right after each call — without it, Ollama kept the
@@ -63,7 +67,8 @@ This is the canonical instructions file for this repo — other agent configs
   caller. `ast_grep` invokes only the fixed executable with validated argv
   (never a shell), and accepts TypeScript/JavaScript only. Treat a `Confidence: low` final answer as "redo this yourself or
   escalate," never as a result to act on directly — that's the one signal
-  the pilot showed actually tracked correctness.
+  the pilot showed actually tracked correctness. It is experimental and
+  registered only with `ENABLE_LOCAL_EXPLORER_TASK=1` (or the master flag).
 - `docs/` — see [docs/README.md](docs/README.md) for the full index. Start
   there instead of opening files individually; it says what each doc answers
   so you only read the one you need.
@@ -119,8 +124,8 @@ Claude's own quota is spent only on work that actually benefits from it.
 ## Development workflow
 
 - No build/lint pipeline is required. `npm start` runs the MCP server;
-  `npm run test:quality` tests the separate quality CLI, and `npx tsc --noEmit`
-  checks TypeScript.
+  `npm run test:features` checks feature configuration, `npm run test:quality`
+  tests Quality Review, and `npx tsc --noEmit` checks TypeScript.
 - For a benchmark that can outlive this command interface's ~30-second attachment window, launch one detached `setsid nohup flock -n` supervisor with stdout/stderr redirected to an ignored `benchmark-data/` log. Poll that log and its final artifact; do not retry while its lock is held. Before starting the next model, confirm the prior artifact is complete and the lock-owning process is gone.
 - Keep changes minimal; this is meant to stay a thin bridge, not grow into a
   framework.
@@ -135,6 +140,8 @@ Claude's own quota is spent only on work that actually benefits from it.
 - `run_local_worker_task` and `run_cloud_claude_task` must remain opt-in,
   enabled only by `LOCAL_WORKER_ENABLED=1` and `CLOUD_CLAUDE_ENABLED=1`. They
   execute shell commands autonomously.
+- Quality Review and default Explorer operations must remain read-only toward
+  target sources. Experimental MCP tools must not register when disabled.
 - Keep the allowlists in `src/shell-allowlist.ts` and
   `scripts/validate-cloud-bash.cjs` synchronized manually — the standalone
   CJS validator can't import the TypeScript module.
@@ -161,9 +168,10 @@ a sub-task is:
 - **Draft-then-review work**: a first-pass draft (of text, code, or a plan)
   that you'll review and refine afterward — let Ollama produce the draft.
 
-For repo-discovery sub-tasks specifically (find files, grep symbols, read
-code, trace how something works — nothing needing judgment or synthesis),
-try `local_explorer_task` first, on the routing idea validated in
+For repo-discovery sub-tasks specifically, prefer deterministic
+`hybrid_retrieve` (`basic` mode), `outline_file`, `read_symbol`, and structural
+queries. If the experimental `local_explorer_task` is explicitly available,
+its routing behavior follows the pilot in
 `docs/benchmarks/runs/2026-09-16-local-explorer.md`:
 
 - If it returns `Confidence: high` or `medium` with real file:line citations,

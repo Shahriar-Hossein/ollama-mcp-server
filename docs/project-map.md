@@ -6,7 +6,7 @@ they are not mistaken for source code.
 
 ```text
 ollama-mcp-server/
-|-- .env.example                 Example optional Ollama and autonomous-tool settings.
+|-- .env.example                 Example Ollama, experimental, and autonomous-tool settings.
 |-- .gitignore                   Excludes dependencies, secrets, and generated data from Git.
 |-- AGENTS.md                    Project instructions, architecture notes, and safety rules.
 |-- CLAUDE.md                    Imports the shared project instructions for Claude Code.
@@ -27,6 +27,8 @@ ollama-mcp-server/
 |
 |-- src/                         Application source code.
 |   |-- index.ts                 Starts the MCP server and registers its tools.
+|   |-- config/features.ts       Validates centralized optional/experimental tool flags.
+|   |-- config/features.test.ts  Checks defaults, overrides, dependencies, and worker isolation.
 |   |-- ollama-client.ts         Shared HTTP client for Ollama generation, models, and embeddings.
 |   |-- shell-allowlist.ts       Safe Git command parser and prompts for autonomous workers.
 |   |-- tools/                   MCP tool definitions; each file registers one capability.
