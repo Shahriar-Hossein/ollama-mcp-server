@@ -18,6 +18,8 @@ export interface ExploreResult extends SynthesisResult {
   tool_calls: number;
   discovery: Awaited<ReturnType<typeof discoverEvidence>>["discovery"];
   verification: Awaited<ReturnType<typeof verifyClaims>>;
+  mode: "verified" | "raw";
+  warnings: string[];
 }
 
 function evidenceForDiscovery(
@@ -105,6 +107,12 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
     const evidence = [...new Map(hypothesis.required_evidence.flatMap((request) => evidenceForDiscovery(index, request)).map((item) => [JSON.stringify(item), item])).values()].slice(0, 10);
     return evidence.length ? [{ id: `hypothesis-${hypothesisIndex + 1}`, claim: hypothesis.hypothesis, evidence }] : [];
   });
+  
+  const warnings: string[] = [];
+  if (!claims.length) {
+    warnings.push("No materializable evidence found for the hypotheses.");
+  }
+
   if (!claims.length) {
     return {
       commit_hash: discovery.commit_hash,
@@ -115,13 +123,33 @@ export async function exploreRepository(input: z.input<typeof inputSchema>): Pro
       tool_calls: discovery.model_calls,
       discovery: discovery.discovery,
       verification: { commit_hash: discovery.commit_hash, results: [], model_calls: 0 },
+      mode: "raw",
+      warnings,
     };
   }
   const verification = await verifyClaims(root, claims, options.model, options.think);
+  const synthesis = synthesizeVerifiedClaims({ question: options.question, verification });
+  
+  if (synthesis.answer_to_user === "I could not verify a supported answer from the supplied evidence.") {
+    warnings.push("No claims were fully verified; falling back to raw discovery hypotheses.");
+    const rawAnswer = discovery.discovery.hypotheses.map((h, i) => `${i + 1}. ${h.hypothesis}`).join("\n");
+    return {
+      ...synthesis,
+      answer_to_user: rawAnswer || "I could not formulate a usable answer.",
+      mode: "raw",
+      warnings,
+      tool_calls: discovery.model_calls + verification.model_calls,
+      discovery: discovery.discovery,
+      verification,
+    };
+  }
+
   return {
-    ...synthesizeVerifiedClaims({ question: options.question, verification }),
+    ...synthesis,
     tool_calls: discovery.model_calls + verification.model_calls,
     discovery: discovery.discovery,
     verification,
+    mode: "verified",
+    warnings,
   };
 }
