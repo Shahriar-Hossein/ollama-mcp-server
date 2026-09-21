@@ -11,6 +11,9 @@ Top-level index. Find the folder that answers your question below, then open
 
 ## Root documents
 
+- [Project map](project-map.md) — an ASCII folder tree with a short purpose
+  for every version-controlled file.
+
 - [Quality reviewer](quality-review.md) — CLI commands, read-only storage,
   symbol discovery, queue policy and verification.
 
