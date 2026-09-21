@@ -75,9 +75,10 @@ This is the canonical instructions file for this repo — other agent configs
   escalate," never as a result to act on directly — that's the one signal
   the pilot showed actually tracked correctness. It is experimental and
   registered only with `ENABLE_LOCAL_EXPLORER_TASK=1` (or the master flag).
-- `docs/` — see [docs/README.md](docs/README.md) for the full index. Start
-  there instead of opening files individually; it says what each doc answers
-  so you only read the one you need.
+- `docs/` — start with [docs/project-map.md](docs/project-map.md) when you
+  need repository orientation. Then use [docs/README.md](docs/README.md) for
+  the full index; it says what each doc answers so you only read the one you
+  need.
 
 See [README.md](README.md) for the project pitch and setup.
 

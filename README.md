@@ -4,6 +4,9 @@ A thin TypeScript MCP server for delegating bounded work to Ollama and for
 inspecting repositories without spending the host agent's context on bulk work.
 It runs over stdio with `npm start`; there is no build step.
 
+For a concise orientation to the repository layout and the purpose of each
+tracked file, start with the [project map](docs/project-map.md).
+
 ## Supported now
 
 The default MCP surface is intentionally small.
