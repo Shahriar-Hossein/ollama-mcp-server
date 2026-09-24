@@ -80,3 +80,48 @@ needs the two worker mappings in those files; EMBED-01 needs the setting and
 GPU-memory reason in `src/ollama-client.ts`; QR-LOCK-01 needs the SQLite
 `worker_lock` in `src/quality-review/storage.ts` and its use in `service.ts`.
 These are leads for human grading, not exact-string pass conditions.
+
+## Nine-model comparison — 2026-09-24
+
+All models ran serially on commit `3c94ae1b8a3829ab22d0a367ad06f838b24c3697`
+with the fixture above, `limit=10`, and the fixed route controls stated in the
+repeat protocol. Ollama was `0.34.3`. Raw structured outputs are retained in
+the ignored artifact `benchmark-data/local-explore-repo-smoke-2026-09-24/model-comparison.json`.
+The model digests at the time of the run were: CodeScout `4d6e5af47692`, Spark
+Coder `6810c00133dc`, Qwen 0.8B `f3817196d142`, Qwen 2B `324d162be6ca`, Qwen
+4B `2a654d98e6fb`, Granite 4.1 `6fd349357287`, Granite 4.2 `40577dc168a3`,
+Ministral `f04aa1c738f6`, and Qwen2.5 Coder 3B `f72c60cabf62`.
+
+Human grading assessed whether a model-selected candidate excerpt contained
+enough source to answer the question. `Useful`/`partial`/`miss` therefore
+measure semantic source selection; `accepted` counts outputs that also passed
+the route's exact-quote validator. A failed validator is not a semantic pass
+for unattended use, even when its selected candidate happens to be useful.
+
+| Model | Semantic selections (SE-01 / SE-02 / EMBED / QR lock) | Useful / partial / miss | Accepted | Total elapsed |
+| --- | --- | ---: | ---: | ---: |
+| `code-scout:4b` | useful / partial / useful* / miss | 2 / 1 / 1 | 3 / 4 | 74.7s |
+| `spark-coder:4b` | useful / partial / useful / miss | 2 / 1 / 1 | 3 / 4 | 92.9s |
+| `qwen3.5:0.8b` | miss / miss / miss / miss | 0 / 0 / 4 | 0 / 4 | 59.5s |
+| `qwen3.5:2b` | miss / miss / useful / miss | 1 / 0 / 3 | 1 / 4 | 58.5s |
+| `qwen3.5:4b` | useful / partial / useful / miss | 2 / 1 / 1 | 4 / 4 | 91.8s |
+| `granite4.1:3b` | useful* / partial* / useful* / miss | 2 / 1 / 1 | 0 / 4 | 107.2s |
+| `granite4.2:3b` | miss / miss / miss / miss | 0 / 0 / 4 | 1 / 4 | 76.7s |
+| `ministral-3:3b` | useful / useful / useful* / miss | 3 / 0 / 1 | 3 / 4 | 73.2s |
+| `qwen2.5-coder:3b` | partial / partial / miss / miss | 0 / 2 / 2 | 3 / 4 | 62.7s |
+
+`*` means the model selected a source-bearing candidate but failed exact-quote
+validation after its retry; it remains unsuitable for an unattended result.
+For `qwen3.5:4b`, all quotes validated, but SE-02 omitted the config lines that
+name the two environment variables and QR-LOCK-01 selected queue/status code
+instead of `worker_lock` in storage. Those are semantic selection failures,
+not validator failures.
+
+Ministral 3B is the best semantic-selection challenger here (3/4) and is
+faster than Qwen 4B, but its embedding answer was rejected for invalid quotes.
+Qwen 4B remains the safer current default: it was the only model with four
+validator-accepted outputs, though its semantic result was only 2 useful, 1
+partial, and 1 miss. This four-question smoke check is too small and shares a
+retrieval miss on the worker-lock question, so it does not justify changing the
+default. A next comparison should add held-out questions and repeat the two
+leaders with cold/warm runs before routing changes.
