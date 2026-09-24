@@ -125,3 +125,27 @@ partial, and 1 miss. This four-question smoke check is too small and shares a
 retrieval miss on the worker-lock question, so it does not justify changing the
 default. A next comparison should add held-out questions and repeat the two
 leaders with cold/warm runs before routing changes.
+
+## Thinking-mode follow-up — 2026-09-25
+
+The same committed tree and four-query fixture were rerun serially with only
+`think=true` changed. Raw outputs are in
+`benchmark-data/local-explore-repo-smoke-2026-09-24/model-comparison-think.json`.
+
+| Model | Semantic selections (SE-01 / SE-02 / EMBED / QR lock) | Useful / partial / miss | Accepted | Total elapsed |
+| --- | --- | ---: | ---: | ---: |
+| `qwen3.5:4b` | useful / useful / useful / miss | 3 / 0 / 1 | 3 / 4 | 83.1s |
+| `code-scout:4b` | useful / partial / useful* / miss | 2 / 1 / 1 | 3 / 4 | 75.2s |
+| `spark-coder:4b` | useful / useful / useful / miss | 3 / 0 / 1 | 4 / 4 | 96.0s |
+| `ministral-3:3b` | request error / request error / request error / request error | — | 0 / 4 | 6.7s |
+
+Spark Coder is the best completed thinking-mode result: thinking improved
+SE-02 from partial to useful while keeping all four outputs validator-accepted.
+Qwen 4B also improved SE-02 to useful, but its QR-lock retry had an invalid
+quote. CodeScout did not improve. Ministral's Ollama server returned HTTP 400
+on every `think=true` request: `"ministral-3:3b" does not support thinking`.
+Its listed capabilities are completion, vision, and tools, not thinking, so it
+is incompatible with this route's thinking-mode configuration. The QR-lock
+miss remains shared: its deterministic candidates did not include the
+`worker_lock` source target, so it cannot separate model quality from retrieval
+coverage.

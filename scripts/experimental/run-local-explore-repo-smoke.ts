@@ -1,13 +1,16 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { generate } from "../../src/ollama-client.js";
 import { runLocalExploreRepo } from "../../src/experimental/tools/local-explore-repo.js";
 
 type Fixture = { version: number; questions: Array<{ id: string; query: string }> };
 
-const [outputPath, ...models] = process.argv.slice(2);
+const arguments_ = process.argv.slice(2);
+const think = arguments_.includes("--think");
+const [outputPath, ...models] = arguments_.filter((argument) => argument !== "--think");
 if (!outputPath || !models.length) {
-  throw new Error("Usage: tsx scripts/experimental/run-local-explore-repo-smoke.ts <output-json> <model> [model...]");
+  throw new Error("Usage: tsx scripts/experimental/run-local-explore-repo-smoke.ts [--think] <output-json> <model> [model...]");
 }
 
 const root = process.cwd();
@@ -32,7 +35,7 @@ const protocol = {
   repository_root: root,
   commit_hash: runCommand("git", ["rev-parse", "HEAD"]),
   limit: 10,
-  route_controls: { retrieval_mode: "basic", max_files: 6, num_ctx: 16_384, num_predict: 2_000, think: false, invalid_evidence_retries: 1 },
+  route_controls: { retrieval_mode: "basic", max_files: 6, num_ctx: 16_384, num_predict: 2_000, think, invalid_evidence_retries: 1 },
   ollama_version: runCommand("ollama", ["--version"]),
 };
 const results: unknown[] = [];
@@ -46,7 +49,10 @@ for (const model of models) {
     const started_at = new Date().toISOString();
     const started = performance.now();
     process.stderr.write(`  ${model} ${question.id} at ${started_at}\n`);
-    const result = await runLocalExploreRepo({ repository_root: root, query: question.query, model, limit: 10 });
+    const result = await runLocalExploreRepo(
+      { repository_root: root, query: question.query, model, limit: 10 },
+      (answerModel, prompt, system, format, _think, options) => generate(answerModel, prompt, system, format, think, options)
+    );
     const elapsed_ms = Math.round(performance.now() - started);
     process.stderr.write(`  ${model} ${question.id} finished in ${elapsed_ms}ms (${result.status})\n`);
     questions.push({ id: question.id, query: question.query, started_at, elapsed_ms, result });
