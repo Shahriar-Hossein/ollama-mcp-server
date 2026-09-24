@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "SE-01",
+      "query": "Where is local_explorer_task registered, and is it enabled by default?",
+      "used_during_development": true
+    },
+    {
+      "id": "SE-02",
+      "query": "Which environment variables gate the autonomous tools, and which tool does each gate?",
+      "used_during_development": true
+    },
+    {
+      "id": "EMBED-01",
+      "query": "Where is Ollama embedding keep_alive set, and why is it zero?",
+      "used_during_development": false
+    },
+    {
+      "id": "QR-LOCK-01",
+      "query": "How does Quality Review prevent duplicate concurrent workers?",
+      "used_during_development": false
+    }
+  ]
+}

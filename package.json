@@ -25,7 +25,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:features": "node --import tsx --test src/config/*.test.ts",
     "quality": "node --env-file-if-exists=.env --import tsx src/quality-review/cli.ts",
-    "test:quality": "node --import tsx --test src/quality-review/*.test.ts"
+    "test:quality": "node --import tsx --test src/quality-review/*.test.ts",
+    "test:local-explore": "node --import tsx --test src/experimental/tools/local-explore-repo.test.ts"
   },
   "keywords": [],
   "author": "",

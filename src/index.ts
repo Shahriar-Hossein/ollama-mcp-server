@@ -27,8 +27,12 @@ registerHybridRetrieval(server, features.semanticSearch && features.gitHistory);
 async function registerOptionalTools() {
   const advancedRetrieval = features.semanticSearch && features.gitHistory;
   if (features.localExplorerTask) {
-    const { registerLocalExplorerTask } = await import("./experimental/tools/local-explorer-task.js");
+    const [{ registerLocalExplorerTask }, { registerLocalExploreRepo }] = await Promise.all([
+      import("./experimental/tools/local-explorer-task.js"),
+      import("./experimental/tools/local-explore-repo.js"),
+    ]);
     registerLocalExplorerTask(server);
+    registerLocalExploreRepo(server);
   }
   if (features.semanticSearch) {
     const { registerSemanticSearch } = await import("./experimental/tools/semantic-search.js");

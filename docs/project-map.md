@@ -56,7 +56,7 @@ ollama-mcp-server/
 |   `-- experimental/            Parked advanced and autonomous work; default runtime skips it.
 |       |-- README.md            Boundary and contents of the parked work.
 |       |-- explorer/            Semantic, history, verification, knowledge, adapters, full pipeline.
-|       |-- tools/               Optional MCP registrations and model-driven local explorer.
+|       |-- tools/               Optional MCP tools: Qwen scout and legacy model-driven explorer.
 |       |-- workers/             Autonomous workers and their shared shell allowlist.
 |       `-- benchmarks/          Super Explorer research entry points.
 |

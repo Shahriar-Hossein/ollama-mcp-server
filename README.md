@@ -70,8 +70,16 @@ groups; a group-specific `0` can override the master flag.
 | `ENABLE_KNOWLEDGE_STORE=1` | `save_knowledge_updates` and `refresh_knowledge_freshness` |
 | `ENABLE_VERIFICATION_PIPELINE=1` | `discover_evidence`, `verify_claims`, and `synthesize_verified_answer` |
 | `ENABLE_FULL_EXPLORER=1` | `explore_repository`; requires the verification flag |
-| `ENABLE_LOCAL_EXPLORER_TASK=1` | model-driven `local_explorer_task` tool loop |
+| `ENABLE_LOCAL_EXPLORER_TASK=1` | `local_explore_repo` deterministic-first scout and legacy `local_explorer_task` tool loop |
 | `ENABLE_FRAMEWORK_ADAPTERS=1` | framework-adapter CLI entry points |
+
+`local_explore_repo` is the preferred model-backed scout. It retrieves up to
+8–12 basic candidates, adds bounded caller and source-text context, and sends
+excerpts from at most six files to `qwen3.5:4b` by default. The model has no
+tools or shell access in this route. It selects candidate IDs and exact source
+quotes; the server checks those quotes and retries once if they fail. The parent
+agent interprets the evidence—quote checking cannot prove a behavioral claim.
+The older `local_explorer_task` loop remains for historical comparisons.
 
 The corresponding semantic, knowledge, verification, full-Explorer, and
 framework CLI commands enforce the same gates. The full pipeline defaults to
@@ -114,6 +122,7 @@ Register `npm start` as a local stdio MCP server in your client.
 ```bash
 npm run test:features
 npm run test:quality
+npm run test:local-explore
 npx tsc --noEmit
 ```
 

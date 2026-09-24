@@ -62,6 +62,10 @@ This is the canonical instructions file for this repo — other agent configs
   SQLite, and the shared Ollama client. Run `npm run test:quality` for fixture
   tests. See [docs/quality-review.md](docs/quality-review.md).
 - `src/tools/*.ts` — one file per MCP tool.
+- `src/experimental/tools/local-explore-repo.ts` — opt-in deterministic-first
+  scout. Basic retrieval and bounded source/caller excerpts run before a
+  tool-free `qwen3.5:4b` call. Candidate IDs and exact quotes are checked;
+  the parent interprets behavior. The legacy tool below remains for benchmarks.
 - `src/experimental/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
   pilot in `docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
@@ -177,21 +181,18 @@ a sub-task is:
 
 For repo-discovery sub-tasks specifically, prefer deterministic
 `hybrid_retrieve` (`basic` mode), `outline_file`, `read_symbol`, and structural
-queries. If the experimental `local_explorer_task` is explicitly available,
-its routing behavior follows the pilot in
-`docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`:
+queries. If the experimental `local_explore_repo` is available, use it for
+bounded Qwen-assisted scouting. Its candidate IDs and exact quotes are checked,
+but its selection may miss the answer; inspect the cited source before making a
+behavioral claim. If it returns `needs_review`, lacks needed evidence, or selects
+irrelevant files, use Luna for bounded read-only exploration in Codex when
+available, then verify its cited source. The 2026-09-24 smoke check found one
+miss in four final-route questions; see
+`docs/experimental/benchmarks/runs/2026-09-24-local-explore-repo-smoke.md`.
 
-- If it returns `Confidence: high` or `medium` with real file:line citations,
-  use it as-is.
-- If it returns `Confidence: low`, gave up without confirming an answer, or
-  its citations don't check out, redo the search yourself (or delegate it to
-  a `general-purpose`/`Explore` subagent) — don't pass a low-confidence
-  answer through to harder reasoning downstream.
-- That pilot only tested a small repo (~10 files) where a Haiku `Explore`
-  subagent already beat it on accuracy, tool-call count, and wall time — the
-  win case is a much larger repo where the exploration itself is expensive.
-  Spot-check a handful of questions on any new, larger repo before trusting
-  it there by default.
+The older `local_explorer_task` remains for historical tool-loop comparisons.
+Its 2026-09-16 pilot found low confidence useful as a fallback signal, but did
+not establish reliable savings on unfamiliar repositories.
 
 If `run_local_worker_task` or `run_cloud_claude_task` are available (they're
 opt-in — check the tool list, don't assume), they can take a mechanical git

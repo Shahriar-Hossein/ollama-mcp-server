@@ -260,12 +260,12 @@ function mergeRankings(rankings: Array<{ source: RetrievalSource; candidates: Ra
 }
 
 /** Retrieves source symbols plus documentation, package scripts, and commit evidence using RRF. */
-export async function hybridRetrieve(repositoryRoot: string, query: string, limit = 10, mode: RetrievalMode = "hybrid", model?: string): Promise<HybridRetrievalResult> {
+export async function hybridRetrieve(repositoryRoot: string, query: string, limit = 10, mode: RetrievalMode = "hybrid", model?: string, repositoryIndex?: RepositoryIndex): Promise<HybridRetrievalResult> {
   const root = resolve(repositoryRoot);
   const trimmedQuery = query.trim();
   if (!trimmedQuery) throw new Error("Retrieval query must not be empty.");
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Retrieval result limit must be an integer from 1 through 100.");
-  const index = indexRepository(root);
+  const index = repositoryIndex ?? indexRepository(root);
   const lexical = lexicalSearch(root, queryTerms(trimmedQuery), index);
   if (mode === "lexical") return { commit_hash: index.commit_hash, mode, query: trimmedQuery, results: mergeRankings([{ source: "lexical", candidates: lexical }], limit, index) };
 

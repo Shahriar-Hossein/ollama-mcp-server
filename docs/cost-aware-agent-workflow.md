@@ -20,7 +20,7 @@ For this repository, creating a commit is an external state change. A model may 
 
 | Commit step | Best owner | Cheap route and boundary |
 | --- | --- | --- |
-| Find likely files, symbols, tests, and recent related commits | local scout first | `local_explorer_task` with a small, read-only budget. Treat citations as leads; parent verifies them. |
+| Find likely files, symbols, tests, and recent related commits | local scout first | `local_explore_repo` with bounded deterministic retrieval and Qwen evidence selection. Treat citations as leads; parent verifies the conclusion. |
 | Condense a log, diff, test output, or many similar errors | local generation | `run_ollama_task` using `qwen3.5:4b`; return a short summary plus exact failing excerpts/locations. Do not make the parent read the full artifact first. |
 | Draft a commit message from an already-reviewed diff | local generation | A one-shot local call. The parent checks that the message neither hides unrelated changes nor claims unverified behavior. |
 | Mechanical, narrowly specified code draft | local generation | `qwen3.5:4b`; require a small output contract and run tests/diff review afterward. |
@@ -35,7 +35,7 @@ The important design is **worker produces a bounded artifact; deterministic chec
 
 | Work shape | First route | Escalate when | Keep with parent from the start |
 | --- | --- | --- | --- |
-| File/symbol discovery in a known repository | `local_explorer_task`; start around 16 calls / 6 files | No final answer, low confidence, bad citations, or a 32-call retry fails | The answer will drive a security or architecture decision. |
+| File/symbol discovery in a known repository | `local_explore_repo`; deterministic top 10, at most 6 files | No useful evidence, bad citations after one retry, or relevant sources missing; use Luna for a bounded read-only fallback in Codex | The answer will drive a security or architecture decision. |
 | Parsing, extraction, summaries, repetitive transforms | `qwen3.5:4b`, `think:false` | Output cannot be deterministically checked, or it loses a critical caveat | The source is sensitive or the summary is itself a decision. |
 | Tiny throwaway code or test scaffolding | `qwen2.5-coder:3b`, one-shot only | It needs tool calls, repo navigation, or test repair | Production change with non-obvious constraints. |
 | Precise, spec-sensitive repair | `granite4.2:3b`, `think:true`, large output budget | Test/diff fails or runtime is unsuitable | Security, destructive migration, or broad refactor. |
@@ -66,7 +66,7 @@ The available project conversation records both a Codex and Claude exchange abou
 
 ## Near-term implementation priorities
 
-- Keep `local_explorer_task` read-only, source-scoped, and citation-checked. Add deterministic navigation helpers before increasing tool budgets.
+- Use `local_explore_repo` for read-only scouting. It supplies deterministic candidates to Qwen and checks exact quotes; the parent still checks any behavioral conclusion. Keep `local_explorer_task` for historical tool-loop comparisons.
 - Make the useful delegation routes return timing/token fields and a compact evidence artifact. The current client discards some Ollama telemetry.
 - For commits, tighten the local worker around fixed operations and explicit paths. Refuse unexpected staged files and verify exact commit contents; never treat a broad `git commit` allowlist as sufficient scope control.
 - Evaluate one real repeated task family end-to-end—for example, extracting CI failure ledgers—against direct parent work before expanding the system.
