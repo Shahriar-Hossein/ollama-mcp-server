@@ -63,9 +63,10 @@ This is the canonical instructions file for this repo — other agent configs
   tests. See [docs/quality-review.md](docs/quality-review.md).
 - `src/tools/*.ts` — one file per MCP tool.
 - `src/experimental/tools/local-explore-repo.ts` — opt-in deterministic-first
-  scout. Basic retrieval and bounded source/caller excerpts run before a
-  tool-free `qwen3.5:4b` call. Candidate IDs and exact quotes are checked;
-  the parent interprets behavior. The legacy tool below remains for benchmarks.
+  scout. It separates question parts, packs bounded source/caller bundles, and
+  lets `qwen3.5:4b` select cited lines. One bounded source expansion is allowed.
+  Candidate IDs and line numbers are checked, and quotes are copied from source;
+  the parent still interprets behavior. The legacy tool below remains for benchmarks.
 - `src/experimental/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
   pilot in `docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
@@ -182,13 +183,14 @@ a sub-task is:
 For repo-discovery sub-tasks specifically, prefer deterministic
 `hybrid_retrieve` (`basic` mode), `outline_file`, `read_symbol`, and structural
 queries. If the experimental `local_explore_repo` is available, use it for
-bounded Qwen-assisted scouting. Its candidate IDs and exact quotes are checked,
-but its selection may miss the answer; inspect the cited source before making a
-behavioral claim. If it returns `needs_review`, lacks needed evidence, or selects
-irrelevant files, use Luna for bounded read-only exploration in Codex when
-available, then verify its cited source. The 2026-09-24 smoke check found one
-miss in four final-route questions; see
-`docs/experimental/benchmarks/runs/2026-09-24-local-explore-repo-smoke.md`.
+bounded Qwen-assisted scouting. Evidence line references are checked and
+quotes are copied from source, but selection may still omit the answer; inspect
+the cited source before making a behavioral claim. If it returns `needs_review`,
+lacks needed evidence, or selects irrelevant files, use Luna for bounded read-only
+exploration in Codex when available, then verify its cited source. The
+2026-09-25 smoke check put the required source in context for 4/4 questions,
+but Qwen selected fully useful evidence for only 2/4; see
+`docs/experimental/benchmarks/runs/2026-09-25-local-explore-repo-improvements.md`.
 
 The older `local_explorer_task` remains for historical tool-loop comparisons.
 Its 2026-09-16 pilot found low confidence useful as a fallback signal, but did

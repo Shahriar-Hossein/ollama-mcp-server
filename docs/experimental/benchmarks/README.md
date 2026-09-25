@@ -10,6 +10,7 @@ numbers behind one specific series.
 |---|---|
 | [MASTER.md](MASTER.md) | Current routing recommendation, winners/losers, hardware, traps. Read this first. |
 | [model-classification.md](model-classification.md) | Models grouped by what they're good at (extraction, code fix, tool use, agentic driving), synthesized from MASTER.md + `runs/` |
+| [field-feedback.md](field-feedback.md) | Brief failures seen during real MCP tasks; not benchmark scores |
 | `runs/` | Individual benchmark runs, one file per question asked — see below |
 
 ### `runs/` — chronological, one file per question
@@ -26,6 +27,8 @@ numbers behind one specific series.
 | [2026-09-16-capability-matrix-results.md](runs/2026-09-16-capability-matrix-results.md) | Measured results for the plan above, by task (extraction, groupBy, evidence-boundary, conflict, bug-investigation, retrieval, summary) |
 | [2026-09-16-local-explorer.md](runs/2026-09-16-local-explorer.md) | Can a local model absorb repo-discovery tool calls ahead of Haiku/Sonnet (not: is its single-completion output correct) |
 | [2026-09-19-explorer-scout-comparison.md](runs/2026-09-19-explorer-scout-comparison.md) | Scout comparison and Qwen's clean 50-call, thinking-enabled rerun; raw outputs remain in ignored `benchmark-data/explorer-scout/` |
+| [2026-09-24-local-explore-repo-smoke.md](runs/2026-09-24-local-explore-repo-smoke.md) | Initial deterministic-first scout smoke and model comparison |
+| [2026-09-25-local-explore-repo-improvements.md](runs/2026-09-25-local-explore-repo-improvements.md) | Evidence bundle and citation changes, with a follow-up smoke check |
 
 ## The rule for benchmark work
 

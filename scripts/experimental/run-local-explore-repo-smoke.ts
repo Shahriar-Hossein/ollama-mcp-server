@@ -35,7 +35,7 @@ const protocol = {
   repository_root: root,
   commit_hash: runCommand("git", ["rev-parse", "HEAD"]),
   limit: 10,
-  route_controls: { retrieval_mode: "basic", max_files: 6, num_ctx: 16_384, num_predict: 2_000, think, invalid_evidence_retries: 1 },
+  route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx: 16_384, num_predict: 2_000, think, invalid_evidence_retries: 1 },
   ollama_version: runCommand("ollama", ["--version"]),
 };
 const results: unknown[] = [];
