@@ -131,3 +131,8 @@ with an A model tag. Add context/budget controls before using A's larger window
 through that route; `run_ollama_task` inherits the tag's context defaults.
 Keep inference on GPU and concise prompt limits. The evidence failures, rather
 than output truncation, are the present bottleneck for ordinary scout tasks.
+
+Later the same day, a user-requested
+[clean-load fit recheck](2026-10-02-qwen-gpu-fit.md) confirmed the 65536 spill
+but found larger GPU-only windows below it. F/61440 and G/57344 are installed;
+the phase-2 quality results above are unchanged.

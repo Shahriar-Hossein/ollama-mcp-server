@@ -40,6 +40,9 @@ input-only allowance.
 | C | q8_0 | 16384 | Higher cache precision candidate |
 | D | q8_0 | 20480 | Initial Q8 extension |
 | E | q4_0 | 16384 | Matched-context control against C |
+| F | q4_0 | 61440 | Clean-load GPU-only extension; less fit margin |
+| G | q4_0 | 57344 | GPU fit margin reference |
+| H | q4_0 | 50000 | Current testing baseline; 25000 output ceiling |
 
 - [ ] Keep model digest, thinking off, sampling, tool schema, retrieval,
   and inference concurrency identical. Compare equal output ceilings first;
@@ -238,3 +241,36 @@ See [reviewed results](experimental/benchmarks/runs/2026-10-02-qwen-context-phas
 - Next: improve evidence packing/selection, then rerun held-out cases. More
   output allowance did not resolve short-answer evidence omissions. Independent
   cache-block rotation, wider held-out tasks and parent-work measurements remain.
+
+## Clean GPU fit recheck — 2026-10-02
+
+User requested a clean 64K retest and a GPU-only extension within 45–65K.
+No other Ollama model was resident before each probe. 65536 still spills;
+63488 fits on three fresh loads, while 64512 and 65024 spill. F/61440 and
+G/57344 are installed, keeping weights and the 8192 ceiling fixed. Prefer G
+for more fit margin. This extends placement capacity, not evidence quality
+or the scout's explicit 16384 override. See the
+[clean-load report](experimental/benchmarks/runs/2026-10-02-qwen-gpu-fit.md)
+for the runner's reserved-memory calculation and larger-prompt validation.
+
+User subsequently selected H (`qwen-context:h-q4_0-50k`) as the baseline
+for further testing: exactly 50000 total context and 25000 output ceiling.
+With a 1024 margin, reserve the full ceiling only for inputs up to 23976
+tokens. Inherited settings and short generation were verified at 100% GPU;
+full 25000-token output remains untested. Existing scout/wrapper overrides
+need matching explicit settings when testing H.
+
+Subsequently, the user removed A/E/F/G model tags and retained only H among
+q4 context variants. B was already absent. C/D q8 tags and base
+`qwen3.5:4b` remain. Historical Modelfiles and benchmark results are preserved;
+`configurations.json` marks A/B/E/F/G removed.
+
+Q8 follow-up: 32768 context passed three independent clean GPU-only loads
+and a 5528-token source prompt. No lower-context sweep was necessary.
+See [q8 placement report](experimental/benchmarks/runs/2026-10-02-qwen-q8-gpu-fit.md).
+The maximum remains unmeasured. System q4/H restored; C/D defaults unchanged.
+
+Final configuration cleanup: only H/q4_0/50000 and I/q8_0/32768 context
+variants are retained, each with a 25000 output ceiling. A–G tags and
+Modelfile folders were deleted. Base `qwen3.5:4b` remains; historical
+measurements above are unchanged. KV precision requires the matching daemon.
