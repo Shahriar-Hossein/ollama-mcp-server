@@ -1,6 +1,6 @@
 # Local model context and MCP improvement checklist
 
-Date: 2026-10-01. Status: planned; no comparison results yet.
+Date: 2026-10-01. Status: five model variants created; initial C/D q8_0 smoke comparison complete; q4_0 runs pending.
 
 Keep Qwen 3.5 4B Q4_K_M weights fixed. Compare `q4_0` KV cache at
 32K/64K with `q8_0` KV cache at 16K/20K, then push each cache type
@@ -19,7 +19,7 @@ evidence and missing information.
   but no context-size option.
 - [x] Inspect telemetry: shared `generate()` returns text and discards
   Ollama's token counts and timing fields.
-- [ ] Verify Q4 quantization with model metadata; do not infer it from size.
+- [x] Verify Q4 quantization: installed `qwen3.5:4b` reports Q4_K_M.
 - [ ] Record Ollama version, model tags/full digests, template, sampling
   parameters, OS, GPU/VRAM, RAM, and available memory. The pasted context
   reports a GTX 1660 Super with 6 GB; GPU access was not verified here.
@@ -193,3 +193,28 @@ Next step: add context/budget controls and benchmark telemetry, then run
 A/C/E as the first comparison. The open question is whether the additional
 capacity in B or cache precision in C/D improves evidence enough to justify its
 memory and latency on this machine.
+
+## Execution checkpoint (2026-10-02)
+
+- Five tags and Modelfiles created under `/home/shahriar/ollama-models/qwen-context/`;
+  `configurations.json` maps A–E to daemon cache and explicit context.
+- All five tags share weight layer `81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490`.
+- Runner accepts `--num-ctx` and `--num-predict`, records raw token/timing
+  metrics and checkpoints questions. Evidence packing remains 24,000 characters;
+  these small smoke prompts do not establish large-context capacity.
+- Current system daemon: Flash Attention enabled, q8_0 cache. Baseline
+  metadata and raw runs are under ignored `benchmark-data/qwen-context/`.
+- C first smoke: 4 questions, 2 `evidence_selected`, 2 `needs_review`;
+  these statuses are not semantic scores. Source review found complete
+  embedding evidence, but missing evidence for default gating, cloud mapping
+  and lock transaction/callers. C loaded entirely on GPU at 16K.
+- Seven local-explore fixture tests pass with host access. TypeScript check
+  fails on missing `vitest` in `src/experimental/explorer/explore.test.ts`.
+- q4_0 testing needs the user to apply the supplied temporary systemd override;
+  sudo requires a password. No cache comparison winner yet.
+- D first smoke also returned 2 `evidence_selected` and 2 `needs_review`;
+  103.679 seconds versus C 104.312 seconds across four questions. Both loaded
+  entirely on GPU. Flash Attention enabled in runtime logs. One repetition
+  with small prompts provides no evidence of a winner.
+- Next: test E/A/B after confirming q4_0 runtime settings.
+  Full repetitions, capacity suites and output-ceiling sweeps remain pending.
