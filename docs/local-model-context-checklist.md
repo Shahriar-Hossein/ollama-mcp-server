@@ -1,6 +1,6 @@
 # Local model context and MCP improvement checklist
 
-Date: 2026-10-01. Status: five model variants created; initial A–E smoke comparison complete; capacity and repeated trials pending.
+Date: 2026-10-01. Updated: 2026-10-02. Status: repeated smoke, controlled capacity diagnostics and output-ceiling tests complete; MCP improvements pending.
 
 Keep Qwen 3.5 4B Q4_K_M weights fixed. Compare `q4_0` KV cache at
 32K with `q8_0` KV cache at 16K/20K, then push each cache type
@@ -173,11 +173,15 @@ Change one behavior at a time and rerun the same fixtures.
 
 | Configuration | Actual input tokens | Useful evidence / cases | Invalid citations | Timeouts | Median / p95 time | Peak VRAM / RAM | CPU/GPU placement |
 |---|---|---|---|---|---|---|---|
-| A: q4_0 KV / 32K | pending | pending | pending | pending | pending | pending | pending |
-| B: q4_0 KV / 64K | pending | pending | pending | pending | pending | pending | pending |
-| C: q8_0 KV / 16K | pending | pending | pending | pending | pending | pending | pending |
-| D: q8_0 KV / 20K | pending | pending | pending | pending | pending | pending | pending |
-| E: q4_0 KV / 16K | pending | pending | pending | pending | pending | pending | pending |
+| A: q4_0 KV / 32K | 1458–4291 | 3/12 complete | 0 unsupported snippets | 0 | 18.2s / 28.3s | smoke peaks unmeasured | 100% GPU |
+| B: q4_0 KV / 64K | retired | excluded | — | — | — | — | CPU offloading |
+| C: q8_0 KV / 16K | 1458–4285 | 3/12 complete | 0 unsupported snippets | 0 | 14.4s / 58.5s | smoke peaks unmeasured | 100% GPU |
+| D: q8_0 KV / 20K | 1458–4285 | 3/12 complete | 0 unsupported snippets | 0 | 14.3s / 42.7s | smoke peaks unmeasured | 100% GPU |
+| E: q4_0 KV / 16K | 1458–4291 | 3/12 complete | 0 unsupported snippets | 0 | 18.3s / 28.2s | smoke peaks unmeasured | 100% GPU |
+
+The table above is the phase-2 smoke suite: 12 questions per active row,
+including retries. Median/p95 are per-question empirical observations. Direct
+capacity and output-ceiling cells are in the reviewed phase-2 report.
 
 - [ ] Create a result row per cache/context/output-ceiling combination;
   include actual output tokens, requested result limit, stop reason, and
@@ -189,46 +193,15 @@ Change one behavior at a time and rerun the same fixtures.
   those limits. Record a larger-context fallback if it earns its extra cost.
 - [ ] Update relevant docs/defaults only after source-reviewed results.
 
-Next step: add context/budget controls and benchmark telemetry, then run
-A/C/E as the first comparison. The open question is whether the additional
-capacity in B or cache precision in C/D improves evidence enough to justify its
-memory and latency on this machine.
+Current next step: add MCP context/budget controls and improve evidence
+packing, then rerun the same cases. Initial and repeated A/C/E comparisons are complete. B is retired. The active comparisons found no complete-evidence advantage
+from extra context or q8 cache precision on these cases.
 
-## Execution checkpoint (2026-10-02)
+## Execution checkpoints
 
-- Five tags and Modelfiles created under `/home/shahriar/ollama-models/qwen-context/`;
-  `configurations.json` maps A–E to daemon cache and explicit context.
-- All five tags share weight layer `81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490`.
-- Runner accepts `--num-ctx` and `--num-predict`, records raw token/timing
-  metrics and checkpoints questions. Evidence packing remains 24,000 characters;
-  these small smoke prompts do not establish large-context capacity.
-- Current system daemon: Flash Attention enabled, q8_0 cache. Baseline
-  metadata and raw runs are under ignored `benchmark-data/qwen-context/`.
-- C first smoke: 4 questions, 2 `evidence_selected`, 2 `needs_review`;
-  these statuses are not semantic scores. Source review found complete
-  embedding evidence, but missing evidence for default gating, cloud mapping
-  and lock transaction/callers. C loaded entirely on GPU at 16K.
-- Seven local-explore fixture tests pass with host access. TypeScript check
-  fails on missing `vitest` in `src/experimental/explorer/explore.test.ts`.
-- q4_0 testing needs the user to apply the supplied temporary systemd override;
-  sudo requires a password. No cache comparison winner yet.
-- D first smoke also returned 2 `evidence_selected` and 2 `needs_review`;
-  103.679 seconds versus C 104.312 seconds across four questions. Both loaded
-  entirely on GPU. Flash Attention enabled in runtime logs. One repetition
-  with small prompts provides no evidence of a winner.
-- Next: test E/A/B after confirming q4_0 runtime settings.
-  Full repetitions, capacity suites and output-ceiling sweeps remain pending.
-
-### Five-variant smoke complete
-
-See [2026-10-02 results](experimental/benchmarks/runs/2026-10-02-qwen-context-smoke.md).
-A/E remain fully on GPU; B at 64K reports 17% CPU / 83% GPU. All five return
-the same completeness pattern: complete embedding evidence and partial
-evidence for three other questions. A is a candidate for expanded-input tests,
-not a routing default. Earlier pending E/A/B checkpoint items are now complete.
-Next: expanded-input checks and three repetitions with rotated cache blocks.
-Daemon remains q4_0; restore by removing `zz-qwen-benchmark.conf`, reloading
-systemd and restarting Ollama.
+The [initial A–E smoke report](experimental/benchmarks/runs/2026-10-02-qwen-context-smoke.md)
+preserves the 2000-token controls and the 64K CPU-offloading result.
+The following checkpoints describe current settings and completed phase-2 work.
 
 ### Retirement and output ceilings (2026-10-02)
 
@@ -240,3 +213,28 @@ Keep concise prompt instructions; 8192 is a maximum, not a requested length.
 Test 16384 separately at A/32K with an appropriate input reserve. Do not
 reserve 16384 output in a 16384 context. Future capacity steps must remain
 fully on GPU; exclude any CPU-offloaded configuration.
+
+### Phase 2 complete (2026-10-02)
+
+See [reviewed results](experimental/benchmarks/runs/2026-10-02-qwen-context-phase2.md).
+
+- Three four-question repetitions each for A/E/C/D at an 8192 ceiling.
+  Reviewed complete evidence: 3/12 per configuration; useful partial evidence
+  remains separate from complete answers. All active configurations stayed on GPU.
+- Matched 5534-token source prompts: identical exact-line scores (5/9).
+  Q8 uncached layouts were about 1.5 seconds faster; precision did not improve
+  accuracy. Prompt reuse strongly affects smoke timings.
+- A accepted 18083-token input on GPU, with about 100 seconds for uncached
+  processing and no complete three-line answer. Capacity is not evidence quality.
+- Same 36-record inventory, 13520 input tokens: 8192 ceiling truncated JSON;
+  16384 ceiling stopped naturally at 13443 tokens with 36 records, 29 exact.
+- Raw artifacts are under ignored `benchmark-data/qwen-context/phase2/`.
+  The ambiguous wrapper pilot is preserved and excluded from comparison.
+- Temporary q8 daemon stopped; temporary weight references removed. System
+  service remains q4_0 with Flash Attention and one inference slot. B remains retired.
+- Keep the current 16K scout default for concise evidence. A/32K is available
+  for larger inputs; the scout's explicit 16K override needs context/budget
+  controls before its route can use that window.
+- Next: improve evidence packing/selection, then rerun held-out cases. More
+  output allowance did not resolve short-answer evidence omissions. Independent
+  cache-block rotation, wider held-out tasks and parent-work measurements remain.
