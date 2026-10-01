@@ -23,6 +23,9 @@ the current default tool surface.
 
 ## Root documents
 
+- [Local model context checklist](local-model-context-checklist.md) — Q4
+  32K/64K versus Q8 16K/20K, prompt budgeting, evaluation, and MCP improvements.
+
 - [Project map](project-map.md) — the repository orientation guide: an ASCII
   folder tree with a short purpose for every version-controlled file.
 
