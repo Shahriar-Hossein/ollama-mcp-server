@@ -50,7 +50,7 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
       assert.equal(model, "qwen3.5:4b");
       assert.equal(typeof format, "object");
       assert.equal(think, false);
-      assert.deepEqual(options, { num_ctx: 16_384, num_predict: 2_000 });
+      assert.deepEqual(options, { num_ctx: 16_384, num_predict: 8_192 });
       const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
       const source = sources.find((item) => item.lines.some((line) => line.text.includes("calculateTotal")));
       assert.ok(source);

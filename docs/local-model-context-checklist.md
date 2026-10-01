@@ -1,9 +1,9 @@
 # Local model context and MCP improvement checklist
 
-Date: 2026-10-01. Status: five model variants created; initial C/D q8_0 smoke comparison complete; q4_0 runs pending.
+Date: 2026-10-01. Status: five model variants created; initial A–E smoke comparison complete; capacity and repeated trials pending.
 
 Keep Qwen 3.5 4B Q4_K_M weights fixed. Compare `q4_0` KV cache at
-32K/64K with `q8_0` KV cache at 16K/20K, then push each cache type
+32K with `q8_0` KV cache at 16K/20K, then push each cache type
 toward its largest usable context. Test usable evidence quality, prompt capacity, and latency on the
 actual machine. Treat 8K as an optional diagnostic control, not the target.
 Keep frontier-model planning and review; the local explorer returns source
@@ -36,7 +36,7 @@ input-only allowance.
 | Run | KV cache | Explicit `num_ctx` | Purpose |
 |---|---|---:|---|
 | A | q4_0 | 32768 | Main larger-context candidate |
-| B | q4_0 | 65536 | Capacity and long-context quality |
+| B (retired) | q4_0 | 65536 | CPU offloading; excluded for speed |
 | C | q8_0 | 16384 | Higher cache precision candidate |
 | D | q8_0 | 20480 | Initial Q8 extension |
 | E | q4_0 | 16384 | Matched-context control against C |
@@ -218,3 +218,25 @@ memory and latency on this machine.
   with small prompts provides no evidence of a winner.
 - Next: test E/A/B after confirming q4_0 runtime settings.
   Full repetitions, capacity suites and output-ceiling sweeps remain pending.
+
+### Five-variant smoke complete
+
+See [2026-10-02 results](experimental/benchmarks/runs/2026-10-02-qwen-context-smoke.md).
+A/E remain fully on GPU; B at 64K reports 17% CPU / 83% GPU. All five return
+the same completeness pattern: complete embedding evidence and partial
+evidence for three other questions. A is a candidate for expanded-input tests,
+not a routing default. Earlier pending E/A/B checkpoint items are now complete.
+Next: expanded-input checks and three repetitions with rotated cache blocks.
+Daemon remains q4_0; restore by removing `zz-qwen-benchmark.conf`, reloading
+systemd and restarting Ollama.
+
+### Retirement and output ceilings (2026-10-02)
+
+B/64K retired at user request because CPU offloading is unacceptable. Its
+installed tag was removed; Modelfile and benchmark evidence are retained.
+Active A/C/D/E tags, scout and smoke runner now default to `num_predict=8192`.
+The initial 2000-token runs remain baseline controls, not high-ceiling tests.
+Keep concise prompt instructions; 8192 is a maximum, not a requested length.
+Test 16384 separately at A/32K with an appropriate input reserve. Do not
+reserve 16384 output in a 16384 context. Future capacity steps must remain
+fully on GPU; exclude any CPU-offloaded configuration.

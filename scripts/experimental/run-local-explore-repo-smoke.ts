@@ -17,7 +17,7 @@ function integerOption(name: string, fallback: number) {
   return value;
 }
 const num_ctx = integerOption("--num-ctx", 16384);
-const num_predict = integerOption("--num-predict", 2000);
+const num_predict = integerOption("--num-predict", 8192);
 if (num_predict + 1024 >= num_ctx) throw new Error("Output ceiling leaves no useful input budget");
 const think = arguments_.includes("--think");
 const [outputPath, ...models] = arguments_.filter((argument) => argument !== "--think");

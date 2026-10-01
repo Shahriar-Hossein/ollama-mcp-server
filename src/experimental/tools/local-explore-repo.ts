@@ -398,7 +398,7 @@ export async function runLocalExploreRepo(
     const repoMap = [...new Map(candidates.map((candidate) => [candidate.file, candidate.symbol ?? candidate.kind])).entries()].map(([file, role]) => ({ file, role }));
     const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(parts)}\nRelevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\nReturn JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. ${lastError ? `Previous output failed: ${lastError}.` : ""}`;
     try {
-      const raw = await generateAnswer(model, prompt, system, ANSWER_SCHEMA, false, { num_ctx: 16_384, num_predict: 2_000 });
+      const raw = await generateAnswer(model, prompt, system, ANSWER_SCHEMA, false, { num_ctx: 16_384, num_predict: 8_192 });
       const answer = validateModelAnswer(raw, candidates, parts, bundles, refs);
       answer.coverage = answer.coverage.map((coverage) => {
         if (coverage.status === "missing") return coverage;
