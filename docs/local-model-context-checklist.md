@@ -2,8 +2,9 @@
 
 Date: 2026-10-01. Status: planned; no comparison results yet.
 
-Compare Qwen 3.5 4B Q4 weights at 32K/64K with Q8 weights at
-16K/20K. Test usable evidence quality, prompt capacity, and latency on the
+Keep Qwen 3.5 4B Q4_K_M weights fixed. Compare `q4_0` KV cache at
+32K/64K with `q8_0` KV cache at 16K/20K, then push each cache type
+toward its largest usable context. Test usable evidence quality, prompt capacity, and latency on the
 actual machine. Treat 8K as an optional diagnostic control, not the target.
 Keep frontier-model planning and review; the local explorer returns source
 evidence and missing information.
@@ -11,7 +12,7 @@ evidence and missing information.
 ## 1. Record the starting point
 
 - [x] Check installed models: `qwen3.5:4b` is present, ID `2a654d98e6fb`,
-  listed size 3.4 GB. No Qwen 3.5 4B Q8 tag was listed on 2026-10-01.
+  listed size 3.4 GB. Use the same model digest for both KV-cache types.
 - [x] Inspect the current smoke runner and scout: generation uses
   `num_ctx: 16384`, `num_predict: 2000`; evidence packing has a
   24,000-character cap. The runner accepts model names and `--think`,
@@ -22,35 +23,61 @@ evidence and missing information.
 - [ ] Record Ollama version, model tags/full digests, template, sampling
   parameters, OS, GPU/VRAM, RAM, and available memory. The pasted context
   reports a GTX 1660 Super with 6 GB; GPU access was not verified here.
-- [ ] Obtain and verify the Q8 build of the same base model.
 - [ ] Record current daemon settings and a restore procedure before changes.
 - [ ] Freeze repository SHA, working-tree changes, fixture version, and
   index state for comparisons.
 
 ## 2. Compare these configurations
 
-Q4/Q8 below refer to **weight quantization**. KV-cache quantization is a
-separate variable. Begin with the same `q8_0` KV setting in every row.
+Q4/Q8 below refer to **KV-cache quantization**. Model weights remain
+Q4_K_M in every row. Context is the total input/output window, not an
+input-only allowance.
 
-| Run | Weights | Explicit `num_ctx` | Purpose |
+| Run | KV cache | Explicit `num_ctx` | Purpose |
 |---|---|---:|---|
-| A | Q4_K_M | 32768 | Main larger-context candidate |
-| B | Q4_K_M | 65536 | Capacity and long-context quality |
-| C | Q8_0 | 16384 | Higher weight precision candidate |
-| D | Q8_0 | 20480 | Push Q8 to the requested 20K |
-| E | Q4_K_M | 16384 | Matched-context control against C |
+| A | q4_0 | 32768 | Main larger-context candidate |
+| B | q4_0 | 65536 | Capacity and long-context quality |
+| C | q8_0 | 16384 | Higher cache precision candidate |
+| D | q8_0 | 20480 | Initial Q8 extension |
+| E | q4_0 | 16384 | Matched-context control against C |
 
-- [ ] Keep thinking off, output budget, sampling, tool schema, retrieval,
-  and inference concurrency identical. Save effective settings, including
-  model defaults, rather than assuming they match.
-- [ ] Configure one inference at a time. Verify Flash Attention and
-  `q8_0` KV cache in the running daemon, not just the client shell.
+- [ ] Keep model digest, thinking off, sampling, tool schema, retrieval,
+  and inference concurrency identical. Compare equal output ceilings first;
+  sweep output budgets separately.
+- [ ] Configure one inference at a time. Verify Flash Attention and the
+  selected KV-cache type in the running daemon, not just the client shell.
+- [ ] Run cache configurations in separate daemon-setting blocks. Restart
+  and verify the effective setting when switching cache type; record it
+  with each artifact. Rotate block order across repetitions.
 - [ ] Record GPU/CPU placement and peak VRAM/RAM during each run. A loaded
   model is not proof that the configuration fits entirely on the GPU.
-- [ ] If a row fails or is too slow, record that result before changing it.
-  Try `q4_0` KV only as a separately labeled second experiment.
-- [ ] Probe intermediate Q8 windows only after C/D; record the largest
-  window that passes repeated capacity and quality checks.
+- [ ] Increase context progressively for both cache types beyond the initial
+  rows where feasible. Record the largest repeatedly usable window and
+  the first failing or impractically slow step; do not assume Q8 stops at 20K.
+- [ ] Preserve failed results before lowering context or changing budgets.
+
+### Output capacity and requested result length
+
+- [ ] Make `num_predict` configurable. Test ceilings of 8192 and 16384
+  generated tokens; retain 2000 as the current control.
+- [ ] Treat these as ceilings, not target lengths. Allow an early natural
+  stop when the task is complete; do not pad results to use the budget.
+- [ ] Give the prompt a task-specific result limit, such as at most three
+  evidence references per question part plus a short unresolved list, or
+  a maximum word count for summaries. Record the limit and score compliance.
+- [ ] Keep ordinary evidence-selection tasks concise. Add separate tasks
+  that genuinely need long output to test sustained 8K/16K generation.
+- [ ] Record actual output tokens, completion reason, schema completeness,
+  repetition, citation quality, and requested-length compliance. Hitting a
+  ceiling with incomplete JSON is a failure, not usable capacity.
+- [ ] Fit each output ceiling to the context budget. A 16K window cannot
+  reserve 16K output and still hold a useful prompt; mark incompatible
+  cells as infeasible or increase context explicitly.
+- [ ] For example, at 32K context, reserving 8K output and a 1K safety
+  margin leaves at most 23K input. Reserving 16K leaves at most 15K input.
+- [ ] Measure latency/deadlines for long-output cases separately. Prompt
+  length instructions guide the model; API ceilings and validation enforce
+  bounded generation and acceptable results.
 
 Ollama documents per-request `num_ctx`, GPU placement via `ollama ps`,
 Flash Attention, and the global KV-cache setting in its
@@ -82,7 +109,8 @@ the local model's window.
 
 ## 4. Prepare the benchmark harness
 
-- [ ] Add explicit context and input-budget controls to
+- [ ] Add explicit context, output-ceiling, requested-result-length, and
+  input-budget controls to
   `scripts/experimental/run-local-explore-repo-smoke.ts`; pass them through
   the scout and record effective values, not a hardcoded protocol label.
 - [ ] Parameterize evidence packing separately from `num_ctx`. Raising
@@ -105,7 +133,8 @@ the local model's window.
 - [ ] Capacity suite: progressively fill each window with realistic code,
   instructions, and search results while retaining known required evidence.
 - [ ] Matched-input suite: give every configuration the same prompts that
-  fit the smallest window. Use C versus E to isolate weight quantization.
+  fit the smallest usable input budget. Use C versus E with equal output
+  ceilings to isolate KV-cache quantization.
 - [ ] Expanded-input suite: use the extra capacity in A/B and score whether
   added evidence improves results. Mark prompts that cannot fit C/D.
 - [ ] Add held-out large-project questions with known required files,
@@ -114,7 +143,7 @@ the local model's window.
 - [ ] Separate retrieval failures (required evidence absent from the packed
   prompt) from selection failures (present but omitted or misused).
 - [ ] Run at least three measured repetitions per question/configuration;
-  separate cold loads and warmed runs and rotate configuration order.
+  separate cold loads and warmed runs and rotate cache-block order.
 - [ ] Review exact citations and semantic sufficiency against source.
   A successful HTTP response, valid JSON, or abstention is not a correct
   answer. Score appropriate abstentions separately on negative cases.
@@ -144,12 +173,15 @@ Change one behavior at a time and rerun the same fixtures.
 
 | Configuration | Actual input tokens | Useful evidence / cases | Invalid citations | Timeouts | Median / p95 time | Peak VRAM / RAM | CPU/GPU placement |
 |---|---|---|---|---|---|---|---|
-| A: Q4 / 32K | pending | pending | pending | pending | pending | pending | pending |
-| B: Q4 / 64K | pending | pending | pending | pending | pending | pending | pending |
-| C: Q8 / 16K | pending | pending | pending | pending | pending | pending | pending |
-| D: Q8 / 20K | pending | pending | pending | pending | pending | pending | pending |
-| E: Q4 / 16K | pending | pending | pending | pending | pending | pending | pending |
+| A: q4_0 KV / 32K | pending | pending | pending | pending | pending | pending | pending |
+| B: q4_0 KV / 64K | pending | pending | pending | pending | pending | pending | pending |
+| C: q8_0 KV / 16K | pending | pending | pending | pending | pending | pending | pending |
+| D: q8_0 KV / 20K | pending | pending | pending | pending | pending | pending | pending |
+| E: q4_0 KV / 16K | pending | pending | pending | pending | pending | pending | pending |
 
+- [ ] Create a result row per cache/context/output-ceiling combination;
+  include actual output tokens, requested result limit, stop reason, and
+  length compliance alongside the columns above.
 - [ ] Choose acceptable latency and failure limits before the full run.
 - [ ] Report denominators, repeated-run variation, and failure categories;
   retain raw artifacts and keep reruns separate.
@@ -159,5 +191,5 @@ Change one behavior at a time and rerun the same fixtures.
 
 Next step: add context/budget controls and benchmark telemetry, then run
 A/C/E as the first comparison. The open question is whether the additional
-capacity in B or precision in C/D improves evidence enough to justify its
+capacity in B or cache precision in C/D improves evidence enough to justify its
 memory and latency on this machine.
