@@ -1,276 +1,158 @@
 # Local model context and MCP improvement checklist
 
-Date: 2026-10-01. Updated: 2026-10-02. Status: repeated smoke, controlled capacity diagnostics and output-ceiling tests complete; MCP improvements pending.
+Updated: 2026-10-02. GPU fit checks and phase-2 comparisons complete.
+H/I are the retained testing configurations; MCP budget controls and evidence
+packing improvements remain pending. Keep frontier planning and review.
 
-Keep Qwen 3.5 4B Q4_K_M weights fixed. Compare `q4_0` KV cache at
-32K with `q8_0` KV cache at 16K/20K, then push each cache type
-toward its largest usable context. Test usable evidence quality, prompt capacity, and latency on the
-actual machine. Treat 8K as an optional diagnostic control, not the target.
-Keep frontier-model planning and review; the local explorer returns source
-evidence and missing information.
+## Current configurations
 
-## 1. Record the starting point
+Both variants use the same Qwen 3.5 4B Q4_K_M weights and template.
+Q4/Q8 below describe **KV-cache precision**, not weight quantization.
+Context is the total input/output window. Output ceilings are maxima;
+request concise results unless the task requires long output.
 
-- [x] Check installed models: `qwen3.5:4b` is present, ID `2a654d98e6fb`,
-  listed size 3.4 GB. Use the same model digest for both KV-cache types.
-- [x] Inspect the current smoke runner and scout: generation uses
-  `num_ctx: 16384`, `num_predict: 2000`; evidence packing has a
-  24,000-character cap. The runner accepts model names and `--think`,
-  but no context-size option.
-- [x] Inspect telemetry: shared `generate()` returns text and discards
-  Ollama's token counts and timing fields.
-- [x] Verify Q4 quantization: installed `qwen3.5:4b` reports Q4_K_M.
-- [ ] Record Ollama version, model tags/full digests, template, sampling
-  parameters, OS, GPU/VRAM, RAM, and available memory. The pasted context
-  reports a GTX 1660 Super with 6 GB; GPU access was not verified here.
-- [ ] Record current daemon settings and a restore procedure before changes.
-- [ ] Freeze repository SHA, working-tree changes, fixture version, and
-  index state for comparisons.
+| Tag | KV cache | Context tokens | Output ceiling | Input budget with full output reserve and 1024 margin |
+|---|---|---:|---:|---:|
+| `qwen-context:h-q4_0-50k` | q4_0 | 50000 | 25000 | 23976 |
+| `qwen-context:i-q8_0-32k` | q8_0 | 32768 | 25000 | 6744 |
 
-## 2. Compare these configurations
+- [x] Install H/I and verify inherited context/output parameters.
+- [x] Delete A–G context tags and Modelfile folders. Retain base
+  `qwen3.5:4b` (ID `2a654d98e6fb`, full digest in raw artifacts).
+- [x] Keep Modelfiles, registry and setup README under
+  `/home/shahriar/ollama-models/qwen-context/` consistent with H/I only.
+- [x] Verify GPU placement for H/50000 and q8/32768.
+- [ ] Test sustained generation with the 25000 output ceiling on H/I;
+  short inherited-default checks do not verify full-ceiling generation.
+- [ ] Compare useful evidence and parent task completion on H/I before
+  choosing a quality-based routing default.
 
-Q4/Q8 below refer to **KV-cache quantization**. Model weights remain
-Q4_K_M in every row. Context is the total input/output window, not an
-input-only allowance.
+## Runtime and budget requirements
 
-| Run | KV cache | Explicit `num_ctx` | Purpose |
-|---|---|---:|---|
-| A | q4_0 | 32768 | Main larger-context candidate |
-| B (retired) | q4_0 | 65536 | CPU offloading; excluded for speed |
-| C | q8_0 | 16384 | Higher cache precision candidate |
-| D | q8_0 | 20480 | Initial Q8 extension |
-| E | q4_0 | 16384 | Matched-context control against C |
-| F | q4_0 | 61440 | Clean-load GPU-only extension; less fit margin |
-| G | q4_0 | 57344 | GPU fit margin reference |
-| H | q4_0 | 50000 | Current testing baseline; 25000 output ceiling |
+Ollama 0.34.3, GTX 1660 SUPER with 6 GB VRAM. The system daemon currently
+uses q4_0 KV, Flash Attention enabled and one inference slot. Its benchmark
+override is `zz-qwen-benchmark.conf`; inspect all service overrides before
+changing or restoring settings. Administrator changes require user sudo.
+Temporary q8 daemons and weight references were removed after testing;
+H was restored on the system daemon.
 
-- [ ] Keep model digest, thinking off, sampling, tool schema, retrieval,
-  and inference concurrency identical. Compare equal output ceilings first;
-  sweep output budgets separately.
-- [ ] Configure one inference at a time. Verify Flash Attention and the
-  selected KV-cache type in the running daemon, not just the client shell.
-- [ ] Run cache configurations in separate daemon-setting blocks. Restart
-  and verify the effective setting when switching cache type; record it
-  with each artifact. Rotate block order across repetitions.
-- [ ] Record GPU/CPU placement and peak VRAM/RAM during each run. A loaded
-  model is not proof that the configuration fits entirely on the GPU.
-- [ ] Increase context progressively for both cache types beyond the initial
-  rows where feasible. Record the largest repeatedly usable window and
-  the first failing or impractically slow step; do not assume Q8 stops at 20K.
-- [ ] Preserve failed results before lowering context or changing budgets.
+- KV precision is a daemon setting. A q8-named tag on a q4 daemon still
+  uses q4 cache. Verify `OLLAMA_KV_CACHE_TYPE`, Flash Attention and one slot
+  in effective settings and runner logs before each cache block.
+- Unload the prior model and verify an empty model list before clean tests.
+  Check `ollama ps` after loading; reject CPU placement for GPU-only work.
+  Other GPU activity can change a future load's placement.
+- Enforce `input tokens + reserved output tokens + safety margin <= num_ctx`.
+  Input includes system text, template, schema, question, source and history.
+  Reduce the reserved ceiling explicitly when larger input is needed.
+- The MCP scout still requests 16384 context, 8192 output and a
+  24000-character evidence cap. Selecting H/I alone does not change this.
+- The smoke runner supports `--num-ctx` and `--num-predict`; pass
+  `50000/25000` for H or `32768/25000` for I with the matching daemon cache.
+  Its wrapper overrides do not establish production MCP budget support.
+- Keep experimental tools opt-in, target sources read-only and autonomous
+  worker flags independent.
 
-### Output capacity and requested result length
+## Completed measurements
 
-- [ ] Make `num_predict` configurable. Test ceilings of 8192 and 16384
-  generated tokens; retain 2000 as the current control.
-- [ ] Treat these as ceilings, not target lengths. Allow an early natural
-  stop when the task is complete; do not pad results to use the budget.
-- [ ] Give the prompt a task-specific result limit, such as at most three
-  evidence references per question part plus a short unresolved list, or
-  a maximum word count for summaries. Record the limit and score compliance.
-- [ ] Keep ordinary evidence-selection tasks concise. Add separate tasks
-  that genuinely need long output to test sustained 8K/16K generation.
-- [ ] Record actual output tokens, completion reason, schema completeness,
-  repetition, citation quality, and requested-length compliance. Hitting a
-  ceiling with incomplete JSON is a failure, not usable capacity.
-- [ ] Fit each output ceiling to the context budget. A 16K window cannot
-  reserve 16K output and still hold a useful prompt; mark incompatible
-  cells as infeasible or increase context explicitly.
-- [ ] For example, at 32K context, reserving 8K output and a 1K safety
-  margin leaves at most 23K input. Reserving 16K leaves at most 15K input.
-- [ ] Measure latency/deadlines for long-output cases separately. Prompt
-  length instructions guide the model; API ceilings and validation enforce
-  bounded generation and acceptable results.
+### GPU fit
 
-Ollama documents per-request `num_ctx`, GPU placement via `ollama ps`,
-Flash Attention, and the global KV-cache setting in its
-[FAQ](https://docs.ollama.com/faq). Confirm support on the installed version.
+See the [q4 clean-load report](experimental/benchmarks/runs/2026-10-02-qwen-gpu-fit.md)
+and [q8 placement report](experimental/benchmarks/runs/2026-10-02-qwen-q8-gpu-fit.md).
+These verify placement and selected prompt sizes, not maximum full-window
+capacity or evidence quality.
 
-## 3. Handle real prompt overhead
+- [x] Retest q4/65536 with no other Ollama model resident: still spills,
+  33/34 GPU layers. Overlap is not required to reproduce the failure.
+- [x] Bracket the observed q4 boundary: 63488 passed three clean GPU-only
+  loads; 64512 and 65024 spilled. The exact threshold is unmeasured.
+- [x] Test q4/57344 with 36134 uncached input tokens: natural READY response,
+  252.4 seconds, all 248 samples GPU-only, peak device usage 5017 MiB.
+- [x] Preserve q4/61440's 240-second timeout on that input. All 236 samples
+  stayed GPU-only, peak device usage 5208 MiB; no completed answer was returned.
+- [x] Test q8/32768 on three clean loads: 34/34 GPU layers, q8 K/V buffers
+  totaling 544 MiB. A 5528-token source prompt completed in 27.7 seconds.
+  It returned extra evidence despite the READY-only instruction; this was
+  a placement test, not a semantic correctness pass. No downward sweep was needed.
+- [ ] Measure the q8 maximum only if needed; 32768 is a verified window.
 
-Codex/Claude session context is not automatically copied into an Ollama
-request. Measure what each MCP route actually forwards or constructs.
-Large delegated questions and accumulated tool results can still consume
-the local model's window.
+The q4 runner reserves memory for the vision component even on text calls;
+its fit calculation missed the free-memory target by only 23–29 MiB near
+64K. Device free memory alone does not predict layer placement. GPU-only
+means model placement, not zero host RAM/CPU work or 100% GPU utilization.
 
-- [ ] Capture sanitized, representative delegation requests from both
-  Codex and Claude: short lookup, large-project lookup, and long task brief.
-- [ ] Account for system prompt, model template, schema/tool definitions,
-  question, repository evidence, history, and reserved output tokens.
-- [ ] Make the invariant explicit:
-  `input tokens + reserved output tokens + safety margin <= num_ctx`.
-- [ ] Use model-compatible token accounting where available; character
-  counts are estimates. Compare estimates with actual `prompt_eval_count`
-  and record any truncation or uncertainty.
-- [ ] Preserve the question, constraints, source paths, and evidence IDs.
-  Deduplicate repeated instructions and source excerpts before packing.
-- [ ] Return an explicit budget/overflow result or repack deterministically;
-  never silently discard essential constraints or evidence.
-- [ ] Add beginning/middle/end evidence checks to detect lost context.
-- [ ] Reserve room for output and follow-up tool results; do not fill the
-  entire window with the initial prompt.
+### Evidence quality and output capacity
 
-## 4. Prepare the benchmark harness
+Historical A–E labels refer to deleted configurations. See the
+[initial smoke controls](experimental/benchmarks/runs/2026-10-02-qwen-context-smoke.md)
+and [reviewed phase-2 results](experimental/benchmarks/runs/2026-10-02-qwen-context-phase2.md).
 
-- [ ] Add explicit context, output-ceiling, requested-result-length, and
-  input-budget controls to
-  `scripts/experimental/run-local-explore-repo-smoke.ts`; pass them through
-  the scout and record effective values, not a hardcoded protocol label.
-- [ ] Parameterize evidence packing separately from `num_ctx`. Raising
-  the window with the same small prompt only tests allocation overhead.
-- [ ] Preserve raw API metrics in a benchmark path without breaking the
-  existing text-returning `generate()` callers.
-- [ ] Save prompt/output token counts, prompt-eval/generation durations,
-  load time, wall time, retry count, timeouts, and rejected citations.
-- [ ] Checkpoint each question, including failures; save sanitized request
-  metadata and outputs under ignored `benchmark-data/`.
-- [ ] Launch long runs using one detached `setsid nohup flock -n`
-  supervisor and log. Confirm completion and released lock before the next
-  model. Use one explicit deadline policy; do not mix timeout retries into
-  original-run scores.
+- [x] Run three four-question smoke repetitions for A/E/C/D at an 8192
+  ceiling. Source-reviewed complete evidence was 3/12 per configuration.
+  Other cases omitted default-helper, cloud-mapping or locking-transaction
+  evidence. Validator success is not semantic correctness.
+- [x] Compare identical 5534-token source prompts: all configurations scored
+  5/9 exact lines and 6/9 locations. Q8 uncached layouts were slightly faster;
+  no accuracy winner emerged. Prompt reuse strongly affects smoke timings.
+- [x] Test A/32768 with 18083 input tokens entirely on GPU, about 100 seconds
+  uncached. More context did not improve exact-evidence completeness.
+- [x] Compare the same 36-record inventory, 13520 input tokens: 8192 ceiling
+  truncated JSON; 16384 stopped naturally at 13443 tokens, valid JSON,
+  all 36 records, 29 exact. Six records lost a quote character and one
+  changed a Unicode character. Valid JSON is not faithful copying.
 
-## 5. Separate capacity from task quality
+Direct-source diagnostics bypass scout retrieval and quote copying. Their
+quote errors do not show that the scout invents copied snippets. Three
+positional layouts are not three repeats of one prompt. Cache-block order
+was not rotated across independent sessions. RAM peaks, wider held-out
+projects and parent follow-up work remain unmeasured.
 
-- [ ] Run the existing four-question smoke fixture first. It is a harness
-  check, not sufficient evidence for a routing default.
-- [ ] Capacity suite: progressively fill each window with realistic code,
-  instructions, and search results while retaining known required evidence.
-- [ ] Matched-input suite: give every configuration the same prompts that
-  fit the smallest usable input budget. Use C versus E with equal output
-  ceilings to isolate KV-cache quantization.
-- [ ] Expanded-input suite: use the extra capacity in A/B and score whether
-  added evidence improves results. Mark prompts that cannot fit C/D.
-- [ ] Add held-out large-project questions with known required files,
-  symbols, lines, and relationships. Include multi-part questions, similar
-  names, irrelevant context, negative cases, and cross-file callers.
-- [ ] Separate retrieval failures (required evidence absent from the packed
-  prompt) from selection failures (present but omitted or misused).
-- [ ] Run at least three measured repetitions per question/configuration;
-  separate cold loads and warmed runs and rotate cache-block order.
-- [ ] Review exact citations and semantic sufficiency against source.
-  A successful HTTP response, valid JSON, or abstention is not a correct
-  answer. Score appropriate abstentions separately on negative cases.
+## Next work
 
-## 6. Improve the MCP after measuring the baseline
+Start by inspecting question decomposition and source/caller bundles in
+`src/experimental/tools/local-explore-repo.ts`. Explain why the required
+helper, cloud mapping and transaction evidence is missing; improve one
+packing or selection behavior and rerun the same held-out cases.
 
-Change one behavior at a time and rerun the same fixtures.
+- [ ] Add production MCP context/output/input-budget controls and record
+  effective values. Preserve the shared text-returning `generate()` API;
+  expose raw token/timing metrics through a benchmark path.
+- [ ] Account for actual prompt overhead. Capture sanitized representative
+  requests from Codex/Claude and calibrate estimates with `prompt_eval_count`.
+  Session context is not automatically forwarded to Ollama.
+- [ ] Deduplicate source and instructions without losing question parts,
+  constraints, paths or evidence IDs. Return an explicit overflow result or
+  repack deterministically; do not silently drop required evidence.
+- [ ] Separate retrieval failures from selection failures by checking that
+  required source was present in each saved bundle.
+- [ ] Repeat matched H/I inputs within I's input reserve, then test larger H
+  inputs separately. Check beginning/middle/end evidence and exact citations.
+- [ ] Add finite tasks that need longer output. Record actual tokens, stop
+  reason, completeness, fidelity, repetition and requested-length compliance.
+  Keep timeout results separate from retries and changed-deadline cells.
+- [ ] Rotate cache blocks and separate fresh loads from prompt reuse. Freeze
+  SHA, working-tree changes, fixture/index state and sampling per comparison.
+  Record peak device/RAM usage and declared latency/failure limits.
+- [ ] Expand to held-out large projects, multi-part/cross-file questions and
+  negative cases. Score supported answers and appropriate abstentions separately.
+- [ ] Add bounded adaptive exploration only when evidence is missing: at most
+  three rounds with total token/action/time budgets; validate paths, evidence
+  IDs and ranges, copy quotes from source and report unresolved parts.
+- [ ] Compare deterministic retrieval, current scout and adaptive scout on
+  equal budgets. Measure parent follow-up work before claiming savings.
 
-- [ ] First improve prompt accounting, deduplication, and evidence packing.
-- [ ] Add bounded adaptive exploration only when missing evidence calls
-  for it: up to three rounds of search/read/symbol/reference/caller/callee
-  actions, with explicit total-token, action, and time budgets.
-- [ ] Validate paths, evidence IDs, and source ranges on every expansion;
-  copy returned quotes from source and report unresolved question parts.
-- [ ] Compare deterministic-only retrieval, current scout, and adaptive
-  scout on the same questions and total budgets.
-- [ ] Log sanitized trajectories: question, SHA, settings, searches,
-  reads, selected evidence, fallback reason, and outcome. Parent follow-up
-  reads, changed files, and tests need separate parent-side instrumentation.
-- [ ] Measure parent follow-up reads and whether the evidence lets the
-  parent complete the task. Do not claim savings without measurements.
-- [ ] Keep experimental registration opt-in, target sources read-only,
-  and autonomous-worker flags independent. Training and editing remain
-  later work, after the evaluation is stable.
+## Artifacts and verification
 
-## 7. Record results and choose a default
-
-| Configuration | Actual input tokens | Useful evidence / cases | Invalid citations | Timeouts | Median / p95 time | Peak VRAM / RAM | CPU/GPU placement |
-|---|---|---|---|---|---|---|---|
-| A: q4_0 KV / 32K | 1458–4291 | 3/12 complete | 0 unsupported snippets | 0 | 18.2s / 28.3s | smoke peaks unmeasured | 100% GPU |
-| B: q4_0 KV / 64K | retired | excluded | — | — | — | — | CPU offloading |
-| C: q8_0 KV / 16K | 1458–4285 | 3/12 complete | 0 unsupported snippets | 0 | 14.4s / 58.5s | smoke peaks unmeasured | 100% GPU |
-| D: q8_0 KV / 20K | 1458–4285 | 3/12 complete | 0 unsupported snippets | 0 | 14.3s / 42.7s | smoke peaks unmeasured | 100% GPU |
-| E: q4_0 KV / 16K | 1458–4291 | 3/12 complete | 0 unsupported snippets | 0 | 18.3s / 28.2s | smoke peaks unmeasured | 100% GPU |
-
-The table above is the phase-2 smoke suite: 12 questions per active row,
-including retries. Median/p95 are per-question empirical observations. Direct
-capacity and output-ceiling cells are in the reviewed phase-2 report.
-
-- [ ] Create a result row per cache/context/output-ceiling combination;
-  include actual output tokens, requested result limit, stop reason, and
-  length compliance alongside the columns above.
-- [ ] Choose acceptable latency and failure limits before the full run.
-- [ ] Report denominators, repeated-run variation, and failure categories;
-  retain raw artifacts and keep reruns separate.
-- [ ] Select the default using useful evidence and task completion within
-  those limits. Record a larger-context fallback if it earns its extra cost.
-- [ ] Update relevant docs/defaults only after source-reviewed results.
-
-Current next step: add MCP context/budget controls and improve evidence
-packing, then rerun the same cases. Initial and repeated A/C/E comparisons are complete. B is retired. The active comparisons found no complete-evidence advantage
-from extra context or q8 cache precision on these cases.
-
-## Execution checkpoints
-
-The [initial A–E smoke report](experimental/benchmarks/runs/2026-10-02-qwen-context-smoke.md)
-preserves the 2000-token controls and the 64K CPU-offloading result.
-The following checkpoints describe current settings and completed phase-2 work.
-
-### Retirement and output ceilings (2026-10-02)
-
-B/64K retired at user request because CPU offloading is unacceptable. Its
-installed tag was removed; Modelfile and benchmark evidence are retained.
-Active A/C/D/E tags, scout and smoke runner now default to `num_predict=8192`.
-The initial 2000-token runs remain baseline controls, not high-ceiling tests.
-Keep concise prompt instructions; 8192 is a maximum, not a requested length.
-Test 16384 separately at A/32K with an appropriate input reserve. Do not
-reserve 16384 output in a 16384 context. Future capacity steps must remain
-fully on GPU; exclude any CPU-offloaded configuration.
-
-### Phase 2 complete (2026-10-02)
-
-See [reviewed results](experimental/benchmarks/runs/2026-10-02-qwen-context-phase2.md).
-
-- Three four-question repetitions each for A/E/C/D at an 8192 ceiling.
-  Reviewed complete evidence: 3/12 per configuration; useful partial evidence
-  remains separate from complete answers. All active configurations stayed on GPU.
-- Matched 5534-token source prompts: identical exact-line scores (5/9).
-  Q8 uncached layouts were about 1.5 seconds faster; precision did not improve
-  accuracy. Prompt reuse strongly affects smoke timings.
-- A accepted 18083-token input on GPU, with about 100 seconds for uncached
-  processing and no complete three-line answer. Capacity is not evidence quality.
-- Same 36-record inventory, 13520 input tokens: 8192 ceiling truncated JSON;
-  16384 ceiling stopped naturally at 13443 tokens with 36 records, 29 exact.
-- Raw artifacts are under ignored `benchmark-data/qwen-context/phase2/`.
-  The ambiguous wrapper pilot is preserved and excluded from comparison.
-- Temporary q8 daemon stopped; temporary weight references removed. System
-  service remains q4_0 with Flash Attention and one inference slot. B remains retired.
-- Keep the current 16K scout default for concise evidence. A/32K is available
-  for larger inputs; the scout's explicit 16K override needs context/budget
-  controls before its route can use that window.
-- Next: improve evidence packing/selection, then rerun held-out cases. More
-  output allowance did not resolve short-answer evidence omissions. Independent
-  cache-block rotation, wider held-out tasks and parent-work measurements remain.
-
-## Clean GPU fit recheck — 2026-10-02
-
-User requested a clean 64K retest and a GPU-only extension within 45–65K.
-No other Ollama model was resident before each probe. 65536 still spills;
-63488 fits on three fresh loads, while 64512 and 65024 spill. F/61440 and
-G/57344 are installed, keeping weights and the 8192 ceiling fixed. Prefer G
-for more fit margin. This extends placement capacity, not evidence quality
-or the scout's explicit 16384 override. See the
-[clean-load report](experimental/benchmarks/runs/2026-10-02-qwen-gpu-fit.md)
-for the runner's reserved-memory calculation and larger-prompt validation.
-
-User subsequently selected H (`qwen-context:h-q4_0-50k`) as the baseline
-for further testing: exactly 50000 total context and 25000 output ceiling.
-With a 1024 margin, reserve the full ceiling only for inputs up to 23976
-tokens. Inherited settings and short generation were verified at 100% GPU;
-full 25000-token output remains untested. Existing scout/wrapper overrides
-need matching explicit settings when testing H.
-
-Subsequently, the user removed A/E/F/G model tags and retained only H among
-q4 context variants. B was already absent. C/D q8 tags and base
-`qwen3.5:4b` remain. Historical Modelfiles and benchmark results are preserved;
-`configurations.json` marks A/B/E/F/G removed.
-
-Q8 follow-up: 32768 context passed three independent clean GPU-only loads
-and a 5528-token source prompt. No lower-context sweep was necessary.
-See [q8 placement report](experimental/benchmarks/runs/2026-10-02-qwen-q8-gpu-fit.md).
-The maximum remains unmeasured. System q4/H restored; C/D defaults unchanged.
-
-Final configuration cleanup: only H/q4_0/50000 and I/q8_0/32768 context
-variants are retained, each with a 25000 output ceiling. A–G tags and
-Modelfile folders were deleted. Base `qwen3.5:4b` remains; historical
-measurements above are unchanged. KV precision requires the matching daemon.
+- Runner: `scripts/experimental/run-qwen-context-comparison.py`.
+- Ignored phase-2 raw artifacts: `benchmark-data/qwen-context/phase2/`.
+  `q4/` smoke is valid; its ambiguous-wrapper pilot is excluded.
+  Corrected diagnostics: `q4-capacity-v2/`; long comparison: `q4-long-36/`;
+  q8 comparisons: `q8/`; aggregate: `summary.json`.
+- Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
+- Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
+- Seven scout fixture tests passed earlier; Python harness syntax and
+  whitespace checks passed. The earlier TypeScript check was blocked by
+  missing `vitest` in an existing experimental test.
+- Launch long benchmarks under one detached `setsid nohup flock -n`
+  supervisor with an ignored log. Confirm a complete artifact and released
+  lock before the next model. Checkpoint failures and retain raw metrics.
