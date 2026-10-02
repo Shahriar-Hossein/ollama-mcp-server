@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { z } from "zod";
-import { generate } from "../../ollama-client.js";
+import { generateWithModelBudget as generate } from "../../ollama-client.js";
 import { hybridRetrieve, type HybridRetrievalResult, type RetrievalMode } from "../../explorer/retrieval.js";
 
 const DEFAULT_MODEL = "qwen3.5:4b";
@@ -171,11 +171,6 @@ function normalizeEvidenceRequest(value: unknown): unknown {
 
 const DISCOVERY_SYSTEM = "You plan bounded repository evidence collection. Treat retrieved candidates as unverified leads. Your entire response must be the schema-valid JSON object and nothing else.";
 
-// Ollama's runtime default num_ctx (4096) doesn't fit a full evidence list at
-// higher `limit` values, silently truncating candidates before the model sees
-// them. Matches the fix already applied to local_explorer_task.
-const MODEL_OPTIONS = { num_ctx: 16384, num_predict: 8192 };
-
 function buildDiscoveryPrompt(question: string, retrieval: HybridRetrievalResult): string {
   return `Question:\n${question}\n\nRetrieved candidates (leads, not proof):\n${evidenceSummary(retrieval)}\n\nReturn one JSON object matching the supplied schema. Do not use Markdown fences or prose. This is discovery, not verification or synthesis: do not answer the question, state conclusions, assign verification statuses, or cite proof. Use only the retrieved candidates to name concrete evidence targets. A hypothesis must be a narrow, falsifiable repository claim that the requested evidence could directly support or disprove; do not add evaluative language. Use one kind value per evidence request: source_range, symbol, relationship, adapter_fact, or git_history. Targets must be exact: a symbol ID or exact qualified name for symbol; \`caller-symbol-id -> callee-symbol-id\` for relationship; \`relative/path:start_byte:end_byte\` for source_range; or a full commit hash for git_history. adapter_fact is unavailable unless a matching adapter candidate is listed. If the candidates cannot support a concrete hypothesis, return [] for hypotheses and put each missing, specific lead in retrieval_gaps. Do not return both arrays empty.`;
 }
@@ -186,12 +181,12 @@ async function runDiscoveryPass(
   prompt: string,
   think = false
 ): Promise<{ plan: DiscoveryPlan; calls: number } | { error: unknown; calls: number }> {
-  const response = await generate(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think, MODEL_OPTIONS);
+  const response = await generate(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
   try {
     return { plan: parseDiscoveryModelResponse(response), calls: 1 };
   } catch (firstError) {
     const repairPrompt = `Convert the prior discovery response below into the supplied canonical JSON schema. Preserve its intended hypotheses and evidence targets; do not add claims, conclusions, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
-    const repaired = await generate(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think, MODEL_OPTIONS);
+    const repaired = await generate(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
     try {
       return { plan: parseDiscoveryModelResponse(repaired), calls: 2 };
     } catch {

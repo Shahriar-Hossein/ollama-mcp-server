@@ -3,7 +3,7 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { OLLAMA_HOST } from "../../ollama-client.js";
+import { DEFAULT_LOCAL_MODEL, OLLAMA_HOST, checkInputBudget, resolveModelBudget } from "../../ollama-client.js";
 
 // Read-only repo-discovery worker: promoted from the throwaway harness used
 // in docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md. That pilot found
@@ -17,7 +17,7 @@ import { OLLAMA_HOST } from "../../ollama-client.js";
 // Still capped hard on tool calls, files read, and output size so a confused
 // model can't turn "explore the repo" into "read everything."
 
-const DEFAULT_MODEL = "qwen3.5:4b";
+const DEFAULT_MODEL = DEFAULT_LOCAL_MODEL;
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build"]);
 const AST_GREP_LANGUAGES = new Set(["TypeScript", "JavaScript"]);
 
@@ -248,11 +248,12 @@ export async function runLocalExplorerTask({
   max_tool_calls = 50,
   max_files_read = 10,
   max_output_chars = 8_000,
-  num_predict = 8192,
-  num_ctx = 32_768,
+  num_predict,
+  num_ctx,
   request_timeout_ms = 180_000,
   think = false,
 }: LocalExplorerTaskParams): Promise<{ isError?: boolean; text: string }> {
+  const budget = await resolveModelBudget(model, { num_ctx, num_predict });
   const root = resolve(cwd || process.cwd());
   const filesRead = new Set<string>();
   const messages: any[] = [
@@ -264,13 +265,15 @@ export async function runLocalExplorerTask({
   const start = Date.now();
 
   for (let turn = 0; turn < max_tool_calls + 2; turn++) {
+    const input = checkInputBudget(budget, JSON.stringify({ messages, tools: TOOLS }));
+    if (!input.fits) return { isError: true, text: JSON.stringify({ status: "input_overflow", budget: input, tool_calls: toolCallCount }) };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), request_timeout_ms);
     let res: Response;
     try {
       res = await fetch(`${OLLAMA_HOST}/api/chat`, {
         method: "POST",
-        body: JSON.stringify({ model, stream: false, think, messages, tools: TOOLS, options: { num_predict, num_ctx } }),
+        body: JSON.stringify({ model, stream: false, think, messages, tools: TOOLS, options: { num_predict: budget.num_predict, num_ctx: budget.num_ctx } }),
         signal: controller.signal,
       });
     } catch (e: any) {
@@ -287,7 +290,7 @@ export async function runLocalExplorerTask({
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      return { text: `${message.content}\n\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s]` };
+      return { text: `${message.content}\n\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s; num_ctx=${budget.num_ctx}, num_predict=${budget.num_predict}]` };
     }
 
     for (const call of message.tool_calls) {
@@ -330,8 +333,8 @@ export function registerLocalExplorerTask(server: McpServer) {
       max_tool_calls: z.number().default(50),
       max_files_read: z.number().default(10),
       max_output_chars: z.number().default(8_000).describe("Per-tool-result truncation limit."),
-      num_predict: z.number().default(8192).describe("Max output tokens per model turn. Not set by Ollama's own default, so we set one explicitly."),
-      num_ctx: z.number().default(32_768).describe("Context window size. Ollama's own runtime default (4096) is too small for this tool loop - a handful of file reads can evict earlier tool results from context, so we set one explicitly."),
+      num_predict: z.number().int().positive().optional().describe("Output ceiling override; inherits the selected model setting when omitted."),
+      num_ctx: z.number().int().positive().optional().describe("Context override; inherits the selected model setting when omitted."),
       request_timeout_ms: z.number().default(180_000).describe("Per-chat-call timeout, guards against an infinite/hung generation."),
       think: z.boolean().default(false).describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),
     },

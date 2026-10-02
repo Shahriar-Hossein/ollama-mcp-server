@@ -73,13 +73,29 @@ groups; a group-specific `0` can override the master flag.
 | `ENABLE_LOCAL_EXPLORER_TASK=1` | `local_explore_repo` deterministic-first scout and legacy `local_explorer_task` tool loop |
 | `ENABLE_FRAMEWORK_ADAPTERS=1` | framework-adapter CLI entry points |
 
-`local_explore_repo` is the preferred model-backed scout. It retrieves up to
-8–12 basic candidates, adds bounded caller and source-text context, and sends
-excerpts from at most six files to `qwen3.5:4b` by default. The model has no
-tools or shell access in this route. It selects candidate IDs and exact source
-quotes; the server checks those quotes and retries once if they fail. The parent
-agent interprets the evidence—quote checking cannot prove a behavioral claim.
-The older `local_explorer_task` loop remains for historical comparisons.
+`local_explore_repo` is the preferred model-backed scout. It retrieves basic
+candidates, merges bounded source windows and caller context, and asks the
+model to select up to six evidence line references per question part. The
+server validates references, copies quotes from source, and retries once while
+retaining supported parts. The parent still interprets behavior.
+
+Local delegation, summaries and both scout routes default to
+`qwen-context:h-q4_0-50k`. They inherit the selected model's saved `num_ctx`
+and `num_predict`; optional request fields override them explicitly. Advanced
+discovery/verification also inherit saved settings. Missing saved limits use
+reported 16384/8192 fallbacks; unbounded output defaults require an explicit
+finite ceiling. `generate()` continues to return text.
+
+Input checks include system text, source/history, schema and template, with a
+1024-token margin and a conservative UTF-8 byte bound. Oversized requests return
+`input_overflow`; source and output ceilings are never silently reduced. This
+bound can reject requests whose actual token count would fit. In particular,
+I's 32768/25000 settings leave only 6744 input tokens. KV precision is a daemon
+setting: I needs a q8 daemon; its tag alone cannot change the current q4 daemon.
+See [the context checklist](docs/local-model-context-checklist.md).
+
+The model has no tools or shell access in the scout route. The older
+`local_explorer_task` loop remains for historical comparisons.
 
 The corresponding semantic, knowledge, verification, full-Explorer, and
 framework CLI commands enforce the same gates. The full pipeline defaults to

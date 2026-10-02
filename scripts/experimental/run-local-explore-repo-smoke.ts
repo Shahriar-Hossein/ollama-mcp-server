@@ -8,7 +8,7 @@ import { runLocalExploreRepo } from "../../src/experimental/tools/local-explore-
 type Fixture = { version: number; questions: Array<{ id: string; query: string }> };
 
 const arguments_ = process.argv.slice(2);
-function integerOption(name: string, fallback: number) {
+function integerOption(name: string, fallback?: number) {
   const index = arguments_.indexOf(name);
   if (index < 0) return fallback;
   const value = Number(arguments_[index + 1]);
@@ -16,9 +16,9 @@ function integerOption(name: string, fallback: number) {
   arguments_.splice(index, 2);
   return value;
 }
-const num_ctx = integerOption("--num-ctx", 16384);
-const num_predict = integerOption("--num-predict", 8192);
-if (num_predict + 1024 >= num_ctx) throw new Error("Output ceiling leaves no useful input budget");
+const num_ctx = integerOption("--num-ctx");
+const num_predict = integerOption("--num-predict");
+if (num_predict !== undefined && num_ctx !== undefined && num_predict + 1024 >= num_ctx) throw new Error("Output ceiling leaves no useful input budget");
 const think = arguments_.includes("--think");
 const [outputPath, ...models] = arguments_.filter((argument) => argument !== "--think");
 if (!outputPath || !models.length) {
@@ -46,6 +46,7 @@ const protocol = {
   fixture_version: fixture.version,
   repository_root: root,
   commit_hash: runCommand("git", ["rev-parse", "HEAD"]),
+  working_tree_diff: runCommand("git", ["diff", "--binary"]),
   limit: 10,
   route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx, num_predict, think, invalid_evidence_retries: 1 },
   ollama_version: runCommand("ollama", ["--version"]),
@@ -63,15 +64,15 @@ for (const model of models) {
     process.stderr.write(`  ${model} ${question.id} at ${started_at}\n`);
     const calls: unknown[] = [];
     const result = await runLocalExploreRepo(
-      { repository_root: root, query: question.query, model, limit: 10 },
-      async (answerModel, prompt, system, format) => {
+      { repository_root: root, query: question.query, model, limit: 10, num_ctx, num_predict },
+      async (answerModel, prompt, system, format, _think, options) => {
         const started = performance.now();
         try {
           const response = await axios.post(`${OLLAMA_HOST}/api/generate`,
-            { model: answerModel, prompt, system, format, think, stream: false, options: { num_ctx, num_predict } },
+            { model: answerModel, prompt, system, format, think, stream: false, options },
             { timeout: REQUEST_TIMEOUT_MS });
           const { response: output, thinking, context, ...metrics } = response.data;
-          calls.push({ elapsed_ms: Math.round(performance.now() - started), prompt_chars: prompt.length, system_chars: system.length, output, metrics });
+          calls.push({ elapsed_ms: Math.round(performance.now() - started), prompt, system, format, options, prompt_chars: prompt.length, system_chars: system.length, output, metrics });
           return (output || thinking || "") as string;
         } catch (error) {
           calls.push({ elapsed_ms: Math.round(performance.now() - started), error: error instanceof Error ? error.message : String(error) });
@@ -86,10 +87,10 @@ for (const model of models) {
     writeFileSync(resolve(outputPath), `${JSON.stringify({ protocol, results: [...results, { model, questions }] }, null, 2)}\n`);
   }
   results.push({ model, model_digest: modelDigests.get(model) ?? "not listed at startup", model_started_at: modelStartedAt, model_elapsed_ms: Math.round(performance.now() - modelStarted), questions });
-  const output = `${JSON.stringify({ protocol, results }, null, 2)}\n`;
+  const output = `${JSON.stringify({ protocol, results, complete: results.length === models.length }, null, 2)}\n`;
   mkdirSync(resolve(outputPath, ".."), { recursive: true });
   writeFileSync(resolve(outputPath), output);
   process.stderr.write(`Finished ${model}; checkpointed ${resolve(outputPath)}\n`);
 }
 
-process.stdout.write(`${JSON.stringify({ protocol, results }, null, 2)}\n`);
+process.stdout.write(`Completed ${results.length} model(s); artifacts: ${resolve(outputPath)}\n`);

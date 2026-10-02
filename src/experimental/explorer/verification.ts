@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { generate } from "../../ollama-client.js";
+import { generateWithModelBudget as generate } from "../../ollama-client.js";
 import { indexRepository, type RepositoryIndex, type ResolutionQuality } from "../../explorer/indexer.js";
 import { readSymbol } from "../../explorer/read-symbol.js";
 
@@ -40,10 +40,6 @@ const verificationResponseFormat = {
     },
   },
 } as const;
-
-// See discovery.ts: Ollama's runtime default num_ctx (4096) truncates evidence
-// silently once claim/evidence lists get large; set it explicitly.
-const MODEL_OPTIONS = { num_ctx: 16384, num_predict: 8192 };
 
 export type VerificationInputClaim = z.infer<typeof claimInputSchema>;
 export interface VerificationEvidence {
@@ -122,13 +118,13 @@ async function runVerificationPass(
   evidenceCounts: number[],
   think = false
 ): Promise<{ assessed: z.infer<typeof modelResponseSchema>; calls: number }> {
-  const response = await generate(model, prompt, VERIFICATION_SYSTEM, verificationResponseFormat, think, MODEL_OPTIONS);
+  const response = await generate(model, prompt, VERIFICATION_SYSTEM, verificationResponseFormat, think);
   try {
     return { assessed: parseModelResponse(response, claims, evidenceCounts), calls: 1 };
   } catch (firstError) {
     const requiredIds = claims.map((claim) => claim.id).join(", ");
     const repairPrompt = `Convert the prior verification response below into the supplied canonical JSON schema. Return exactly ${claims.length} results in this input order with these IDs: ${requiredIds}. Preserve each result's intended status, rationale, and evidence indexes when valid; otherwise use INSUFFICIENT with an empty evidence_indexes array. Do not add a synthesis, new claims, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
-    const repaired = await generate(model, repairPrompt, VERIFICATION_SYSTEM, verificationResponseFormat, think, MODEL_OPTIONS);
+    const repaired = await generate(model, repairPrompt, VERIFICATION_SYSTEM, verificationResponseFormat, think);
     try {
       return { assessed: parseModelResponse(repaired, claims, evidenceCounts), calls: 2 };
     } catch {

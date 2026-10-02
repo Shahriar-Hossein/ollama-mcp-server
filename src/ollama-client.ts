@@ -2,6 +2,35 @@ import axios from "axios";
 
 export const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 export const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_000;
+export const DEFAULT_LOCAL_MODEL = "qwen-context:h-q4_0-50k";
+export type ModelOptions = { num_ctx?: number; num_predict?: number };
+
+export async function showModel(model: string) {
+  const response = await axios.post(`${OLLAMA_HOST}/api/show`, { model }, { timeout: REQUEST_TIMEOUT_MS });
+  return response.data as { parameters?: string; template?: string };
+}
+
+export async function resolveModelBudget(model: string, overrides: ModelOptions = {}, load = showModel) {
+  const settings = await load(model);
+  const saved = Object.fromEntries([...((settings.parameters ?? "").matchAll(/^\s*(num_ctx|num_predict)\s+(-?\d+)\s*$/gm))].map((match) => [match[1], Number(match[2])]));
+  const source = (key: keyof ModelOptions) => overrides[key] !== undefined ? "request" : saved[key] !== undefined ? "model" : "fallback";
+  const num_ctx = overrides.num_ctx ?? saved.num_ctx ?? 16_384;
+  const num_predict = overrides.num_predict ?? saved.num_predict ?? 8_192;
+  for (const [name, value] of Object.entries({ num_ctx, num_predict })) {
+    if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a finite positive integer; set an explicit ceiling for unbounded model defaults.`);
+  }
+  const safety_margin = 1024;
+  const input_budget = num_ctx - num_predict - safety_margin;
+  if (input_budget <= 0) throw new Error("Output reserve and safety margin leave no input budget.");
+  return { num_ctx, num_predict, safety_margin, input_budget, sources: { num_ctx: source("num_ctx"), num_predict: source("num_predict") }, template: settings.template ?? "" };
+}
+
+export function checkInputBudget(budget: Awaited<ReturnType<typeof resolveModelBudget>>, input: string) {
+  // A UTF-8 byte bound is conservative for byte-tokenized Qwen; reject oversized input before Ollama can truncate it.
+  const input_token_bound = Buffer.byteLength(input + budget.template, "utf8");
+  const { template: _template, ...effective } = budget;
+  return { ...effective, input_token_bound, accounting: "utf8_byte_bound" as const, fits: input_token_bound <= budget.input_budget };
+}
 
 export async function generate(
   model: string,
@@ -9,7 +38,7 @@ export async function generate(
   system: string,
   format?: "json" | Record<string, unknown>,
   think = false,
-  modelOptions?: { num_ctx?: number; num_predict?: number }
+  modelOptions?: ModelOptions
 ) {
   const response = await axios.post(
     `${OLLAMA_HOST}/api/generate`,
@@ -21,6 +50,13 @@ export async function generate(
   // separating chain-of-thought from the final answer. Fall back to `thinking` so
   // callers that pass think:true don't see a silently empty response.
   return (response.data.response || response.data.thinking || "") as string;
+}
+
+export async function generateWithModelBudget(model: string, prompt: string, system: string, format?: "json" | Record<string, unknown>, think = false) {
+  const budget = await resolveModelBudget(model);
+  const input = checkInputBudget(budget, prompt + system + (format ? JSON.stringify(format) : ""));
+  if (!input.fits) throw new Error(`input_overflow: ${JSON.stringify(input)}`);
+  return generate(model, prompt, system, format, think, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
 }
 
 export async function listModels() {

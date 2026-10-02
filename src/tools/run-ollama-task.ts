@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { OLLAMA_HOST, REQUEST_TIMEOUT_MS, generate } from "../ollama-client.js";
+import { DEFAULT_LOCAL_MODEL, OLLAMA_HOST, REQUEST_TIMEOUT_MS, checkInputBudget, generate, resolveModelBudget } from "../ollama-client.js";
 
 export function registerRunOllamaTask(server: McpServer) {
   server.tool(
@@ -9,12 +9,18 @@ export function registerRunOllamaTask(server: McpServer) {
     {
       prompt: z.string().describe("The specific task or prompt to send to the Ollama model."),
       system_prompt: z.string().optional().describe("Optional instructions framing the model's role."),
-      model: z.string().default("qwen2.5-coder:3b").describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
+      num_ctx: z.number().int().positive().optional().describe("Context override; inherits the model setting when omitted."),
+      num_predict: z.number().int().positive().optional().describe("Output ceiling override; inherits the model setting when omitted."),
+      model: z.string().default(DEFAULT_LOCAL_MODEL).describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
     },
-    async ({ prompt, system_prompt, model }) => {
+    async ({ prompt, system_prompt, model, num_ctx, num_predict }) => {
       try {
-        const text = await generate(model, prompt, system_prompt || "You are a specialized sub-agent assistant.");
-        return { content: [{ type: "text", text }] };
+        const system = system_prompt || "You are a specialized sub-agent assistant.";
+        const budget = await resolveModelBudget(model, { num_ctx, num_predict });
+        const input = checkInputBudget(budget, prompt + system);
+        if (!input.fits) return { isError: true, content: [{ type: "text", text: JSON.stringify({ status: "input_overflow", budget: input }) }] };
+        const text = await generate(model, prompt, system, undefined, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
+        return { content: [{ type: "text", text }], _meta: { model_budget: input } };
       } catch (error: any) {
         const message =
           error.code === "ECONNABORTED"

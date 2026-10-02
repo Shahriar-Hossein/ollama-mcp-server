@@ -1,8 +1,9 @@
 # Local model context and MCP improvement checklist
 
 Updated: 2026-10-02. GPU fit checks and phase-2 comparisons complete.
-H/I are the retained testing configurations; MCP budget controls and evidence
-packing improvements remain pending. Keep frontier planning and review.
+H/I are the retained configurations. MCP model-budget inheritance and a first
+evidence-packing pass are implemented. Selection and tighter input accounting
+remain unfinished. Keep frontier planning and review.
 
 ## Current configurations
 
@@ -45,11 +46,20 @@ H was restored on the system daemon.
 - Enforce `input tokens + reserved output tokens + safety margin <= num_ctx`.
   Input includes system text, template, schema, question, source and history.
   Reduce the reserved ceiling explicitly when larger input is needed.
-- The MCP scout still requests 16384 context, 8192 output and a
-  24000-character evidence cap. Selecting H/I alone does not change this.
+- Local MCP routes inherit the selected model's saved context/output settings.
+  Explicit `num_ctx`/`num_predict` request fields override them. H is the
+  operational default on the current q4 daemon, not a quality winner.
+  Models without saved finite limits use reported 16384/8192 fallbacks.
+- Input checks use a conservative UTF-8 byte bound over system, schema,
+  question/source/history and template, plus a 1024-token margin. It is not
+  a calibrated tokenizer. Oversized requests return `input_overflow`; the
+  24000-character packing cap also reports overflow rather than generating
+  from silently omitted source. I's default reserve rejects the four current
+  smoke bundles even though measured H token counts would fit its reserve.
 - The smoke runner supports `--num-ctx` and `--num-predict`; pass
   `50000/25000` for H or `32768/25000` for I with the matching daemon cache.
-  Its wrapper overrides do not establish production MCP budget support.
+  These are explicit overrides; without them it uses production inheritance
+  and records effective options, requests and raw token/timing metrics.
 - Keep experimental tools opt-in, target sources read-only and autonomous
   worker flags independent.
 
@@ -109,22 +119,25 @@ projects and parent follow-up work remain unmeasured.
 
 ## Next work
 
-Start by inspecting question decomposition and source/caller bundles in
-`src/experimental/tools/local-explore-repo.ts`. Explain why the required
-helper, cloud mapping and transaction evidence is missing; improve one
-packing or selection behavior and rerun the same held-out cases.
+The [first implementation pass](experimental/benchmarks/runs/2026-10-02-scout-evidence-budget-fix.md)
+is complete. All required helper, tool-mapping and transaction source reaches
+all four bundles. The final H run returns complete evidence for 2/4 cases;
+tool guards and the locking rejection/caller remain selection failures.
+Next: improve selection of those remaining chain elements, and tighten input
+accounting/packing so I can accept feasible requests without reducing its
+saved output ceiling. Do not infer an H/I quality winner.
 
-- [ ] Add production MCP context/output/input-budget controls and record
+- [x] Add production MCP context/output/input-budget controls and record
   effective values. Preserve the shared text-returning `generate()` API;
-  expose raw token/timing metrics through a benchmark path.
+  expose raw token/timing metrics through the smoke benchmark path.
 - [ ] Account for actual prompt overhead. Capture sanitized representative
   requests from Codex/Claude and calibrate estimates with `prompt_eval_count`.
   Session context is not automatically forwarded to Ollama.
-- [ ] Deduplicate source and instructions without losing question parts,
-  constraints, paths or evidence IDs. Return an explicit overflow result or
-  repack deterministically; do not silently drop required evidence.
-- [ ] Separate retrieval failures from selection failures by checking that
-  required source was present in each saved bundle.
+- [x] Merge overlapping source windows, deduplicate shared bundles and charge
+  repeated source once. Preserve question parts, paths and evidence IDs;
+  return explicit overflow instead of generating from omitted source.
+- [x] Separate retrieval failures from selection failures on the four current
+  cases: the saved final bundles contain every required source element.
 - [ ] Repeat matched H/I inputs within I's input reserve, then test larger H
   inputs separately. Check beginning/middle/end evidence and exact citations.
 - [ ] Add finite tasks that need longer output. Record actual tokens, stop
@@ -150,9 +163,15 @@ packing or selection behavior and rerun the same held-out cases.
   q8 comparisons: `q8/`; aggregate: `summary.json`.
 - Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
 - Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
-- Seven scout fixture tests passed earlier; Python harness syntax and
-  whitespace checks passed. The earlier TypeScript check was blocked by
-  missing `vitest` in an existing experimental test.
+- Current checks: 12 scout, 7 model-budget, 3 feature and 8 Quality Review
+  tests pass. Whitespace checks pass. Standard TypeScript checking remains
+  blocked by missing `vitest` in an existing experimental test; a temporary
+  config excluding only that test checks the remaining source and smoke CLI.
+- New raw requests/results and source-presence audit:
+  `benchmark-data/qwen-context/evidence-budget-fix/`. H v1/v2 are intermediate
+  implementations, not repetitions of final H v3. I's four overflow results
+  are budget refusals, not model accuracy failures. Its short q8 settings/GPU
+  check passed; the temporary daemon/store were removed and H restored.
 - Launch long benchmarks under one detached `setsid nohup flock -n`
   supervisor with an ignored log. Confirm a complete artifact and released
   lock before the next model. Checkpoint failures and retain raw metrics.

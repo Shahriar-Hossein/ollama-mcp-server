@@ -2,12 +2,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { generate } from "../../ollama-client.js";
+import { directEvidenceForPart } from "./local-explore-validation.js";
+import { ANSWER_SCHEMA, SCOUT_SYSTEM as system } from "./local-explore-prompt.js";
+import { DEFAULT_LOCAL_MODEL, checkInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
 import { indexRepository, type RepositoryIndex } from "../../explorer/indexer.js";
 import { readSymbol } from "../../explorer/read-symbol.js";
 import { hybridRetrieve, type HybridRetrievalResult } from "../../explorer/retrieval.js";
 
-const DEFAULT_MODEL = "qwen3.5:4b";
+export { directEvidenceForPart } from "./local-explore-validation.js";
+
+const DEFAULT_MODEL = DEFAULT_LOCAL_MODEL;
 const MAX_FILES = 6;
 const MAX_LINES = 20;
 const MAX_LINE_CHARS = 180;
@@ -36,6 +40,8 @@ export interface LocalExploreRepoParams {
   repository_root: string;
   model?: string;
   limit?: number;
+  num_ctx?: number;
+  num_predict?: number;
 }
 
 function checkedFile(root: string, file: string): string {
@@ -68,12 +74,12 @@ export function decomposeQuestion(query: string): QuestionPart[] {
   return (clauses.length > 1 ? clauses : [query.trim()]).map((question, index) => {
     let evidence_needed = "Direct implementation lines that establish the requested behavior.";
     if (/register/i.test(question)) evidence_needed = "The call that registers the named tool and its guard; an import or function definition alone is insufficient.";
-    else if (/enabled by default|default state/i.test(question)) evidence_needed = "The named flag mapping and the expression that establishes its default value.";
+    else if (/enabled by default|default state/i.test(question)) evidence_needed = "The named flag mapping, the helper resolving that mapping, and the expression establishing the master flag default.";
     else if (/environment variables?/i.test(question)) evidence_needed = "Each distinct environment variable controlling the requested tools.";
     else if (/which tool|what tool/i.test(question) && /gate|environment/i.test(query)) evidence_needed = "The guarded registration call for each tool, showing which feature controls it.";
     else if (/\bwhere\b.*\bset\b/i.test(question)) evidence_needed = "The executable assignment or request field that sets the value.";
     else if (/\bwhy\b/i.test(question)) evidence_needed = "Source text that explains the reason for the setting.";
-    else if (/concurren|duplicate/i.test(question)) evidence_needed = "The lock acquisition, rejection condition, and a caller using the lock.";
+    else if (/concurren|duplicate/i.test(question)) evidence_needed = "The transaction wrapper call, its exclusive BEGIN statement, the lock insertion, rejection condition, and a caller using the lock.";
     return { id: `P${index + 1}`, question, evidence_needed };
   });
 }
@@ -146,18 +152,25 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
     const weighted = match.hits.map((hit) => ({ hit, score: match.matchedTerms.reduce((sum, term) => sum + (match.lines[hit].toLowerCase().includes(term) ? term.length / (frequency.get(term) ?? 1) : 0), 0)
       + (/\b(?:function|lock\s*\(|INSERT|SELECT|CREATE TABLE)\b/.test(match.lines[hit]) ? 3 : 0) }));
     weighted.sort((a, b) => b.score - a.score || a.hit - b.hit);
-    const hit = weighted[0].hit;
-    const start = Math.max(0, hit - 4);
-    const end = Math.min(match.lines.length, start + MAX_LINES);
-    let chars = 0;
-    const lines: EvidenceLine[] = [];
-    for (let offset = start; offset < end; offset++) {
-      const source = match.lines[offset].slice(0, MAX_LINE_CHARS).trimEnd();
-      if (chars + source.length > MAX_CANDIDATE_CHARS) break;
-      lines.push({ line: offset + 1, text: source });
-      chars += source.length;
+    const covered = new Set<number>();
+    let windows = 0;
+    for (const { hit } of weighted) {
+      if (covered.has(hit)) continue;
+      if (windows >= 3) break;
+      const start = Math.max(0, hit - 4);
+      const end = Math.min(match.lines.length, start + MAX_LINES);
+      let chars = 0;
+      const lines: EvidenceLine[] = [];
+      for (let offset = start; offset < end; offset++) {
+        const source = match.lines[offset].slice(0, MAX_LINE_CHARS).trimEnd();
+        if (chars + source.length > MAX_CANDIDATE_CHARS) break;
+        lines.push({ line: offset + 1, text: source });
+        chars += source.length;
+        covered.add(offset);
+      }
+      add({ id: "", kind: "text_match", file: match.file, lines });
+      windows++;
     }
-    add({ id: "", kind: "text_match", file: match.file, lines });
   }
   if (/environment|\benv\b|gate|enabled by default/i.test(query)) {
     const configured = sourceFiles.flatMap((file) => {
@@ -212,12 +225,13 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
   return candidates;
 }
 
-export function compileEvidenceBundles(parts: QuestionPart[], byPart: Map<string, Candidate[]>): { bundles: EvidenceBundle[]; candidates: Candidate[] } {
+export function compileEvidenceBundles(parts: QuestionPart[], byPart: Map<string, Candidate[]>): { bundles: EvidenceBundle[]; candidates: Candidate[]; overflow: boolean } {
   const bundles: EvidenceBundle[] = [];
   const candidates: Candidate[] = [];
   const seen = new Map<string, Candidate>();
   const perPart = Math.max(1, Math.floor(MAX_BUNDLES / parts.length));
   let usedChars = 0;
+  let overflow = false;
   for (const part of parts) {
     const pool = byPart.get(part.id) ?? [];
     const usedFiles = new Set<string>();
@@ -226,11 +240,17 @@ export function compileEvidenceBundles(parts: QuestionPart[], byPart: Map<string
       if (count >= perPart || bundles.length >= MAX_BUNDLES || usedFiles.has(seed.file)) continue;
       const related = pool.find((candidate) => candidate !== seed && candidate.symbol && candidate.symbol === seed.symbol && candidate.file !== seed.file)
         ?? pool.find((candidate) => candidate !== seed && candidate.file === seed.file && candidate.kind !== seed.kind);
-      const items = related ? [seed, related] : [seed];
-      const newChars = items.reduce((sum, item) => sum + item.lines.reduce((n, line) => n + line.text.length, 0), 0);
-      if (usedChars + newChars > MAX_CONTEXT_CHARS) continue;
+      const relatedItems = [...new Set([...pool.filter((candidate) => candidate.file === seed.file), ...(related ? [related] : [])])];
+      const items = [...new Set(relatedItems.map((item) => item.file))].map((file) => {
+        const sources = relatedItems.filter((item) => item.file === file);
+        const lines = [...new Map(sources.flatMap((item) => item.lines).map((line) => [line.line, line])).values()].sort((a, b) => a.line - b.line);
+        return { ...sources[0], lines };
+      });
+      const keyFor = (item: Candidate) => `${item.file}:${item.lines.map((line) => line.line).join(",")}`;
+      const newChars = items.filter((item) => !seen.has(keyFor(item))).reduce((sum, item) => sum + item.lines.reduce((n, line) => n + line.text.length, 0), 0);
+      if (usedChars + newChars > MAX_CONTEXT_CHARS) { overflow = true; continue; }
       const packed = items.map((item) => {
-        const key = `${item.file}:${item.lines.map((line) => line.line).join(",")}`;
+        const key = keyFor(item);
         const prior = seen.get(key);
         if (prior) return prior;
         const candidate = { ...item, id: `C${candidates.length + 1}` };
@@ -250,7 +270,7 @@ export function compileEvidenceBundles(parts: QuestionPart[], byPart: Map<string
       count++;
     }
   }
-  return { bundles, candidates };
+  return { bundles, candidates, overflow };
 }
 
 function expandCandidate(root: string, candidate: Candidate, line: number, nextId: string): Candidate {
@@ -265,17 +285,6 @@ function expandCandidate(root: string, candidate: Candidate, line: number, nextI
 }
 
 type LineReference = { candidate: Candidate; line: EvidenceLine };
-
-const ANSWER_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    part_evidence: { type: "array", items: { type: "object", properties: { part_id: { type: "string" }, evidence_refs: { type: "array", maxItems: 3, items: { type: "string" } } }, required: ["part_id", "evidence_refs"] } },
-    confidence: { type: "string", enum: ["high", "medium", "low"] },
-    unresolved: { type: "array", items: { type: "string" } },
-    next_action: { type: "object", properties: { ref: { type: "string" } }, required: ["ref"] },
-  },
-  required: ["part_evidence", "confidence", "unresolved", "next_action"],
-};
 
 function promptContext(bundles: EvidenceBundle[], candidates: Candidate[]) {
   const refs = new Map<string, LineReference>();
@@ -311,13 +320,13 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
   const partRefs = Array.isArray(answer.part_evidence) ? answer.part_evidence.flatMap((part) => part && typeof part === "object" && Array.isArray((part as { evidence_refs?: unknown }).evidence_refs) ? (part as { evidence_refs: unknown[] }).evidence_refs : []) : [];
   const evidenceRefs = Array.isArray(answer.evidence_refs) ? answer.evidence_refs : partRefs.length ? [...new Set(partRefs)] : null;
   if (evidenceRefs) {
-    for (const ref of evidenceRefs.slice(0, 12)) {
+    for (const ref of evidenceRefs.slice(0, 36)) {
       const located = typeof ref === "string" ? refs.get(ref) : undefined;
       if (!located || located.line.text.trim().length < 6) { rejected_evidence++; continue; }
       evidence.push({ id: located.candidate.id, file: located.candidate.file, line: located.line.line, quote: located.line.text.trim() });
     }
   }
-  for (const rawReference of !evidenceRefs && Array.isArray(answer.evidence) ? answer.evidence.slice(0, 12) : []) {
+  for (const rawReference of !evidenceRefs && Array.isArray(answer.evidence) ? answer.evidence.slice(0, 36) : []) {
     if (!rawReference || typeof rawReference !== "object") { rejected_evidence++; continue; }
     const reference = rawReference as Partial<ModelEvidence>;
     if (typeof reference.id !== "string" || !Number.isInteger(reference.line)) { rejected_evidence++; continue; }
@@ -337,7 +346,11 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
     const evidence_ids = Array.isArray(cited)
       ? [...new Set(cited.filter((id): id is string => typeof id === "string" && evidence.some((item) => item.id === id) && (!bundles.length || allowed.has(id))))]
       : [];
-    return { part_id: part.id, question: part.question, status: evidence_ids.length ? "supported" as const : "missing" as const, evidence_ids };
+    return { part_id: part.id, question: part.question, status: evidence_ids.length ? "supported" as const : "missing" as const, evidence_ids,
+      evidence_locations: Array.isArray(entry?.evidence_refs) ? entry.evidence_refs.flatMap((ref) => {
+        const located = typeof ref === "string" ? refs.get(ref) : undefined;
+        return located && evidence_ids.includes(located.candidate.id) ? [`${located.candidate.file}:${located.line.line}`] : [];
+      }) : evidence.filter((item) => evidence_ids.includes(item.id)).map((item) => `${item.file}:${item.line}`) };
   });
   const action = answer.next_action && typeof answer.next_action === "object" ? answer.next_action as { candidate_id?: unknown; line?: unknown } : null;
   const requested = typeof (action as { ref?: unknown } | null)?.ref === "string" ? refs.get((action as { ref: string }).ref) : undefined;
@@ -352,29 +365,16 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
   return { evidence, selected_ids, coverage, next_action, model_confidence, unresolved, rejected_evidence };
 }
 
-export function directEvidenceForPart(part: QuestionPart, evidence: ValidEvidence[], query: string): boolean {
-  const lines = evidence.map((item) => item.quote);
-  if (/register/i.test(part.question)) return lines.some((line) => /\bregister[A-Za-z0-9_]+\s*\(/.test(line) && !/\b(?:function|import|const)\b/.test(line));
-  if (/enabled by default|default state/i.test(part.question)) return lines.some((line) => /\?\?\s*(?:true|false)|=\s*(?:true|false)/.test(line)) && lines.some((line) => /(?:Feature|Flag)\s*\(/.test(line));
-  if (/environment variables?/i.test(part.question)) {
-    const names = lines.flatMap((line) => line.match(/\b(?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)\b/g) ?? []);
-    return new Set(/autonomous/i.test(query) ? names.filter((name) => name.endsWith("_ENABLED")) : names).size >= 2;
-  }
-  if (/which tool|what tool/i.test(part.question) && /gate|environment/i.test(query)) {
-    const registrations = new Set(lines.flatMap((line) => line.match(/register[A-Za-z0-9_]+\s*\(\s*server\s*\)/g) ?? []));
-    return registrations.size >= 2 && lines.some((line) => /if\s*\(\s*features\./.test(line));
-  }
-  if (/\bwhere\b.*\bset\b/i.test(part.question)) return lines.some((line) => !/^\s*(?:\*|\/\/)/.test(line) && /[:=]/.test(line));
-  if (/concurren|duplicate/i.test(part.question)) return lines.some((line) => /throw|INSERT|BEGIN IMMEDIATE/.test(line)) && lines.some((line) => /\.lock\s*\(/.test(line));
-  return true;
-}
-
 export async function runLocalExploreRepo(
-  { query, repository_root, model = DEFAULT_MODEL, limit = 10 }: LocalExploreRepoParams,
-  generateAnswer: typeof generate = generate
+  { query, repository_root, model = DEFAULT_MODEL, limit = 10, num_ctx, num_predict }: LocalExploreRepoParams,
+  generateAnswer: typeof generate = generate,
+  resolveBudget: typeof resolveModelBudget = resolveModelBudget
 ) {
   if (!query.trim()) throw new Error("Exploration query must not be empty.");
   if (!Number.isInteger(limit) || limit < 8 || limit > 12) throw new Error("Candidate limit must be an integer from 8 through 12.");
+  const budget = await resolveBudget(model, { num_ctx, num_predict });
+  const input_checks: ReturnType<typeof checkInputBudget>[] = [];
+  let model_calls = 0;
   const root = resolve(repository_root);
   const index = indexRepository(root);
   const parts = decomposeQuestion(query);
@@ -388,24 +388,39 @@ export async function runLocalExploreRepo(
   }
   const compiled = compileEvidenceBundles(parts, byPart);
   const { bundles, candidates } = compiled;
-  const base = () => ({ query, model, commit_hash: index.commit_hash, retrieval_mode: "basic" as const, parts, bundles, candidates, retrieved_count });
+  const base = () => ({ query, model, commit_hash: index.commit_hash, retrieval_mode: "basic" as const, parts, bundles, candidates, retrieved_count, input_checks, packing_overflow: compiled.overflow });
+  if (compiled.overflow) return { ...base(), status: "input_overflow" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: ["Evidence packing exceeded its character cap; source was omitted. Narrow the query before generation."], model_calls: 0 };
   if (!candidates.length) return { ...base(), status: "no_evidence" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: ["Deterministic retrieval supplied no readable candidates."], model_calls: 0 };
 
-  const system = `You locate repository evidence. For each question part, choose up to three displayed evidence line refs (E numbers) that satisfy its evidence_needed field. A relevant file or symbol name alone does not satisfy a part. Cite the exact assignment or call when asked where a setting is set; cite a comment only for its stated reason. Do not infer defaults, registration, callers, or behavior from names alone. Return useful partial evidence when other parts are missing. If a part is missing, request at most one expansion using a supplied E ref; use an empty ref if no expansion would help. Prefer executable source and configuration over comments. Use only E refs shown in the bundles, never file line numbers, bundle IDs, or source quotes. Do not explain your reasoning or invent source relationships. Return only the requested JSON object.`;
   let lastError = "";
+  let retained: ReturnType<typeof validateModelAnswer> | undefined;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const { refs, promptBundles } = promptContext(bundles, candidates);
     const repoMap = [...new Map(candidates.map((candidate) => [candidate.file, candidate.symbol ?? candidate.kind])).entries()].map(([file, role]) => ({ file, role }));
     const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(parts)}\nRelevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\nReturn JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. ${lastError ? `Previous output failed: ${lastError}.` : ""}`;
+    const inputCheck = checkInputBudget(budget, prompt + system + JSON.stringify(ANSWER_SCHEMA));
+    input_checks.push(inputCheck);
+    if (!inputCheck.fits) return { ...base(), status: "input_overflow" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: ["Input exceeds the conservative budget. Reduce the source/query or explicitly lower num_predict."], model_calls };
     try {
-      const raw = await generateAnswer(model, prompt, system, ANSWER_SCHEMA, false, { num_ctx: 16_384, num_predict: 8_192 });
+      model_calls++;
+      const raw = await generateAnswer(model, prompt, system, ANSWER_SCHEMA, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
       const answer = validateModelAnswer(raw, candidates, parts, bundles, refs);
       answer.coverage = answer.coverage.map((coverage) => {
         if (coverage.status === "missing") return coverage;
         const part = parts.find((item) => item.id === coverage.part_id)!;
-        const cited = answer.evidence.filter((item) => coverage.evidence_ids.includes(item.id));
+        const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
         return directEvidenceForPart(part, cited, query) ? coverage : { ...coverage, status: "missing" as const };
       });
+      // A retry may resolve one part while dropping an already supported part.
+      for (const prior of retained?.coverage ?? []) {
+        if (prior.status !== "supported" || !answer.coverage.some((part) => part.part_id === prior.part_id && part.status === "missing")) continue;
+        answer.coverage = answer.coverage.map((part) => part.part_id === prior.part_id ? prior : part);
+        for (const item of retained!.evidence.filter((item) => prior.evidence_locations.includes(`${item.file}:${item.line}`))) {
+          if (!answer.evidence.some((other) => other.file === item.file && other.line === item.line)) answer.evidence.push(item);
+        }
+      }
+      answer.selected_ids = [...new Set(answer.evidence.map((item) => item.id))];
+      retained = answer;
       const missing = answer.coverage.some((part) => part.status === "missing");
       if (answer.evidence.length && !answer.rejected_evidence && !missing) {
         return { ...base(), ...answer, status: "evidence_selected" as const, model_calls: attempt, verification: "Candidate IDs and line numbers checked; returned quotes copied from source. Coverage is model-indicated, not semantic verification." };
@@ -436,6 +451,8 @@ export function registerLocalExploreRepo(server: McpServer) {
       repository_root: z.string().describe("Absolute Git repository root."),
       query: z.string().describe("Repository exploration question."),
       model: z.string().default(DEFAULT_MODEL).describe("Local model for evidence interpretation."),
+      num_ctx: z.number().int().positive().optional().describe("Context override; otherwise inherits the selected model's saved num_ctx."),
+      num_predict: z.number().int().positive().optional().describe("Output ceiling override; otherwise inherits the selected model's saved num_predict. Lower explicitly for more input room."),
       limit: z.number().int().min(8).max(12).default(10).describe("Deterministic candidates to retrieve before model interpretation."),
     },
     async (params) => {

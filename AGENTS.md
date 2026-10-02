@@ -27,6 +27,11 @@ This is the canonical instructions file for this repo — other agent configs
   optional MCP tools, and autonomous workers. Default startup does not import
   this tree. Keep new work out unless an experimental feature is explicitly
   resumed.
+- Local delegation, summaries and both scout routes default to
+  `qwen-context:h-q4_0-50k`. Read selected model settings via `/api/show`;
+  honor saved context/output limits unless the caller explicitly overrides
+  them. Report input overflow instead of dropping evidence or reducing output.
+  KV cache precision remains a daemon setting; an I tag does not enable q8.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
   `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
   embedding model unloads right after each call — without it, Ollama kept the
@@ -70,7 +75,7 @@ This is the canonical instructions file for this repo — other agent configs
 - `src/experimental/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
   pilot in `docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
-  `qwen3.5:4b` — it's the only local model confirmed to reliably emit real
+  H, using the `qwen3.5:4b` weights/template — that family reliably emits real
   `tool_calls` in this loop; `qwen2.5-coder:7b` fabricates confidently
   instead of calling tools at all, don't route it here. Every `read`/`grep`
   path is checked against the repo root before touching disk (see
