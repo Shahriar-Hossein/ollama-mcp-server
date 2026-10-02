@@ -1,6 +1,5 @@
-import type { QuestionPart } from "./local-explore-repo.js";
-
-type ValidEvidence = { id: string; file: string; line: number; quote: string };
+export type QuestionPart = { id: string; question: string; evidence_needed: string };
+export type ValidEvidence = { id: string; file: string; line: number; quote: string };
 
 export function directEvidenceForPart(part: QuestionPart, evidence: ValidEvidence[], query: string): boolean {
   const lines = evidence.map((item) => item.quote);
@@ -18,4 +17,3 @@ export function directEvidenceForPart(part: QuestionPart, evidence: ValidEvidenc
   if (/concurren|duplicate/i.test(part.question)) return [/\.transaction\s*\(/, /BEGIN IMMEDIATE|BEGIN EXCLUSIVE/, /INSERT.*lock/i, /throw/, /\.lock\s*\(/].every((pattern) => lines.some((line) => pattern.test(line)));
   return true;
 }
-

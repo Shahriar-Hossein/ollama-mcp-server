@@ -1,13 +1,59 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 import axios from "axios";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { checkInputBudget, generateWithModelBudget, resolveModelBudget } from "./ollama-client.js";
+import { checkInputBudget, clearModelSettingsCache, generateWithModelBudget, resolveModelBudget } from "./ollama-client.js";
 import { registerRunOllamaTask } from "./tools/run-ollama-task.js";
 import { registerSummarizeOutput } from "./tools/summarize-output.js";
 import { runLocalExplorerTask } from "./experimental/tools/local-explorer-task.js";
 
 const settings = (model: string) => ({ parameters: `num_ctx ${model.includes(":i-") ? 32768 : 50000}\nnum_predict 25000`, template: "{{ .System }}{{ .Prompt }}" });
+beforeEach(() => clearModelSettingsCache());
+
+test("shares concurrent settings requests per tag without caching budget overrides", async (t) => {
+  const requests: string[] = [];
+  t.mock.method(axios, "post", async (_url: string, body: { model: string }) => {
+    requests.push(body.model);
+    return { data: settings(body.model) };
+  });
+  const [saved, overridden] = await Promise.all([
+    resolveModelBudget("qwen-context:h-q4_0-50k"),
+    resolveModelBudget("qwen-context:h-q4_0-50k", { num_predict: 4096 }),
+  ]);
+  assert.equal(saved.num_predict, 25000);
+  assert.equal(overridden.num_predict, 4096);
+  await resolveModelBudget("qwen-context:i-q8_0-32k");
+  assert.deepEqual(requests, ["qwen-context:h-q4_0-50k", "qwen-context:i-q8_0-32k"]);
+  clearModelSettingsCache("qwen-context:h-q4_0-50k");
+  await resolveModelBudget("qwen-context:h-q4_0-50k");
+  assert.equal(requests.length, 3);
+});
+
+test("refreshes saved settings after 60 seconds", async (t) => {
+  let now = 1000;
+  let calls = 0;
+  t.mock.method(Date, "now", () => now);
+  t.mock.method(axios, "post", async () => ({
+    data: { parameters: `num_ctx ${++calls === 1 ? 50000 : 32768}\nnum_predict 25000` },
+  }));
+  assert.equal((await resolveModelBudget("fixture")).num_ctx, 50000);
+  now += 59_999;
+  assert.equal((await resolveModelBudget("fixture")).num_ctx, 50000);
+  now++;
+  assert.equal((await resolveModelBudget("fixture")).num_ctx, 32768);
+  assert.equal(calls, 2);
+});
+
+test("does not cache failed settings requests", async (t) => {
+  let calls = 0;
+  t.mock.method(axios, "post", async () => {
+    if (++calls === 1) throw new Error("unavailable");
+    return { data: settings("H") };
+  });
+  await assert.rejects(resolveModelBudget("fixture"), /unavailable/);
+  assert.equal((await resolveModelBudget("fixture")).num_ctx, 50000);
+  assert.equal(calls, 2);
+});
 
 test("inherits H/I settings and reserves their full output ceiling", async () => {
   for (const [model, input_budget] of [["qwen-context:h-q4_0-50k", 23976], ["qwen-context:i-q8_0-32k", 6744]] as const) {
@@ -89,6 +135,9 @@ test("advanced generation honors model settings and counts schema overhead", asy
   });
   assert.equal(await generateWithModelBudget("qwen-context:h-q4_0-50k", "Short", "System", "json"), "{}");
   assert.deepEqual(options, { num_ctx: 50000, num_predict: 25000 });
+  assert.equal(await generateWithModelBudget("qwen-context:i-q8_0-32k", "Short", "System", "json", false,
+    { num_ctx: 16384, num_predict: 4096 }), "{}");
+  assert.deepEqual(options, { num_ctx: 16384, num_predict: 4096 });
   await assert.rejects(generateWithModelBudget("qwen-context:i-q8_0-32k", "Short", "System", { description: "x".repeat(7000) }), /input_overflow/);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
 });

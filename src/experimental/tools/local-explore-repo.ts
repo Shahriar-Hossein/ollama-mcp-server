@@ -2,16 +2,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { directEvidenceForPart } from "./local-explore-validation.js";
-import { ANSWER_SCHEMA, SCOUT_SYSTEM as system } from "./local-explore-prompt.js";
+import { directEvidenceForPart, type QuestionPart, type ValidEvidence } from "./local-explore-validation.js";
+import { ANSWER_SCHEMA, SCOUT_SYSTEM } from "./local-explore-prompt.js";
 import { DEFAULT_LOCAL_MODEL, checkInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
 import { indexRepository, type RepositoryIndex } from "../../explorer/indexer.js";
 import { readSymbol } from "../../explorer/read-symbol.js";
 import { hybridRetrieve, type HybridRetrievalResult } from "../../explorer/retrieval.js";
 
 export { directEvidenceForPart } from "./local-explore-validation.js";
+export type { QuestionPart } from "./local-explore-validation.js";
 
-const DEFAULT_MODEL = DEFAULT_LOCAL_MODEL;
 const MAX_FILES = 6;
 const MAX_LINES = 20;
 const MAX_LINE_CHARS = 180;
@@ -29,11 +29,9 @@ export type Candidate = {
   lines: EvidenceLine[];
 };
 
-export type QuestionPart = { id: string; question: string; evidence_needed: string };
 export type EvidenceBundle = { id: string; part_id: string; why_retrieved: string; relationship: string; candidates: Candidate[] };
 
-type ModelEvidence = { id: string; line: number; quote: string };
-type ValidEvidence = ModelEvidence & { file: string };
+type ModelEvidence = Omit<ValidEvidence, "file">;
 
 export interface LocalExploreRepoParams {
   query: string;
@@ -317,7 +315,11 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
     : [];
   const evidence: ValidEvidence[] = [];
   let rejected_evidence = 0;
-  const partRefs = Array.isArray(answer.part_evidence) ? answer.part_evidence.flatMap((part) => part && typeof part === "object" && Array.isArray((part as { evidence_refs?: unknown }).evidence_refs) ? (part as { evidence_refs: unknown[] }).evidence_refs : []) : [];
+  const partRefs = Array.isArray(answer.part_evidence) ? answer.part_evidence.flatMap((part) => {
+    if (!part || typeof part !== "object") return [];
+    const refs = (part as { evidence_refs?: unknown }).evidence_refs;
+    return Array.isArray(refs) ? refs : [];
+  }) : [];
   const evidenceRefs = Array.isArray(answer.evidence_refs) ? answer.evidence_refs : partRefs.length ? [...new Set(partRefs)] : null;
   if (evidenceRefs) {
     for (const ref of evidenceRefs.slice(0, 36)) {
@@ -346,11 +348,17 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
     const evidence_ids = Array.isArray(cited)
       ? [...new Set(cited.filter((id): id is string => typeof id === "string" && evidence.some((item) => item.id === id) && (!bundles.length || allowed.has(id))))]
       : [];
-    return { part_id: part.id, question: part.question, status: evidence_ids.length ? "supported" as const : "missing" as const, evidence_ids,
-      evidence_locations: Array.isArray(entry?.evidence_refs) ? entry.evidence_refs.flatMap((ref) => {
-        const located = typeof ref === "string" ? refs.get(ref) : undefined;
-        return located && evidence_ids.includes(located.candidate.id) ? [`${located.candidate.file}:${located.line.line}`] : [];
-      }) : evidence.filter((item) => evidence_ids.includes(item.id)).map((item) => `${item.file}:${item.line}`) };
+    const evidence_locations = Array.isArray(entry?.evidence_refs) ? entry.evidence_refs.flatMap((ref) => {
+      const located = typeof ref === "string" ? refs.get(ref) : undefined;
+      return located && evidence_ids.includes(located.candidate.id) ? [`${located.candidate.file}:${located.line.line}`] : [];
+    }) : evidence.filter((item) => evidence_ids.includes(item.id)).map((item) => `${item.file}:${item.line}`);
+    return {
+      part_id: part.id,
+      question: part.question,
+      status: evidence_ids.length ? "supported" as const : "missing" as const,
+      evidence_ids,
+      evidence_locations,
+    };
   });
   const action = answer.next_action && typeof answer.next_action === "object" ? answer.next_action as { candidate_id?: unknown; line?: unknown } : null;
   const requested = typeof (action as { ref?: unknown } | null)?.ref === "string" ? refs.get((action as { ref: string }).ref) : undefined;
@@ -366,7 +374,7 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
 }
 
 export async function runLocalExploreRepo(
-  { query, repository_root, model = DEFAULT_MODEL, limit = 10, num_ctx, num_predict }: LocalExploreRepoParams,
+  { query, repository_root, model = DEFAULT_LOCAL_MODEL, limit = 10, num_ctx, num_predict }: LocalExploreRepoParams,
   generateAnswer: typeof generate = generate,
   resolveBudget: typeof resolveModelBudget = resolveModelBudget
 ) {
@@ -388,22 +396,40 @@ export async function runLocalExploreRepo(
   }
   const compiled = compileEvidenceBundles(parts, byPart);
   const { bundles, candidates } = compiled;
-  const base = () => ({ query, model, commit_hash: index.commit_hash, retrieval_mode: "basic" as const, parts, bundles, candidates, retrieved_count, input_checks, packing_overflow: compiled.overflow });
-  if (compiled.overflow) return { ...base(), status: "input_overflow" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: ["Evidence packing exceeded its character cap; source was omitted. Narrow the query before generation."], model_calls: 0 };
-  if (!candidates.length) return { ...base(), status: "no_evidence" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: ["Deterministic retrieval supplied no readable candidates."], model_calls: 0 };
+  const base = () => ({
+    query, model, commit_hash: index.commit_hash, retrieval_mode: "basic" as const,
+    parts, bundles, candidates, retrieved_count, input_checks, packing_overflow: compiled.overflow,
+  });
+  const emptyResult = <Status extends "input_overflow" | "no_evidence" | "needs_review">(
+    status: Status, unresolved: string[], warning?: string
+  ) => ({
+    ...base(), status, evidence: [], selected_ids: [],
+    coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })),
+    model_confidence: "low" as const, unresolved, model_calls,
+    ...(warning === undefined ? {} : { warning }),
+  });
+  if (compiled.overflow) return emptyResult("input_overflow", [
+    "Evidence packing exceeded its character cap; source was omitted. Narrow the query before generation.",
+  ]);
+  if (!candidates.length) return emptyResult("no_evidence", ["Deterministic retrieval supplied no readable candidates."]);
 
   let lastError = "";
   let retained: ReturnType<typeof validateModelAnswer> | undefined;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const { refs, promptBundles } = promptContext(bundles, candidates);
     const repoMap = [...new Map(candidates.map((candidate) => [candidate.file, candidate.symbol ?? candidate.kind])).entries()].map(([file, role]) => ({ file, role }));
-    const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(parts)}\nRelevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\nReturn JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. ${lastError ? `Previous output failed: ${lastError}.` : ""}`;
-    const inputCheck = checkInputBudget(budget, prompt + system + JSON.stringify(ANSWER_SCHEMA));
+    const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(parts)}\n`
+      + `Relevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\n`
+      + `Return JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. `
+      + (lastError ? `Previous output failed: ${lastError}.` : "");
+    const inputCheck = checkInputBudget(budget, prompt + SCOUT_SYSTEM + JSON.stringify(ANSWER_SCHEMA));
     input_checks.push(inputCheck);
-    if (!inputCheck.fits) return { ...base(), status: "input_overflow" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: ["Input exceeds the conservative budget. Reduce the source/query or explicitly lower num_predict."], model_calls };
+    if (!inputCheck.fits) return emptyResult("input_overflow", [
+      "Input exceeds the conservative budget. Reduce the source/query or explicitly lower num_predict.",
+    ]);
     try {
       model_calls++;
-      const raw = await generateAnswer(model, prompt, system, ANSWER_SCHEMA, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
+      const raw = await generateAnswer(model, prompt, SCOUT_SYSTEM, ANSWER_SCHEMA, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
       const answer = validateModelAnswer(raw, candidates, parts, bundles, refs);
       answer.coverage = answer.coverage.map((coverage) => {
         if (coverage.status === "missing") return coverage;
@@ -423,7 +449,10 @@ export async function runLocalExploreRepo(
       retained = answer;
       const missing = answer.coverage.some((part) => part.status === "missing");
       if (answer.evidence.length && !answer.rejected_evidence && !missing) {
-        return { ...base(), ...answer, status: "evidence_selected" as const, model_calls: attempt, verification: "Candidate IDs and line numbers checked; returned quotes copied from source. Coverage is model-indicated, not semantic verification." };
+        return {
+          ...base(), ...answer, status: "evidence_selected" as const, model_calls: attempt,
+          verification: "Candidate IDs and line numbers checked; returned quotes copied from source. Coverage is model-indicated, not semantic verification.",
+        };
       }
       lastError = answer.rejected_evidence ? `${answer.rejected_evidence} evidence reference(s) did not match supplied source lines.`
         : `Missing direct evidence for: ${answer.coverage.filter((part) => part.status === "missing").map((part) => parts.find((item) => item.id === part.part_id)?.evidence_needed).join("; ")}`;
@@ -431,13 +460,17 @@ export async function runLocalExploreRepo(
         const candidate = candidates.find((item) => item.id === answer.next_action!.candidate_id)!;
         const expanded = expandCandidate(root, candidate, answer.next_action.line, `C${candidates.length + 1}`);
         candidates.push(expanded);
-        bundles.push({ id: `B${bundles.length + 1}`, part_id: answer.coverage.find((part) => part.status === "missing")!.part_id, why_retrieved: "bounded follow-up read", relationship: `expanded source around ${candidate.id}:${answer.next_action.line}`, candidates: [expanded] });
+        bundles.push({
+          id: `B${bundles.length + 1}`, part_id: answer.coverage.find((part) => part.status === "missing")!.part_id,
+          why_retrieved: "bounded follow-up read", relationship: `expanded source around ${candidate.id}:${answer.next_action.line}`,
+          candidates: [expanded],
+        });
         continue;
       }
       if (attempt === 2) return { ...base(), ...answer, status: "needs_review" as const, model_confidence: "low" as const, model_calls: attempt, warning: lastError };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
-      if (attempt === 2) return { ...base(), status: "needs_review" as const, evidence: [], selected_ids: [], coverage: parts.map((part) => ({ ...part, status: "missing" as const, evidence_ids: [] })), model_confidence: "low" as const, unresolved: [], model_calls: attempt, warning: lastError };
+      if (attempt === 2) return emptyResult("needs_review", [], lastError);
     }
   }
   throw new Error("Unreachable explorer state.");
@@ -450,7 +483,7 @@ export function registerLocalExploreRepo(server: McpServer) {
     {
       repository_root: z.string().describe("Absolute Git repository root."),
       query: z.string().describe("Repository exploration question."),
-      model: z.string().default(DEFAULT_MODEL).describe("Local model for evidence interpretation."),
+      model: z.string().default(DEFAULT_LOCAL_MODEL).describe("Local model for evidence interpretation."),
       num_ctx: z.number().int().positive().optional().describe("Context override; otherwise inherits the selected model's saved num_ctx."),
       num_predict: z.number().int().positive().optional().describe("Output ceiling override; otherwise inherits the selected model's saved num_predict. Lower explicitly for more input room."),
       limit: z.number().int().min(8).max(12).default(10).describe("Deterministic candidates to retrieve before model interpretation."),

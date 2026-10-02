@@ -4,10 +4,27 @@ export const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 export const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_000;
 export const DEFAULT_LOCAL_MODEL = "qwen-context:h-q4_0-50k";
 export type ModelOptions = { num_ctx?: number; num_predict?: number };
+type ModelSettings = { parameters?: string; template?: string };
+const MODEL_SETTINGS_TTL_MS = 60_000;
+const modelSettingsCache = new Map<string, { expires: number; settings: Promise<ModelSettings> }>();
+
+export function clearModelSettingsCache(model?: string) {
+  if (model === undefined) modelSettingsCache.clear();
+  else modelSettingsCache.delete(model);
+}
 
 export async function showModel(model: string) {
-  const response = await axios.post(`${OLLAMA_HOST}/api/show`, { model }, { timeout: REQUEST_TIMEOUT_MS });
-  return response.data as { parameters?: string; template?: string };
+  const cached = modelSettingsCache.get(model);
+  if (cached && cached.expires > Date.now()) return cached.settings;
+  const settings = axios.post(`${OLLAMA_HOST}/api/show`, { model }, { timeout: REQUEST_TIMEOUT_MS })
+    .then((response) => response.data as ModelSettings);
+  modelSettingsCache.set(model, { expires: Date.now() + MODEL_SETTINGS_TTL_MS, settings });
+  try {
+    return await settings;
+  } catch (error) {
+    if (modelSettingsCache.get(model)?.settings === settings) modelSettingsCache.delete(model);
+    throw error;
+  }
 }
 
 export async function resolveModelBudget(model: string, overrides: ModelOptions = {}, load = showModel) {
@@ -52,8 +69,15 @@ export async function generate(
   return (response.data.response || response.data.thinking || "") as string;
 }
 
-export async function generateWithModelBudget(model: string, prompt: string, system: string, format?: "json" | Record<string, unknown>, think = false) {
-  const budget = await resolveModelBudget(model);
+export async function generateWithModelBudget(
+  model: string,
+  prompt: string,
+  system: string,
+  format?: "json" | Record<string, unknown>,
+  think = false,
+  modelOptions?: ModelOptions
+) {
+  const budget = await resolveModelBudget(model, modelOptions);
   const input = checkInputBudget(budget, prompt + system + (format ? JSON.stringify(format) : ""));
   if (!input.fits) throw new Error(`input_overflow: ${JSON.stringify(input)}`);
   return generate(model, prompt, system, format, think, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });

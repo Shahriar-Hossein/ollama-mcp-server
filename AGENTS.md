@@ -119,7 +119,8 @@ See [README.md](README.md) for the project pitch and setup.
   silently ran at Ollama's runtime default (4096 tokens) regardless of the
   model's real context window — a handful of tool-call results could evict
   earlier evidence from context before the model ever saw it. Fixed by
-  adding an explicit `num_ctx` param (now default 32768; it was 16384 in the 10-model benchmark). In the 10-model
+  adding an explicit `num_ctx` param (now inherited from the selected model's
+  saved settings; it was 16384 in the 10-model benchmark). In the 10-model
   SE-01..12 rerun after the fix, `granite4.2:3b` went from 0/5 (pre-fix,
   Super Explorer pipeline) to 7/12 (post-fix, same gold set) — though at
   ~11x `qwen3.5:4b`'s latency per question, so it's a fallback, not a

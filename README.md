@@ -85,6 +85,8 @@ and `num_predict`; optional request fields override them explicitly. Advanced
 discovery/verification also inherit saved settings. Missing saved limits use
 reported 16384/8192 fallbacks; unbounded output defaults require an explicit
 finite ceiling. `generate()` continues to return text.
+Model settings are cached per tag for up to 60 seconds, including concurrent
+requests. Restart the server after editing a tag to refresh them immediately.
 
 Input checks include system text, source/history, schema and template, with a
 1024-token margin and a conservative UTF-8 byte bound. Oversized requests return

@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { z } from "zod";
-import { generateWithModelBudget as generate } from "../../ollama-client.js";
+import { generateWithModelBudget } from "../../ollama-client.js";
 import { hybridRetrieve, type HybridRetrievalResult, type RetrievalMode } from "../../explorer/retrieval.js";
 
 const DEFAULT_MODEL = "qwen3.5:4b";
@@ -181,12 +181,12 @@ async function runDiscoveryPass(
   prompt: string,
   think = false
 ): Promise<{ plan: DiscoveryPlan; calls: number } | { error: unknown; calls: number }> {
-  const response = await generate(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
+  const response = await generateWithModelBudget(model, prompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
   try {
     return { plan: parseDiscoveryModelResponse(response), calls: 1 };
   } catch (firstError) {
     const repairPrompt = `Convert the prior discovery response below into the supplied canonical JSON schema. Preserve its intended hypotheses and evidence targets; do not add claims, conclusions, citations, or prose. Return only the repaired JSON object.\n\nPrior response:\n${response}`;
-    const repaired = await generate(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
+    const repaired = await generateWithModelBudget(model, repairPrompt, DISCOVERY_SYSTEM, discoveryResponseFormat, think);
     try {
       return { plan: parseDiscoveryModelResponse(repaired), calls: 2 };
     } catch {

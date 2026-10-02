@@ -4,6 +4,8 @@ Updated: 2026-10-02. GPU fit checks and phase-2 comparisons complete.
 H/I are the retained configurations. MCP model-budget inheritance and a first
 evidence-packing pass are implemented. Selection and tighter input accounting
 remain unfinished. Keep frontier planning and review.
+Next: choose explicit output reserves for summaries/scouting and improve input
+accounting. Cross-repository selection quality remains unverified.
 
 ## Current configurations
 
@@ -36,6 +38,15 @@ override is `zz-qwen-benchmark.conf`; inspect all service overrides before
 changing or restoring settings. Administrator changes require user sudo.
 Temporary q8 daemons and weight references were removed after testing;
 H was restored on the system daemon.
+
+2026-10-02 review follow-up: effective service settings still show q4_0;
+`zz-qwen-benchmark.conf` overrides `override.conf`'s q8_0 setting. This
+mismatch changes I's actual cache precision. The four smoke rejections happen
+at the input-budget check with zero generation calls, before cache loading.
+Reproduced against installed H/I settings with generation stubbed: all four
+I requests overflow; H reaches the stub for all four. Input byte bounds are
+8392–14394 against I's 6744 budget. Raw results are in ignored
+`benchmark-data/review-cleanup/2026-10-02-budget-check.json`.
 
 - KV precision is a daemon setting. A q8-named tag on a q4 daemon still
   uses q4 cache. Verify `OLLAMA_KV_CACHE_TYPE`, Flash Attention and one slot

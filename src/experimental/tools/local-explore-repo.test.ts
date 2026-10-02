@@ -70,7 +70,6 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
   }
 });
 
-
 test("decomposes independent evidence requirements", () => {
   assert.deepEqual(decomposeQuestion("Where is x registered, and is it enabled by default?"), [
     { id: "P1", question: "Where is x registered", evidence_needed: "The call that registers the named tool and its guard; an import or function definition alone is insufficient." },
@@ -126,7 +125,6 @@ test("expands one requested source window for a missing question part", async ()
   }
 });
 
-
 test("autonomous gate coverage excludes the experimental master flag", () => {
   const query = "Which environment variables gate the autonomous tools?";
   const part = decomposeQuestion(query)[0];
@@ -135,14 +133,15 @@ test("autonomous gate coverage excludes the experimental master flag", () => {
   assert.equal(directEvidenceForPart(part, [cite('"LOCAL_WORKER_ENABLED"'), cite('"CLOUD_CLAUDE_ENABLED"')], query), true);
 });
 
-
 test("packs both autonomous guarded registrations and the default helper", async () => {
   const queries = [
     "Which environment variables gate the autonomous tools, and which tool does each gate?",
     "Where is local_explorer_task registered, and is it enabled by default?",
   ];
   for (const query of queries) {
+    let calls = 0;
     const stub: typeof generate = async (_model, prompt) => {
+      calls++;
       const lines = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines);
       const required = query.includes("autonomous")
         ? ["LOCAL_WORKER_ENABLED", "CLOUD_CLAUDE_ENABLED", "if (features.localWorker)", "registerRunLocalWorkerTask(server)", "if (features.cloudClaudeWorker)", "registerRunCloudClaudeTask(server)"]
@@ -150,7 +149,10 @@ test("packs both autonomous guarded registrations and the default helper", async
       for (const text of required) assert.ok(lines.some((line) => line.text.includes(text)), `${text} must reach context`);
       return JSON.stringify({ part_evidence: [], unresolved: [], next_action: { ref: "" } });
     };
-    await runLocalExploreRepo({ repository_root: process.cwd(), query }, stub);
+    const result = await runLocalExploreRepo({ repository_root: process.cwd(), query }, stub);
+    assert.ok(calls > 0, "packing assertions must execute");
+    assert.equal(result.model_calls, calls);
+    assert.equal(result.status, "needs_review");
   }
 });
 
