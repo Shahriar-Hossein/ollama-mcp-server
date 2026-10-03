@@ -1,6 +1,13 @@
 # Local model context and MCP improvement checklist
 
 Updated: 2026-10-03. GPU fit, phase-2, H/8192 and 64 Ki/16384 tests complete.
+
+The [fresh context ceiling sweep](experimental/benchmarks/runs/2026-10-03-context-ceiling.md)
+passed 66048 tokens on 4/4 clean GPU-only loads; 65536 also passed 4/4.
+66304 was mixed (2/4 GPU-only), and 66560 spilled on all four loads. Earlier
+64 Ki runs spilled, so this is a resource-sensitive observed ceiling, not
+a cross-session guarantee. The sweep uses tiny READY prompts, not full-window
+generation. Saved defaults are unchanged.
 H/I are the retained configurations. MCP model-budget inheritance and a first
 evidence-packing pass are implemented. Selection and tighter input accounting
 remain unfinished. Keep frontier planning and review.
