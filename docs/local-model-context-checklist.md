@@ -1,6 +1,6 @@
 # Local model context and MCP improvement checklist
 
-Updated: 2026-10-03. GPU fit checks, phase-2 comparisons and H/8192 tests complete.
+Updated: 2026-10-03. GPU fit, phase-2, H/8192 and 64 Ki/16384 tests complete.
 H/I are the retained configurations. MCP model-budget inheritance and a first
 evidence-packing pass are implemented. Selection and tighter input accounting
 remain unfinished. Keep frontier planning and review.
@@ -14,6 +14,15 @@ repetitions each returned complete evidence for 2/4 questions, matching the
 prior H/25000 result. The long inventory hit 8192 and returned incomplete
 JSON. H stayed GPU-only in sampled placements. Saved ceilings and production
 defaults remain 25000; the test used explicit request overrides.
+
+The [64 Ki/16384 repeat](experimental/benchmarks/runs/2026-10-03-h-64k-16k-output.md)
+completed the long inventory in 435.6 seconds: 13446 output tokens, valid
+JSON, all 36 records, 35 verbatim. Scout completeness remained 2/4 per run;
+the summary took 69.8 seconds and still overstated source support. Clean
+placement was 15% CPU / 85% GPU throughout sampled checks. It is usable
+with mixed placement, but does not establish a GPU-only or full-window
+default. Keep 50K operationally; 50K/16384 needs a matched long-output test
+before choosing a universal replacement. Saved defaults remain unchanged.
 
 ## Current configurations
 
