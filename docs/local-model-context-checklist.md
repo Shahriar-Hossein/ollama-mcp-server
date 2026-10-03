@@ -1,11 +1,19 @@
 # Local model context and MCP improvement checklist
 
-Updated: 2026-10-02. GPU fit checks and phase-2 comparisons complete.
+Updated: 2026-10-03. GPU fit checks, phase-2 comparisons and H/8192 tests complete.
 H/I are the retained configurations. MCP model-budget inheritance and a first
 evidence-packing pass are implemented. Selection and tighter input accounting
 remain unfinished. Keep frontier planning and review.
-Next: choose explicit output reserves for summaries/scouting and improve input
+Next: apply documented tool-specific output reserves and improve input
 accounting. Cross-repository selection quality remains unverified.
+
+The [H/8192 test](experimental/benchmarks/runs/2026-10-03-h-8k-output.md)
+supports 8192 for ordinary delegation requests: a 30000-character summary
+passed the MCP byte check and stopped at 812 output tokens. Three scout
+repetitions each returned complete evidence for 2/4 questions, matching the
+prior H/25000 result. The long inventory hit 8192 and returned incomplete
+JSON. H stayed GPU-only in sampled placements. Saved ceilings and production
+defaults remain 25000; the test used explicit request overrides.
 
 ## Current configurations
 
