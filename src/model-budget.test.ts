@@ -17,15 +17,15 @@ test("shares concurrent settings requests per tag without caching budget overrid
     return { data: settings(body.model) };
   });
   const [saved, overridden] = await Promise.all([
-    resolveModelBudget("qwen-context:h-q4_0-50k"),
-    resolveModelBudget("qwen-context:h-q4_0-50k", { num_predict: 4096 }),
+    resolveModelBudget("qwen-context:h-q4_0-64k"),
+    resolveModelBudget("qwen-context:h-q4_0-64k", { num_predict: 4096 }),
   ]);
   assert.equal(saved.num_predict, 25000);
   assert.equal(overridden.num_predict, 4096);
   await resolveModelBudget("qwen-context:i-q8_0-32k");
-  assert.deepEqual(requests, ["qwen-context:h-q4_0-50k", "qwen-context:i-q8_0-32k"]);
-  clearModelSettingsCache("qwen-context:h-q4_0-50k");
-  await resolveModelBudget("qwen-context:h-q4_0-50k");
+  assert.deepEqual(requests, ["qwen-context:h-q4_0-64k", "qwen-context:i-q8_0-32k"]);
+  clearModelSettingsCache("qwen-context:h-q4_0-64k");
+  await resolveModelBudget("qwen-context:h-q4_0-64k");
   assert.equal(requests.length, 3);
 });
 
@@ -56,7 +56,7 @@ test("does not cache failed settings requests", async (t) => {
 });
 
 test("inherits H/I settings and reserves their full output ceiling", async () => {
-  for (const [model, input_budget] of [["qwen-context:h-q4_0-50k", 23976], ["qwen-context:i-q8_0-32k", 6744]] as const) {
+  for (const [model, input_budget] of [["qwen-context:h-q4_0-64k", 23976], ["qwen-context:i-q8_0-32k", 6744]] as const) {
     const budget = await resolveModelBudget(model, {}, async () => settings(model));
     assert.equal(budget.input_budget, input_budget);
     assert.equal(budget.num_predict, 25000);
@@ -93,8 +93,8 @@ test("basic MCP tools pass the selected tag's saved settings to generation", asy
     let invoke!: (params: Record<string, unknown>) => Promise<any>;
     let schema!: Record<string, any>;
     register({ tool: (_name: string, _description: string, fields: Record<string, unknown>, handler: typeof invoke) => { schema = fields; invoke = handler; } } as unknown as McpServer);
-    assert.equal(schema.model.parse(undefined), "qwen-context:h-q4_0-50k");
-    for (const model of ["qwen-context:h-q4_0-50k", "qwen-context:i-q8_0-32k"]) {
+    assert.equal(schema.model.parse(undefined), "qwen-context:h-q4_0-64k");
+    for (const model of ["qwen-context:h-q4_0-64k", "qwen-context:i-q8_0-32k"]) {
       const result = await invoke({ model, prompt: "Short task", text: "Short log" });
       assert.equal(result.content[0].text, "OK");
       assert.equal(result._meta.model_budget.sources.num_ctx, "model");
@@ -116,7 +116,7 @@ test("legacy chat loop inherits saved settings and stops before history overflow
     options = JSON.parse(String(request.body)).options;
     return { json: async () => ({ message: { content: "OK" } }) };
   });
-  const result = await runLocalExplorerTask({ task: "Short task", model: "qwen-context:h-q4_0-50k" });
+  const result = await runLocalExplorerTask({ task: "Short task", model: "qwen-context:h-q4_0-64k" });
   assert.deepEqual(options, { num_ctx: 50000, num_predict: 25000 });
   assert.match(result.text, /num_ctx=50000, num_predict=25000/);
   const overflow = await runLocalExplorerTask({ task: "x".repeat(7000), model: "qwen-context:i-q8_0-32k" });
@@ -133,7 +133,7 @@ test("advanced generation honors model settings and counts schema overhead", asy
     options = body.options;
     return { data: { response: "{}" } };
   });
-  assert.equal(await generateWithModelBudget("qwen-context:h-q4_0-50k", "Short", "System", "json"), "{}");
+  assert.equal(await generateWithModelBudget("qwen-context:h-q4_0-64k", "Short", "System", "json"), "{}");
   assert.deepEqual(options, { num_ctx: 50000, num_predict: 25000 });
   assert.equal(await generateWithModelBudget("qwen-context:i-q8_0-32k", "Short", "System", "json", false,
     { num_ctx: 16384, num_predict: 4096 }), "{}");

@@ -28,7 +28,7 @@ This is the canonical instructions file for this repo — other agent configs
   this tree. Keep new work out unless an experimental feature is explicitly
   resumed.
 - Local delegation, summaries and both scout routes default to
-  `qwen-context:h-q4_0-50k`. Read selected model settings via `/api/show`;
+  `qwen-context:h-q4_0-64k`. Read selected model settings via `/api/show`;
   honor saved context/output limits unless the caller explicitly overrides
   them. Report input overflow instead of dropping evidence or reducing output.
   KV cache precision remains a daemon setting; an I tag does not enable q8.

@@ -33,6 +33,10 @@ before choosing a universal replacement. Saved defaults remain unchanged.
 
 ## Current configurations
 
+On 2026-10-03, H changed to 64000 context and 16000 output tokens and
+was renamed from `h-q4_0-50k`. The earlier 50K recommendation above
+records the benchmark assessment before this configuration change.
+
 Both variants use the same Qwen 3.5 4B Q4_K_M weights and template.
 Q4/Q8 below describe **KV-cache precision**, not weight quantization.
 Context is the total input/output window. Output ceilings are maxima;
@@ -40,7 +44,7 @@ request concise results unless the task requires long output.
 
 | Tag | KV cache | Context tokens | Output ceiling | Input budget with full output reserve and 1024 margin |
 |---|---|---:|---:|---:|
-| `qwen-context:h-q4_0-50k` | q4_0 | 50000 | 25000 | 23976 |
+| `qwen-context:h-q4_0-64k` | q4_0 | 64000 | 16000 | 46976 |
 | `qwen-context:i-q8_0-32k` | q8_0 | 32768 | 25000 | 6744 |
 
 - [x] Install H/I and verify inherited context/output parameters.
@@ -49,7 +53,8 @@ request concise results unless the task requires long output.
 - [x] Keep Modelfiles, registry and setup README under
   `/home/shahriar/ollama-models/qwen-context/` consistent with H/I only.
 - [x] Verify GPU placement for H/50000 and q8/32768.
-- [ ] Test sustained generation with the 25000 output ceiling on H/I;
+- [ ] Test sustained generation with the 16000 output ceiling on H and
+  25000 on I;
   short inherited-default checks do not verify full-ceiling generation.
 - [ ] Compare useful evidence and parent task completion on H/I before
   choosing a quality-based routing default.

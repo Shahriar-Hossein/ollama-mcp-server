@@ -80,7 +80,7 @@ server validates references, copies quotes from source, and retries once while
 retaining supported parts. The parent still interprets behavior.
 
 Local delegation, summaries and both scout routes default to
-`qwen-context:h-q4_0-50k`. They inherit the selected model's saved `num_ctx`
+`qwen-context:h-q4_0-64k`. They inherit the selected model's saved `num_ctx`
 and `num_predict`; optional request fields override them explicitly. Advanced
 discovery/verification also inherit saved settings. Missing saved limits use
 reported 16384/8192 fallbacks; unbounded output defaults require an explicit

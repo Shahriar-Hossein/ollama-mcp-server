@@ -50,7 +50,7 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
     let calls = 0;
     const stub: typeof generate = async (model, prompt, _system, format, think, options) => {
       calls++;
-      assert.equal(model, "qwen-context:h-q4_0-50k");
+      assert.equal(model, "qwen-context:h-q4_0-64k");
       assert.equal(typeof format, "object");
       assert.equal(think, false);
       assert.deepEqual(options, { num_ctx: 50_000, num_predict: 25_000 });
