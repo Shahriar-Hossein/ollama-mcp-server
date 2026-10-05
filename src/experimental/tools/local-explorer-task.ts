@@ -3,7 +3,7 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { DEFAULT_LOCAL_MODEL, OLLAMA_HOST, checkInputBudget, resolveModelBudget } from "../../ollama-client.js";
+import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, OLLAMA_HOST, checkInputBudget, resolveModelBudget } from "../../ollama-client.js";
 
 // Read-only repo-discovery worker: promoted from the throwaway harness used
 // in docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md. That pilot found
@@ -253,7 +253,7 @@ export async function runLocalExplorerTask({
   request_timeout_ms = 180_000,
   think = false,
 }: LocalExplorerTaskParams): Promise<{ isError?: boolean; text: string }> {
-  const budget = await resolveModelBudget(model, { num_ctx, num_predict });
+  const budget = await resolveModelBudget(model, { num_ctx, num_predict }, undefined, TOOL_OUTPUT_RESERVES.scout);
   const root = resolve(cwd || process.cwd());
   const filesRead = new Set<string>();
   const messages: any[] = [
@@ -333,7 +333,7 @@ export function registerLocalExplorerTask(server: McpServer) {
       max_tool_calls: z.number().default(50),
       max_files_read: z.number().default(10),
       max_output_chars: z.number().default(8_000).describe("Per-tool-result truncation limit."),
-      num_predict: z.number().int().positive().optional().describe("Output ceiling override; inherits the selected model setting when omitted."),
+      num_predict: z.number().int().positive().optional().describe("Output ceiling override; defaults to the smaller of the saved model ceiling and 2048 tokens."),
       num_ctx: z.number().int().positive().optional().describe("Context override; inherits the selected model setting when omitted."),
       request_timeout_ms: z.number().default(180_000).describe("Per-chat-call timeout, guards against an infinite/hung generation."),
       think: z.boolean().default(false).describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),

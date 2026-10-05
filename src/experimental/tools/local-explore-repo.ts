@@ -2,9 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { directEvidenceForPart, type QuestionPart, type ValidEvidence } from "./local-explore-validation.js";
-import { ANSWER_SCHEMA, SCOUT_SYSTEM } from "./local-explore-prompt.js";
-import { DEFAULT_LOCAL_MODEL, checkInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
+import { evidenceChecklist, missingEvidenceRequirements, directEvidenceForPart, type QuestionPart, type ValidEvidence } from "./local-explore-validation.js";
+import { answerSchemaForRefs, SCOUT_SYSTEM } from "./local-explore-prompt.js";
+import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, checkInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
 import { indexRepository, type RepositoryIndex } from "../../explorer/indexer.js";
 import { readSymbol } from "../../explorer/read-symbol.js";
 import { hybridRetrieve, type HybridRetrievalResult } from "../../explorer/retrieval.js";
@@ -292,14 +292,14 @@ function promptContext(bundles: EvidenceBundle[], candidates: Candidate[]) {
     refs.set(ref, { candidate, line });
     byLocation.set(`${candidate.id}:${line.line}`, ref);
   }
-  const grouped = new Map<string, { part_ids: string[]; why_retrieved: string; relationship: string; sources: Array<{ file: string; symbol?: string; lines: Array<{ ref: string; line: number; text: string }> }> }>();
+  const grouped = new Map<string, { part_ids: string[]; why_retrieved: string; relationship: string; sources: Array<{ file: string; symbol?: string; lines: Array<{ ref: string; text: string }> }> }>();
   for (const bundle of bundles) {
     const key = bundle.candidates.map((candidate) => candidate.id).join(",");
     const prior = grouped.get(key);
     if (prior) { if (!prior.part_ids.includes(bundle.part_id)) prior.part_ids.push(bundle.part_id); continue; }
     grouped.set(key, {
       part_ids: [bundle.part_id], why_retrieved: bundle.why_retrieved, relationship: bundle.relationship,
-      sources: bundle.candidates.map((candidate) => ({ file: candidate.file, symbol: candidate.symbol, lines: candidate.lines.map((line) => ({ ref: byLocation.get(`${candidate.id}:${line.line}`)!, line: line.line, text: line.text })) })),
+      sources: bundle.candidates.map((candidate) => ({ file: candidate.file, symbol: candidate.symbol, lines: candidate.lines.map((line) => ({ ref: byLocation.get(`${candidate.id}:${line.line}`)!, text: line.text })) })),
     });
   }
   return { refs, promptBundles: [...grouped.values()] };
@@ -380,7 +380,7 @@ export async function runLocalExploreRepo(
 ) {
   if (!query.trim()) throw new Error("Exploration query must not be empty.");
   if (!Number.isInteger(limit) || limit < 8 || limit > 12) throw new Error("Candidate limit must be an integer from 8 through 12.");
-  const budget = await resolveBudget(model, { num_ctx, num_predict });
+  const budget = await resolveBudget(model, { num_ctx, num_predict }, undefined, TOOL_OUTPUT_RESERVES.scout);
   const input_checks: ReturnType<typeof checkInputBudget>[] = [];
   let model_calls = 0;
   const root = resolve(repository_root);
@@ -418,33 +418,40 @@ export async function runLocalExploreRepo(
   for (let attempt = 1; attempt <= 2; attempt++) {
     const { refs, promptBundles } = promptContext(bundles, candidates);
     const repoMap = [...new Map(candidates.map((candidate) => [candidate.file, candidate.symbol ?? candidate.kind])).entries()].map(([file, role]) => ({ file, role }));
-    const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(parts)}\n`
+    const checklistParts = parts.map((part) => {
+      const allowed = new Set(bundles.filter((bundle) => bundle.part_id === part.id).flatMap((bundle) => bundle.candidates.map((candidate) => candidate.id)));
+      const lines = [...refs].filter(([, { candidate }]) => allowed.has(candidate.id))
+        .map(([ref, { line }]) => ({ ref, quote: line.text }));
+      return { ...part, checklist: evidenceChecklist(part, lines, query) };
+    });
+    const format = answerSchemaForRefs(parts.map((part) => part.id), [...refs.keys()]);
+    const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(checklistParts)}\n`
       + `Relevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\n`
       + `Return JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. `
       + (lastError ? `Previous output failed: ${lastError}.` : "");
-    const inputCheck = checkInputBudget(budget, prompt + SCOUT_SYSTEM + JSON.stringify(ANSWER_SCHEMA));
+    const inputCheck = checkInputBudget(budget, { prompt, system: SCOUT_SYSTEM, format });
     input_checks.push(inputCheck);
     if (!inputCheck.fits) return emptyResult("input_overflow", [
       "Input exceeds the conservative budget. Reduce the source/query or explicitly lower num_predict.",
     ]);
     try {
       model_calls++;
-      const raw = await generateAnswer(model, prompt, SCOUT_SYSTEM, ANSWER_SCHEMA, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
+      const raw = await generateAnswer(model, prompt, SCOUT_SYSTEM, format, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
       const answer = validateModelAnswer(raw, candidates, parts, bundles, refs);
-      answer.coverage = answer.coverage.map((coverage) => {
-        if (coverage.status === "missing") return coverage;
-        const part = parts.find((item) => item.id === coverage.part_id)!;
-        const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
-        return directEvidenceForPart(part, cited, query) ? coverage : { ...coverage, status: "missing" as const };
-      });
-      // A retry may resolve one part while dropping an already supported part.
+      // Keep checked partial citations: retries can supply different links in one chain.
       for (const prior of retained?.coverage ?? []) {
-        if (prior.status !== "supported" || !answer.coverage.some((part) => part.part_id === prior.part_id && part.status === "missing")) continue;
-        answer.coverage = answer.coverage.map((part) => part.part_id === prior.part_id ? prior : part);
+        const current = answer.coverage.find((part) => part.part_id === prior.part_id)!;
+        current.evidence_ids = [...new Set([...current.evidence_ids, ...prior.evidence_ids])];
+        current.evidence_locations = [...new Set([...current.evidence_locations, ...prior.evidence_locations])];
         for (const item of retained!.evidence.filter((item) => prior.evidence_locations.includes(`${item.file}:${item.line}`))) {
           if (!answer.evidence.some((other) => other.file === item.file && other.line === item.line)) answer.evidence.push(item);
         }
       }
+      answer.coverage = answer.coverage.map((coverage) => {
+        const part = parts.find((item) => item.id === coverage.part_id)!;
+        const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
+        return { ...coverage, status: cited.length && directEvidenceForPart(part, cited, query) ? "supported" as const : "missing" as const };
+      });
       answer.selected_ids = [...new Set(answer.evidence.map((item) => item.id))];
       retained = answer;
       const missing = answer.coverage.some((part) => part.status === "missing");
@@ -454,8 +461,13 @@ export async function runLocalExploreRepo(
           verification: "Candidate IDs and line numbers checked; returned quotes copied from source. Coverage is model-indicated, not semantic verification.",
         };
       }
+      const missingRequirements = answer.coverage.filter((part) => part.status === "missing").map((coverage) => {
+        const part = parts.find((item) => item.id === coverage.part_id)!;
+        const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
+        return `${part.id}: ${missingEvidenceRequirements(part, cited, query).join(", ") || part.evidence_needed}`;
+      });
       lastError = answer.rejected_evidence ? `${answer.rejected_evidence} evidence reference(s) did not match supplied source lines.`
-        : `Missing direct evidence for: ${answer.coverage.filter((part) => part.status === "missing").map((part) => parts.find((item) => item.id === part.part_id)?.evidence_needed).join("; ")}`;
+        : `Missing direct evidence for: ${missingRequirements.join("; ")}`;
       if (attempt === 1 && missing && answer.next_action) {
         const candidate = candidates.find((item) => item.id === answer.next_action!.candidate_id)!;
         const expanded = expandCandidate(root, candidate, answer.next_action.line, `C${candidates.length + 1}`);
@@ -485,7 +497,7 @@ export function registerLocalExploreRepo(server: McpServer) {
       query: z.string().describe("Repository exploration question."),
       model: z.string().default(DEFAULT_LOCAL_MODEL).describe("Local model for evidence interpretation."),
       num_ctx: z.number().int().positive().optional().describe("Context override; otherwise inherits the selected model's saved num_ctx."),
-      num_predict: z.number().int().positive().optional().describe("Output ceiling override; otherwise inherits the selected model's saved num_predict. Lower explicitly for more input room."),
+      num_predict: z.number().int().positive().optional().describe("Output ceiling override; defaults to the smaller of the saved model ceiling and 2048 tokens."),
       limit: z.number().int().min(8).max(12).default(10).describe("Deterministic candidates to retrieve before model interpretation."),
     },
     async (params) => {

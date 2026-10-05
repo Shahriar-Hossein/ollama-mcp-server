@@ -76,12 +76,17 @@ groups; a group-specific `0` can override the master flag.
 `local_explore_repo` is the preferred model-backed scout. It retrieves basic
 candidates, merges bounded source windows and caller context, and asks the
 model to select up to six evidence line references per question part. The
-server validates references, copies quotes from source, and retries once while
-retaining supported parts. The parent still interprets behavior.
+server shortlists lines for each evidence requirement, constrains output refs
+to supplied lines, copies quotes from source, and retries once while retaining
+checked partial citations. Coverage checks remain heuristics.
+The parent still interprets behavior.
 
 Local delegation, summaries and both scout routes default to
-`qwen-context:h-q4_0-64k`. They inherit the selected model's saved `num_ctx`
-and `num_predict`; optional request fields override them explicitly. Advanced
+`qwen-context:h-q4_0-64k`. They inherit the selected model's saved `num_ctx`.
+Default output reserves are the smaller of its finite saved ceiling and 8192
+for delegation/summaries or 2048 for either scout. Optional request fields
+override these limits explicitly; long output needs a larger `num_predict`.
+Budget metadata identifies limits from the model, tool policy, or request. Advanced
 discovery/verification also inherit saved settings. Missing saved limits use
 reported 16384/8192 fallbacks; unbounded output defaults require an explicit
 finite ceiling. `generate()` continues to return text.
@@ -90,9 +95,11 @@ requests. Restart the server after editing a tag to refresh them immediately.
 
 Input checks include system text, source/history, schema and template, with a
 1024-token margin and a conservative UTF-8 byte bound. Oversized requests return
-`input_overflow`; source and output ceilings are never silently reduced. This
-bound can reject requests whose actual token count would fit. In particular,
-I's 32768/25000 settings leave only 6744 input tokens. KV precision is a daemon
+`input_overflow`; source is never silently omitted and explicit output overrides
+are preserved. Generation tools and the deterministic-first scout report byte
+charges for prompt, system, schema, and template. This bound can reject requests whose actual token count would fit. In particular,
+Explicitly reserving I's full 25000 ceiling at 32768 context leaves only
+6744 input tokens. KV precision is a daemon
 setting: I needs a q8 daemon; its tag alone cannot change the current q4 daemon.
 See [the context checklist](docs/local-model-context-checklist.md).
 

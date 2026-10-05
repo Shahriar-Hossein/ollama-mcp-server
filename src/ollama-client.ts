@@ -3,6 +3,7 @@ import axios from "axios";
 export const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 export const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_000;
 export const DEFAULT_LOCAL_MODEL = "qwen-context:h-q4_0-64k";
+export const TOOL_OUTPUT_RESERVES = { delegation: 8192, summary: 8192, scout: 2048 } as const;
 export type ModelOptions = { num_ctx?: number; num_predict?: number };
 type ModelSettings = { parameters?: string; template?: string };
 const MODEL_SETTINGS_TTL_MS = 60_000;
@@ -27,12 +28,17 @@ export async function showModel(model: string) {
   }
 }
 
-export async function resolveModelBudget(model: string, overrides: ModelOptions = {}, load = showModel) {
+export async function resolveModelBudget(model: string, overrides: ModelOptions = {}, load = showModel, outputReserve?: number) {
   const settings = await load(model);
   const saved = Object.fromEntries([...((settings.parameters ?? "").matchAll(/^\s*(num_ctx|num_predict)\s+(-?\d+)\s*$/gm))].map((match) => [match[1], Number(match[2])]));
-  const source = (key: keyof ModelOptions) => overrides[key] !== undefined ? "request" : saved[key] !== undefined ? "model" : "fallback";
+  const source = (key: keyof ModelOptions) => overrides[key] !== undefined ? "request"
+    : key === "num_predict" && toolReserveApplied ? "tool" : saved[key] !== undefined ? "model" : "fallback";
   const num_ctx = overrides.num_ctx ?? saved.num_ctx ?? 16_384;
-  const num_predict = overrides.num_predict ?? saved.num_predict ?? 8_192;
+  const selectedOutput = overrides.num_predict ?? saved.num_predict ?? 8_192;
+  if (outputReserve !== undefined && (!Number.isSafeInteger(outputReserve) || outputReserve <= 0)) throw new Error("Tool output reserve must be a finite positive integer.");
+  if (!Number.isSafeInteger(selectedOutput) || selectedOutput <= 0) throw new Error("num_predict must be a finite positive integer; set an explicit ceiling for unbounded model defaults.");
+  const toolReserveApplied = overrides.num_predict === undefined && outputReserve !== undefined && outputReserve < selectedOutput;
+  const num_predict = toolReserveApplied ? outputReserve! : selectedOutput;
   for (const [name, value] of Object.entries({ num_ctx, num_predict })) {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a finite positive integer; set an explicit ceiling for unbounded model defaults.`);
   }
@@ -42,11 +48,18 @@ export async function resolveModelBudget(model: string, overrides: ModelOptions 
   return { num_ctx, num_predict, safety_margin, input_budget, sources: { num_ctx: source("num_ctx"), num_predict: source("num_predict") }, template: settings.template ?? "" };
 }
 
-export function checkInputBudget(budget: Awaited<ReturnType<typeof resolveModelBudget>>, input: string) {
-  // A UTF-8 byte bound is conservative for byte-tokenized Qwen; reject oversized input before Ollama can truncate it.
-  const input_token_bound = Buffer.byteLength(input + budget.template, "utf8");
+type InputContent = string | { prompt: string; system: string; format?: "json" | Record<string, unknown> };
+
+export function checkInputBudget(budget: Awaited<ReturnType<typeof resolveModelBudget>>, input: InputContent) {
+  const content = typeof input === "string" ? { input } : {
+    prompt: input.prompt, system: input.system, schema: input.format ? JSON.stringify(input.format) : "",
+  };
+  const input_bytes = Object.fromEntries(Object.entries({ ...content, template: budget.template })
+    .map(([name, text]) => [name, Buffer.byteLength(text, "utf8")]));
+  // Measured ratios vary by source; keep the byte bound until a matching tokenizer is available.
+  const input_token_bound = Object.values(input_bytes).reduce((sum, bytes) => sum + bytes, 0);
   const { template: _template, ...effective } = budget;
-  return { ...effective, input_token_bound, accounting: "utf8_byte_bound" as const, fits: input_token_bound <= budget.input_budget };
+  return { ...effective, input_bytes, input_token_bound, accounting: "utf8_byte_bound" as const, fits: input_token_bound <= budget.input_budget };
 }
 
 export async function generate(
@@ -78,7 +91,7 @@ export async function generateWithModelBudget(
   modelOptions?: ModelOptions
 ) {
   const budget = await resolveModelBudget(model, modelOptions);
-  const input = checkInputBudget(budget, prompt + system + (format ? JSON.stringify(format) : ""));
+  const input = checkInputBudget(budget, { prompt, system, format });
   if (!input.fits) throw new Error(`input_overflow: ${JSON.stringify(input)}`);
   return generate(model, prompt, system, format, think, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
 }

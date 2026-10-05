@@ -1,41 +1,43 @@
 # Local model context and MCP improvement checklist
 
-Updated: 2026-10-03. GPU fit, phase-2, H/8192 and 64 Ki/16384 tests complete.
+Updated: 2026-10-05. Active work focuses on H; I comparisons are paused.
 
-The [fresh context ceiling sweep](experimental/benchmarks/runs/2026-10-03-context-ceiling.md)
-passed 66048 tokens on 4/4 clean GPU-only loads; 65536 also passed 4/4.
-66304 was mixed (2/4 GPU-only), and 66560 spilled on all four loads. Earlier
-64 Ki runs spilled, so this is a resource-sensitive observed ceiling, not
-a cross-session guarantee. The sweep uses tiny READY prompts, not full-window
-generation. Saved defaults are unchanged.
-H/I are the retained configurations. MCP model-budget inheritance and a first
-evidence-packing pass are implemented. Selection and tighter input accounting
-remain unfinished. Keep frontier planning and review.
-Next: apply documented tool-specific output reserves and improve input
-accounting. Cross-repository selection quality remains unverified.
+H remains `qwen-context:h-q4_0-64k`, with saved 64000 context and 16000
+output tokens. Selection now returns complete source-backed evidence for all
+four development questions in three runs, both at the saved output ceiling
+and at the new 2048 scout reserve. This does not establish held-out quality.
+See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-improvements.md).
 
-The [H/8192 test](experimental/benchmarks/runs/2026-10-03-h-8k-output.md)
-supports 8192 for ordinary delegation requests: a 30000-character summary
-passed the MCP byte check and stopped at 812 output tokens. Three scout
-repetitions each returned complete evidence for 2/4 questions, matching the
-prior H/25000 result. The long inventory hit 8192 and returned incomplete
-JSON. H stayed GPU-only in sampled placements. Saved ceilings and production
-defaults remain 25000; the test used explicit request overrides.
+## Active H-only work
 
-The [64 Ki/16384 repeat](experimental/benchmarks/runs/2026-10-03-h-64k-16k-output.md)
-completed the long inventory in 435.6 seconds: 13446 output tokens, valid
-JSON, all 36 records, 35 verbatim. Scout completeness remained 2/4 per run;
-the summary took 69.8 seconds and still overstated source support. Clean
-placement was 15% CPU / 85% GPU throughout sampled checks. It is usable
-with mixed placement, but does not establish a GPU-only or full-window
-default. Keep 50K operationally; 50K/16384 needs a matched long-output test
-before choosing a universal replacement. Saved defaults remain unchanged.
+- [x] Add source-reference shortlists for each evidence requirement and a
+  schema restricted to supplied refs. Retain checked partial citations across
+  the bounded retry; require an actual competing-worker rejection.
+- [x] Apply default output reserves: 8192 for delegation/summaries, 2048 for
+  both scouts, capped by the saved finite ceiling. Explicit overrides remain
+  available. H input allowances are 54784 and 60928 respectively, before
+  charging prompt overhead. Saved model settings are unchanged.
+- [x] Report prompt/system/schema/template byte charges and calibrate actual
+  MCP handler requests using sanitized synthetic code, logs, Unicode and JSON.
+  Keep the conservative byte bound; these samples do not justify a universal
+  bytes-to-tokens conversion.
+- [ ] Next: test held-out multi-part questions and negative cases on another
+  repository, scoring completeness, irrelevant citations and abstentions.
+- [ ] Capture sanitized representative Codex/Claude request shapes to extend
+  calibration; synthetic inputs do not measure full caller/session overhead.
+
+Historical context/output tests are linked below. The
+[fresh ceiling sweep](experimental/benchmarks/runs/2026-10-03-context-ceiling.md)
+verified tiny-prompt clean loads near 66K, not full-window generation. The
+[H/8192 test](experimental/benchmarks/runs/2026-10-03-h-8k-output.md) truncated
+a long inventory; [64 Ki/16384](experimental/benchmarks/runs/2026-10-03-h-64k-16k-output.md)
+completed it with one altered record and mixed placement. Saved H's 16000
+ceiling still needs a sustained long-output fidelity test.
 
 ## Current configurations
 
 On 2026-10-03, H changed to 64000 context and 16000 output tokens and
-was renamed from `h-q4_0-50k`. The earlier 50K recommendation above
-records the benchmark assessment before this configuration change.
+was renamed from `h-q4_0-50k`. Earlier benchmark recommendations used 50K before this configuration change.
 
 Both variants use the same Qwen 3.5 4B Q4_K_M weights and template.
 Q4/Q8 below describe **KV-cache precision**, not weight quantization.
@@ -86,19 +88,19 @@ I requests overflow; H reaches the stub for all four. Input byte bounds are
 - Enforce `input tokens + reserved output tokens + safety margin <= num_ctx`.
   Input includes system text, template, schema, question, source and history.
   Reduce the reserved ceiling explicitly when larger input is needed.
-- Local MCP routes inherit the selected model's saved context/output settings.
-  Explicit `num_ctx`/`num_predict` request fields override them. H is the
+- Local MCP routes inherit saved context. Output defaults use the documented
+  tool reserves above; explicit `num_ctx`/`num_predict` fields override them. H is the
   operational default on the current q4 daemon, not a quality winner.
   Models without saved finite limits use reported 16384/8192 fallbacks.
 - Input checks use a conservative UTF-8 byte bound over system, schema,
   question/source/history and template, plus a 1024-token margin. It is not
   a calibrated tokenizer. Oversized requests return `input_overflow`; the
   24000-character packing cap also reports overflow rather than generating
-  from silently omitted source. I's default reserve rejects the four current
-  smoke bundles even though measured H token counts would fit its reserve.
+  from silently omitted source. The historical I/25000 reserve rejected all four smoke bundles before
+  generation. That is not the new 2048 scout reserve.
 - The smoke runner supports `--num-ctx` and `--num-predict`; pass
   `50000/25000` for H or `32768/25000` for I with the matching daemon cache.
-  These are explicit overrides; without them it uses production inheritance
+  These are explicit overrides; without them it uses production context/tool reserves
   and records effective options, requests and raw token/timing metrics.
 - Keep experimental tools opt-in, target sources read-only and autonomous
   worker flags independent.
@@ -157,15 +159,14 @@ positional layouts are not three repeats of one prompt. Cache-block order
 was not rotated across independent sessions. RAM peaks, wider held-out
 projects and parent follow-up work remain unmeasured.
 
-## Next work
+## Historical backlog (H/I comparisons paused)
 
 The [first implementation pass](experimental/benchmarks/runs/2026-10-02-scout-evidence-budget-fix.md)
 is complete. All required helper, tool-mapping and transaction source reaches
 all four bundles. The final H run returns complete evidence for 2/4 cases;
 tool guards and the locking rejection/caller remain selection failures.
-Next: improve selection of those remaining chain elements, and tighten input
-accounting/packing so I can accept feasible requests without reducing its
-saved output ceiling. Do not infer an H/I quality winner.
+The H-only follow-up above supersedes these selection/output-budget priorities.
+Input accounting remains conservative. Do not infer an H/I quality winner.
 
 - [x] Add production MCP context/output/input-budget controls and record
   effective values. Preserve the shared text-returning `generate()` API;
@@ -203,7 +204,7 @@ saved output ceiling. Do not infer an H/I quality winner.
   q8 comparisons: `q8/`; aggregate: `summary.json`.
 - Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
 - Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
-- Current checks: 12 scout, 7 model-budget, 3 feature and 8 Quality Review
+- Current checks: 14 scout, 12 model-budget, 3 feature and 8 Quality Review
   tests pass. Whitespace checks pass. Standard TypeScript checking remains
   blocked by missing `vitest` in an existing experimental test; a temporary
   config excluding only that test checks the remaining source and smoke CLI.

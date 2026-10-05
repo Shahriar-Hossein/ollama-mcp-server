@@ -8,7 +8,7 @@ import { resolveModelBudget, type generate } from "../../ollama-client.js";
 import { compileEvidenceBundles, decomposeQuestion, directEvidenceForPart, runLocalExploreRepo as runScout, validateModelAnswer, type Candidate } from "./local-explore-repo.js";
 
 const runLocalExploreRepo: typeof runScout = (params, generateAnswer) => runScout(params, generateAnswer,
-  (model, overrides) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 50000\nnum_predict 25000" })));
+  (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 64000\nnum_predict 16000" }), reserve));
 
 type PromptSource = { file: string; lines: Array<{ ref: string; line: number; text: string }> };
 type PromptBundle = { why_retrieved: string; sources: PromptSource[] };
@@ -53,7 +53,7 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
       assert.equal(model, "qwen-context:h-q4_0-64k");
       assert.equal(typeof format, "object");
       assert.equal(think, false);
-      assert.deepEqual(options, { num_ctx: 50_000, num_predict: 25_000 });
+      assert.deepEqual(options, { num_ctx: 64_000, num_predict: 2_048 });
       const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
       const source = sources.find((item) => item.lines.some((line) => line.text.includes("calculateTotal")));
       assert.ok(source);
@@ -156,9 +156,9 @@ test("packs both autonomous guarded registrations and the default helper", async
   }
 });
 
-test("reports overflow without calling the model or reducing its saved output ceiling", async () => {
+test("reports overflow without calling the model or reducing an explicit output ceiling", async () => {
   let calls = 0;
-  const result = await runLocalExploreRepo({ repository_root: process.cwd(), query: "Where is embed keep_alive set?", model: "qwen-context:i-q8_0-32k", num_ctx: 26030 }, async () => { calls++; return "{}"; });
+  const result = await runLocalExploreRepo({ repository_root: process.cwd(), query: "Where is embed keep_alive set?", model: "qwen-context:i-q8_0-32k", num_ctx: 26030, num_predict: 25000 }, async () => { calls++; return "{}"; });
   assert.equal(result.status, "input_overflow");
   assert.equal(result.model_calls, 0);
   assert.equal(calls, 0);
@@ -200,4 +200,26 @@ test("keeps a supported environment mapping when a retry resolves registrations"
   assert.equal(result.status, "evidence_selected");
   assert.equal(result.evidence.length, 6);
   assert.equal(result.model_calls, 2);
+});
+
+
+test("unrelated throws do not establish competing-worker rejection", () => {
+  const query = "How does Quality Review prevent duplicate concurrent workers?";
+  const evidence = ["this.transaction(() => {", "BEGIN IMMEDIATE", "INSERT INTO worker_lock", "else throw error", "this.store.lock()"]
+    .map((quote) => ({ id: "C1", file: "storage.ts", line: 1, quote }));
+  assert.equal(directEvidenceForPart(decomposeQuestion(query)[0], evidence, query), false);
+});
+
+test("combines checked partial locking citations across the bounded retry", async () => {
+  let calls = 0;
+  const result = await runLocalExploreRepo({ repository_root: process.cwd(), query: "How does Quality Review prevent duplicate concurrent workers?" }, async (_model, prompt) => {
+    calls++;
+    const lines = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines);
+    const texts = calls === 1 ? ["this.transaction(", "BEGIN IMMEDIATE", "INSERT INTO worker_lock"] : ["Another scan/worker owns the queue", "this.store.lock()"];
+    const refs = texts.map((text) => lines.find((line) => line.text.includes(text))!.ref);
+    return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: refs }], next_action: { ref: "" } });
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.status, "evidence_selected");
+  assert.equal(result.evidence.length, 5);
 });
