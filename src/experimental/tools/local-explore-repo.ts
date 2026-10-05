@@ -7,6 +7,7 @@ import { answerSchemaForRefs, SCOUT_SYSTEM } from "./local-explore-prompt.js";
 import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, checkGenerationInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
 import { indexRepository } from "../../explorer/indexer.js";
 import { hybridRetrieve } from "../../explorer/retrieval.js";
+import { createRelationshipChecks } from "./local-explore-relationships.js";
 
 import { buildCandidates, compileEvidenceBundles, checkedFile, MAX_LINE_CHARS, MAX_CONTEXT_CHARS, type Candidate, type EvidenceBundle } from "./local-explore-packing.js";
 
@@ -172,6 +173,11 @@ export async function runLocalExploreRepo(
   const root = resolve(repository_root);
   const index = indexRepository(root);
   const parts = decomposeQuestion(query);
+  const relationships = createRelationshipChecks(root, index);
+  const missingRequirementsFor = (part: QuestionPart, evidence: ValidEvidence[]) => [
+    ...missingEvidenceRequirements(part, evidence, query).filter((name) => !relationships.replacedRequirements(part).includes(name)),
+    ...relationships.missing(part, evidence),
+  ];
   const byPart = new Map<string, Candidate[]>();
   let retrieved_count = 0;
   for (const part of parts) {
@@ -207,8 +213,9 @@ export async function runLocalExploreRepo(
     const checklistParts = parts.map((part) => {
       const allowed = new Set(bundles.filter((bundle) => bundle.part_id === part.id).flatMap((bundle) => bundle.candidates.map((candidate) => candidate.id)));
       const lines = [...refs].filter(([, { candidate }]) => allowed.has(candidate.id))
-        .map(([ref, { line }]) => ({ ref, quote: line.text }));
-      return { ...part, checklist: evidenceChecklist(part, lines, query) };
+        .map(([ref, { candidate, line }]) => ({ ref, id: candidate.id, file: candidate.file, line: line.line, quote: line.text }));
+      return { ...part, checklist: evidenceChecklist(part, lines, query)
+        .filter((item) => !relationships.replacedRequirements(part).includes(item.requirement)), relationships: relationships.checklist(part, lines) };
     });
     const format = answerSchemaForRefs(parts.map((part) => part.id), [...refs.keys()]);
     const prompt = `Question: ${query}\nQuestion parts: ${JSON.stringify(checklistParts)}\n`
@@ -236,7 +243,7 @@ export async function runLocalExploreRepo(
       answer.coverage = answer.coverage.map((coverage) => {
         const part = parts.find((item) => item.id === coverage.part_id)!;
         const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
-        return { ...coverage, status: cited.length && directEvidenceForPart(part, cited, query) ? "supported" as const : "missing" as const };
+        return { ...coverage, status: cited.length && !missingRequirementsFor(part, cited).length ? "supported" as const : "missing" as const };
       });
       answer.selected_ids = [...new Set(answer.evidence.map((item) => item.id))];
       retained = answer;
@@ -244,13 +251,13 @@ export async function runLocalExploreRepo(
       if (answer.evidence.length && !answer.rejected_evidence && !missing && !answer.unresolved.length) {
         return {
           ...base(), ...answer, status: "evidence_selected" as const, model_calls: attempt,
-          verification: "Candidate IDs and line numbers checked; returned quotes copied from source. Coverage is model-indicated, not semantic verification.",
+          verification: "Quotes copied from checked source lines. Explicit named callers and supported direct object configuration bindings checked; other coverage remains heuristic, not runtime verification.",
         };
       }
       const missingRequirements = answer.coverage.filter((part) => part.status === "missing").map((coverage) => {
         const part = parts.find((item) => item.id === coverage.part_id)!;
         const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
-        return `${part.id}: ${missingEvidenceRequirements(part, cited, query).join(", ") || part.evidence_needed}`;
+        return `${part.id}: ${missingRequirementsFor(part, cited).join(", ") || part.evidence_needed}`;
       });
       answer.unresolved = [...new Set([...answer.unresolved, ...missingRequirements])];
       lastError = [

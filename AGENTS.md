@@ -84,6 +84,10 @@ This is the canonical instructions file for this repo — other agent configs
   One bounded source expansion is allowed within the same character cap.
   Candidate IDs and line numbers are checked, and quotes are copied from source;
   named call/configuration and token-operation checklists guide selection.
+  `local-explore-relationships.ts` checks explicit named caller identity and
+  direct top-level object initializer/use bindings. Static aliases are supported;
+  unresolved member implementations, shadowed imports and complex providers
+  require review. These checks do not establish general semantic completeness.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
   interprets behavior. The legacy

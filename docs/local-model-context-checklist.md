@@ -40,13 +40,20 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   Previous positives now select complete evidence in 2/2 development cases;
   the newly frozen synthetic screen completes 2/2 positives and safely
   abstains on 2/2 negatives. This is not independent real-repo held-out quality.
-- [ ] Next: freeze independently authored questions on a fresh sanitized real
-  repository. Check chain relevance and configuration provenance, including
-  misleading executable matches and unresolved member calls.
+- [x] Add named caller identity and direct object provider/use checks; test
+  aliases, shadowing, competing providers and unresolved member implementations.
+- [x] Freeze independently authored questions on a fresh real-source slice.
+  Complete minimum evidence: 0/3 positives; appropriate status: 2/2 negatives.
+  One negative retains a distractor, and two incomplete positives still return
+  `evidence_selected`. These are open gaps, not broader reliability evidence.
+- [ ] Next: improve natural question decomposition and source windows within
+  large methods. Require review when evidence completeness cannot be checked;
+  validate on new independently authored questions, preserving this screen.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current evidence work: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).
+Current evidence work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).
+Earlier improvement: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).
 Earlier results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
 The two negative development reruns now require review. The inventory stops
 naturally at 13446 output tokens with 35/36 exact records; it ran on a mixed
@@ -235,8 +242,8 @@ Byte fallback remains conservative. Do not infer an H/I quality winner.
   q8 comparisons: `q8/`; aggregate: `summary.json`.
 - Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
 - Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
-- Current checks: 19 scout, 17 model-budget/tokenizer, 3 feature and 8 Quality Review
-  tests pass. Whitespace checks pass. Standard TypeScript checking remains
+- Current checks: 28 scout/relationship, 17 model-budget/tokenizer, 3 feature,
+  8 Quality Review and 2 grader CLI tests pass. Whitespace checks pass. Standard TypeScript checking remains
   blocked by missing `vitest` in an existing experimental test; a temporary
   config excluding only that test checks the remaining source and smoke CLI.
 - New raw requests/results and source-presence audit:

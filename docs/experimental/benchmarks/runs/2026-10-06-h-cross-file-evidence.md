@@ -91,3 +91,6 @@ speedup. Sustained long-output/GPU-fit work remains separate.
 
 Parent review effort, broad held-out quality, long-input fidelity and sustained
 GPU-only long output remain unmeasured by this run.
+
+Follow-up: [caller/provider checks and the fresh real-source screen](2026-10-06-h-relationships.md)
+complete the next evaluation step and record the remaining completeness gap.

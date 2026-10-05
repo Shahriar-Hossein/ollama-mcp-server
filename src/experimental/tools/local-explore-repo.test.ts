@@ -274,7 +274,7 @@ test("missing operation is retained as unresolved even when the model claims com
     let calls = 0;
     const result = await runLocalExploreRepo({ repository_root: root, query: "Where does preparePage call renderPage?" }, async (_model, prompt) => {
       calls++;
-      if (calls === 2) assert.match(prompt, /Unresolved evidence requirements: P1: renderPage call/);
+      if (calls === 2) assert.match(prompt, /Unresolved evidence requirements: P1: preparePage -> renderPage caller identity/);
       const lines = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines);
       return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [lines.find((line) => line.text.includes("pageMarkup"))!.ref] }], confidence: "high", unresolved: [], next_action: { ref: "" } });
     });

@@ -64,6 +64,9 @@ const scores = run.results[0].questions.map((cell: any) => {
   const abstained =
     ["no_evidence", "needs_review"].includes(result.status) &&
     result.unresolved.length > 0;
+  const distractors = selected.filter((e) => (expected.forbidden ?? []).some(
+    (item: any) => item.file === e.file && item.line === e.line,
+  ));
   return {
     id: cell.id,
     kind: expected.kind,
@@ -76,7 +79,10 @@ const scores = run.results[0].questions.map((cell: any) => {
     complete_evidence:
       expected.kind === "positive" && missing.length === 0 && exactQuotes,
     appropriate_abstention: expected.kind === "negative" && abstained,
-    generation_completed: cell.calls.every((call: any) => call.metrics?.done === true && call.metrics?.done_reason === "stop"),
+    positive_supported: expected.kind === "positive" && missing.length === 0 && exactQuotes && result.status === "evidence_selected",
+    frozen_distractor_citations: distractors,
+    avoids_frozen_distractors: distractors.length === 0,
+    generation_completed: cell.calls.length > 0 && cell.calls.every((call: any) => call.metrics?.done === true && call.metrics?.done_reason === "stop"),
     non_required_citations: selected.filter(
       (e) =>
         !required.some((item) => item.file === e.file && item.line === e.line),
@@ -89,7 +95,7 @@ writeFileSync(
   JSON.stringify(
     {
       protocol:
-        "v2: complete question set and source/fixture hashes checked; frozen required lines; non-required citations require manual relevance review; scout status is not an answer-quality score",
+        "v3: source/fixture identities and question set checked; required coverage, supported positive status and explicit distractor citations scored separately; other citations require manual relevance review; ambiguous cases have no gold status",
       scores,
     },
     null,
