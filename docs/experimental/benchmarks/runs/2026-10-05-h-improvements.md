@@ -6,6 +6,10 @@ the new 2048 scout reserve. Four synthetic MCP delegation/summary requests
 also meet their output contracts. These are development checks, not held-out
 accuracy or measured parent-work savings.
 
+Later the same day, the [CPU placement diagnosis](2026-10-05-h-cpu-placement.md)
+reduced the operational context to 50000. Measurements below used 64000
+before that adjustment.
+
 ## Selection
 
 The earlier checklist reported complete evidence on 2/4 questions. Source

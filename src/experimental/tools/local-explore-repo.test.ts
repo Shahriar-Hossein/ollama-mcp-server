@@ -8,7 +8,7 @@ import { resolveModelBudget, type generate } from "../../ollama-client.js";
 import { compileEvidenceBundles, decomposeQuestion, directEvidenceForPart, runLocalExploreRepo as runScout, validateModelAnswer, type Candidate } from "./local-explore-repo.js";
 
 const runLocalExploreRepo: typeof runScout = (params, generateAnswer) => runScout(params, generateAnswer,
-  (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 64000\nnum_predict 16000" }), reserve));
+  (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 50000\nnum_predict 16000" }), reserve));
 
 type PromptSource = { file: string; lines: Array<{ ref: string; line: number; text: string }> };
 type PromptBundle = { why_retrieved: string; sources: PromptSource[] };
@@ -50,10 +50,10 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
     let calls = 0;
     const stub: typeof generate = async (model, prompt, _system, format, think, options) => {
       calls++;
-      assert.equal(model, "qwen-context:h-q4_0-64k");
+      assert.equal(model, "qwen-context:h-q4_0-50k");
       assert.equal(typeof format, "object");
       assert.equal(think, false);
-      assert.deepEqual(options, { num_ctx: 64_000, num_predict: 2_048 });
+      assert.deepEqual(options, { num_ctx: 50_000, num_predict: 2_048 });
       const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
       const source = sources.find((item) => item.lines.some((line) => line.text.includes("calculateTotal")));
       assert.ok(source);

@@ -82,11 +82,14 @@ checked partial citations. Coverage checks remain heuristics.
 The parent still interprets behavior.
 
 Local delegation, summaries and both scout routes default to
-`qwen-context:h-q4_0-64k`. They inherit the selected model's saved `num_ctx`.
+`qwen-context:h-q4_0-50k`. They inherit the selected model's saved `num_ctx`.
 Default output reserves are the smaller of its finite saved ceiling and 8192
 for delegation/summaries or 2048 for either scout. Optional request fields
 override these limits explicitly; long output needs a larger `num_predict`.
-Budget metadata identifies limits from the model, tool policy, or request. Advanced
+H is set to 50000 context / 16000 saved output for additional GPU fit margin.
+The [placement report](docs/experimental/benchmarks/runs/2026-10-05-h-cpu-placement.md)
+explains the 64K offload and lower-context verification. Budget metadata
+identifies limits from the model, tool policy, or request. Advanced
 discovery/verification also inherit saved settings. Missing saved limits use
 reported 16384/8192 fallbacks; unbounded output defaults require an explicit
 finite ceiling. `generate()` continues to return text.

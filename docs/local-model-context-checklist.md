@@ -2,8 +2,10 @@
 
 Updated: 2026-10-05. Active work focuses on H; I comparisons are paused.
 
-H remains `qwen-context:h-q4_0-64k`, with saved 64000 context and 16000
-output tokens. Selection now returns complete source-backed evidence for all
+H now uses `qwen-context:h-q4_0-50k`, with saved 50000 context and 16000
+output tokens. The old 64K name is a compatibility alias with these same limits. The 64K load spilled during the first scout request; the
+[placement diagnosis](experimental/benchmarks/runs/2026-10-05-h-cpu-placement.md)
+records the reason and lower-context checks. Selection now returns complete source-backed evidence for all
 four development questions in three runs, both at the saved output ceiling
 and at the new 2048 scout reserve. This does not establish held-out quality.
 See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-improvements.md).
@@ -15,13 +17,16 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   the bounded retry; require an actual competing-worker rejection.
 - [x] Apply default output reserves: 8192 for delegation/summaries, 2048 for
   both scouts, capped by the saved finite ceiling. Explicit overrides remain
-  available. H input allowances are 54784 and 60928 respectively, before
-  charging prompt overhead. Saved model settings are unchanged.
+  available. H input allowances are 40784 and 46928 respectively, before
+  charging prompt overhead. The output ceiling is unchanged; context was lowered from 64000 to 50000.
 - [x] Report prompt/system/schema/template byte charges and calibrate actual
   MCP handler requests using sanitized synthetic code, logs, Unicode and JSON.
   Keep the conservative byte bound; these samples do not justify a universal
   bytes-to-tokens conversion.
-- [ ] Next: test held-out multi-part questions and negative cases on another
+- [ ] Next: add matching-tokenizer accounting to recover feasible input
+  capacity at 50K without silently truncating source. The earlier 49912-byte
+  log request now exceeds the 40784 delegation/summary allowance.
+- [ ] Test held-out multi-part questions and negative cases on another
   repository, scoring completeness, irrelevant citations and abstentions.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
@@ -36,8 +41,9 @@ ceiling still needs a sustained long-output fidelity test.
 
 ## Current configurations
 
-On 2026-10-03, H changed to 64000 context and 16000 output tokens and
-was renamed from `h-q4_0-50k`. Earlier benchmark recommendations used 50K before this configuration change.
+On 2026-10-03, H changed from 50K to 64000 context and 16000 output
+tokens. On 2026-10-05 it returned to 50000 context after the 64K load
+offloaded two layers. The 16000 output ceiling and sampling are retained.
 
 Both variants use the same Qwen 3.5 4B Q4_K_M weights and template.
 Q4/Q8 below describe **KV-cache precision**, not weight quantization.
@@ -46,7 +52,7 @@ request concise results unless the task requires long output.
 
 | Tag | KV cache | Context tokens | Output ceiling | Input budget with full output reserve and 1024 margin |
 |---|---|---:|---:|---:|
-| `qwen-context:h-q4_0-64k` | q4_0 | 64000 | 16000 | 46976 |
+| `qwen-context:h-q4_0-50k` | q4_0 | 50000 | 16000 | 32976 |
 | `qwen-context:i-q8_0-32k` | q8_0 | 32768 | 25000 | 6744 |
 
 - [x] Install H/I and verify inherited context/output parameters.

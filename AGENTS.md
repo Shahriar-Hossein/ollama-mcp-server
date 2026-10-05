@@ -28,7 +28,7 @@ This is the canonical instructions file for this repo — other agent configs
   this tree. Keep new work out unless an experimental feature is explicitly
   resumed.
 - Local delegation, summaries and both scout routes default to
-  `qwen-context:h-q4_0-64k`. Read selected model settings via `/api/show`;
+  `qwen-context:h-q4_0-50k`. Read selected model settings via `/api/show`;
   inherit saved context limits; output defaults use the smaller of the saved
   finite ceiling and 8192 for delegation/summaries or 2048 for scouts. Explicit
   request limits override these reserves. Report input overflow instead of

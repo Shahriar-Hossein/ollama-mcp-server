@@ -2,7 +2,7 @@ import axios from "axios";
 
 export const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 export const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_000;
-export const DEFAULT_LOCAL_MODEL = "qwen-context:h-q4_0-64k";
+export const DEFAULT_LOCAL_MODEL = "qwen-context:h-q4_0-50k";
 export const TOOL_OUTPUT_RESERVES = { delegation: 8192, summary: 8192, scout: 2048 } as const;
 export type ModelOptions = { num_ctx?: number; num_predict?: number };
 type ModelSettings = { parameters?: string; template?: string };
