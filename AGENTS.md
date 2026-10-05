@@ -34,6 +34,12 @@ This is the canonical instructions file for this repo — other agent configs
   request limits override these reserves. Report input overflow instead of
   dropping evidence or reducing explicit output limits.
   KV cache precision remains a daemon setting; an I tag does not enable q8.
+- H generation input uses `src/qwen-tokenizer.ts` against its pinned local
+  GGUF vocabulary and Qwen35 renderer framing. Unsupported settings, thinking,
+  unavailable vocabulary and bounded tokenizer failures keep byte accounting.
+  Schema bytes and the 1024 margin remain reserved. Legacy chat uses bytes.
+  Basic delegation/summary tools expose completion metrics and an optional
+  1000–900000 ms deadline; length stops return partial text with `isError`.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
   `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
   embedding model unloads right after each call — without it, Ollama kept the
@@ -73,7 +79,9 @@ This is the canonical instructions file for this repo — other agent configs
   scout. It separates question parts, packs bounded source/caller bundles, and
   lets `qwen3.5:4b` select cited lines. One bounded source expansion is allowed.
   Candidate IDs and line numbers are checked, and quotes are copied from source;
-  the parent still interprets behavior. The legacy tool below remains for benchmarks.
+  unresolved requirements must return `needs_review` even when nearby citations
+  pass generic coverage checks. The parent still interprets behavior. The legacy
+  tool below remains for benchmarks.
 - `src/experimental/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the
   pilot in `docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md`. Default model is
@@ -226,11 +234,11 @@ Do **not** delegate when the task needs:
   refactors, anything needing the current diff/state).
 
 Practical notes given the current implementation:
-- There's no model-discovery tool yet, so don't assume a specific model is
-  pulled — if unsure, ask the user or fall back to whatever `ollama list`
-  shows, rather than assuming `qwen2.5-coder:latest`.
+- Use `list_ollama_models` or `ollama list` to check available tags; do not
+  assume a specific model is pulled.
 - Calls are stateless (`/api/generate`, no conversation memory) — pack
   whatever context the sub-task needs into a single `prompt`/`system_prompt`,
   don't expect follow-up turns to remember earlier ones.
-- There's no timeout on the Ollama call — for large prompts, expect it can
-  take a while; don't retry immediately on what looks like a hang.
+- Shared calls have a configured deadline (120 seconds by default). Basic
+  delegation/summaries accept an explicit `timeout_ms` up to 900000. Do not
+  retry a timed-out job before confirming its prior work stopped.

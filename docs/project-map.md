@@ -30,6 +30,8 @@ ollama-mcp-server/
 |   |-- config/features.ts       Validates centralized optional/experimental tool flags.
 |   |-- config/features.test.ts  Checks defaults, overrides, dependencies, and worker isolation.
 |   |-- ollama-client.ts         Shared HTTP client for Ollama generation, models, and embeddings.
+|   |-- qwen-tokenizer.ts        Bounded input accounting from H's installed GGUF vocabulary.
+|   |-- qwen-tokenizer.test.ts   Vocabulary, BPE and supported-configuration fixtures.
 |   |-- tools/                   Supported MCP tool definitions.
 |   |   |-- run-ollama-task.ts   Sends a one-shot task to an Ollama model.
 |   |   |-- summarize-output.ts  Summarizes logs or large text with Ollama.

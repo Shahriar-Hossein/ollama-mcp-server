@@ -8,6 +8,16 @@ import { runLocalExploreRepo } from "../../src/experimental/tools/local-explore-
 type Fixture = { version: number; questions: Array<{ id: string; query: string }> };
 
 const arguments_ = process.argv.slice(2);
+function pathOption(name: string) {
+  const index = arguments_.indexOf(name);
+  if (index < 0) return undefined;
+  const value = arguments_[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a path`);
+  arguments_.splice(index, 2);
+  return resolve(value);
+}
+const repositoryRoot = pathOption("--repository-root");
+const fixtureOverride = pathOption("--fixture");
 function integerOption(name: string, fallback?: number) {
   const index = arguments_.indexOf(name);
   if (index < 0) return fallback;
@@ -25,12 +35,12 @@ if (!outputPath || !models.length) {
   throw new Error("Usage: tsx scripts/experimental/run-local-explore-repo-smoke.ts [--think] [--num-ctx N] [--num-predict N] <output-json> <model> [model...]");
 }
 
-const root = process.cwd();
-const fixturePath = resolve(root, "docs/experimental/benchmarks/runs/2026-09-24-local-explore-repo-queries.json");
+const root = repositoryRoot ?? process.cwd();
+const fixturePath = fixtureOverride ?? resolve(process.cwd(), "docs/experimental/benchmarks/runs/2026-09-24-local-explore-repo-queries.json");
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as Fixture;
-const runCommand = (command: string, args: string[]) => {
+const runCommand = (command: string, args: string[], cwd = process.cwd()) => {
   try {
-    return execFileSync(command, args, { encoding: "utf8" }).trim();
+    return execFileSync(command, args, { encoding: "utf8", cwd }).trim();
   } catch (error) {
     return `unavailable: ${error instanceof Error ? error.message : String(error)}`;
   }
@@ -42,11 +52,13 @@ const modelDigests = new Map(
   })
 );
 const protocol = {
-  fixture_path: "docs/experimental/benchmarks/runs/2026-09-24-local-explore-repo-queries.json",
+  fixture_path: fixturePath,
   fixture_version: fixture.version,
   repository_root: root,
   commit_hash: runCommand("git", ["rev-parse", "HEAD"]),
   working_tree_diff: runCommand("git", ["diff", "--binary"]),
+  target_commit_hash: runCommand("git", ["rev-parse", "HEAD"], root),
+  target_working_tree_diff: runCommand("git", ["diff", "--binary"], root),
   limit: 10,
   route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx, num_predict, think, invalid_evidence_retries: 1 },
   ollama_version: runCommand("ollama", ["--version"]),

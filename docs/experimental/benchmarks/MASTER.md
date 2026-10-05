@@ -10,9 +10,23 @@ All measured numbers from the Ollama worker benchmarking series. Raw
 requests, responses and VRAM logs are **not** in git — see
 [README.md](README.md) for where they live and why.
 
-Every result below is **one deterministic completion per model per task**
+Each result in the historical three-task series is **one deterministic completion per model per task**
 (temperature 0, seed 42). This is a failure-mode map, not a reliability
 estimate.
+
+## Current H checkpoint — 2026-10-05
+
+H is the operational default at 50000 context, 16000 saved output, and
+8192 delegation/2048 scout reserves. This is not a quality-based routing win.
+See the [tokenizer and held-out report](runs/2026-10-05-h-tokenizer-heldout.md).
+
+| Measurement | Result | Consequence |
+|---|---|---|
+| Registered-handler input calibration | 4/4 exact token counts and output contracts | Matching GGUF accounting accepts the previously refused 21007-token log |
+| Unseen cross-file evidence | 0/2 complete required citation sets | Generic packing and chain selection still need work |
+| Negative capability questions | 0/2 safe statuses before fix | Explicit unresolved requirements now require review; reruns are development checks |
+| Post-reboot 50K placement | 32/34 GPU layers, 18% CPU / 82% GPU | 50K adds fit margin but competing GPU usage can still cause offload |
+| Sustained H/16000 inventory, resumed after outage | 13446 output tokens, 35/36 exact records, 500.0 seconds on mixed runner | Explicit longer deadline works; exact-copy fidelity and GPU-only sustained output remain limitations |
 
 ## Current recommendation
 

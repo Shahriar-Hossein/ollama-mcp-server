@@ -1,5 +1,11 @@
 # H CPU offload diagnosis and 50K default — 2026-10-05
 
+Follow-up: [matching-tokenizer accounting and held-out checks](2026-10-05-h-tokenizer-heldout.md)
+now recover the rejected log's production input capacity. A post-reboot 50K
+load also offloaded two layers at lower available GPU memory; the safer
+default is still not a GPU-only guarantee. Original measurements below are
+preserved as recorded.
+
 H's original 64000-context load offloaded two layers on the first scout
 question, SE-01. The following scout stages and synthetic calibration reused
 that mixed runner. H is now configured for **50000 context / 16000 output**,
@@ -113,6 +119,6 @@ window.
   and Quality Review tests passed for the preceding implementation commit;
   their behavior is unchanged by the model-default adjustment.
 
-Next: matching-tokenizer input accounting, then held-out evidence questions
-and negative cases. Sustained generation at the 16000 output ceiling remains
-unverified; the log replay exercises long input and short output.
+Matching-tokenizer accounting and the first held-out checks are now recorded
+in the follow-up above. The log replay here exercises long input and short
+output; consult the follow-up for sustained-output results and remaining work.

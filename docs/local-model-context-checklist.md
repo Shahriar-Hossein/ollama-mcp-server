@@ -3,7 +3,7 @@
 Updated: 2026-10-05. Active work focuses on H; I comparisons are paused.
 
 H now uses `qwen-context:h-q4_0-50k`, with saved 50000 context and 16000
-output tokens. The old 64K name is a compatibility alias with these same limits. The 64K load spilled during the first scout request; the
+output tokens. The old 64K alias was removed on 2026-10-05. The 64K load spilled during the first scout request; the
 [placement diagnosis](experimental/benchmarks/runs/2026-10-05-h-cpu-placement.md)
 records the reason and lower-context checks. Selection now returns complete source-backed evidence for all
 four development questions in three runs, both at the saved output ceiling
@@ -23,13 +23,28 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   MCP handler requests using sanitized synthetic code, logs, Unicode and JSON.
   Keep the conservative byte bound; these samples do not justify a universal
   bytes-to-tokens conversion.
-- [ ] Next: add matching-tokenizer accounting to recover feasible input
-  capacity at 50K without silently truncating source. The earlier 49912-byte
-  log request now exceeds the 40784 delegation/summary allowance.
-- [ ] Test held-out multi-part questions and negative cases on another
-  repository, scoring completeness, irrelevant citations and abstentions.
+- [x] Add matching-tokenizer accounting for H generation using its installed
+  GGUF vocabulary, Qwen35 BPE and renderer framing. Preserve byte fallback,
+  schema reserve, explicit output ceilings and overflow refusal. All four
+  live calibration counts match; the 49912-byte log is accepted at 21007
+  tokens and passes its exact-output contract.
+- [x] Expose generation completion/token/timing metadata and explicit bounded
+  deadlines on delegation/summaries. Report length stops as incomplete with
+  partial text retained; keep the 120-second default.
+- [x] Test frozen multi-part and negative questions on a source snapshot of
+  another repository. Complete evidence: 0/2 positives; safe unresolved
+  status: 0/2 negatives before the fix. Nearby citations falsely passed
+  despite explicit unresolved requirements; the wrapper now requires review.
+- [ ] Next: improve generic cross-file packing and missing-chain selection;
+  validate on newly frozen unseen questions. Current failures are development
+  examples after this run, not an untouched test set.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
+
+Current results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
+The two negative development reruns now require review. The inventory stops
+naturally at 13446 output tokens with 35/36 exact records; it ran on a mixed
+post-reboot runner. GPU-only long-output fidelity remains unverified.
 
 Historical context/output tests are linked below. The
 [fresh ceiling sweep](experimental/benchmarks/runs/2026-10-03-context-ceiling.md)
@@ -37,7 +52,7 @@ verified tiny-prompt clean loads near 66K, not full-window generation. The
 [H/8192 test](experimental/benchmarks/runs/2026-10-03-h-8k-output.md) truncated
 a long inventory; [64 Ki/16384](experimental/benchmarks/runs/2026-10-03-h-64k-16k-output.md)
 completed it with one altered record and mixed placement. Saved H's 16000
-ceiling still needs a sustained long-output fidelity test.
+ceiling has now been exercised in the current report above.
 
 ## Current configurations
 
@@ -61,9 +76,12 @@ request concise results unless the task requires long output.
 - [x] Keep Modelfiles, registry and setup README under
   `/home/shahriar/ollama-models/qwen-context/` consistent with H/I only.
 - [x] Verify GPU placement for H/50000 and q8/32768.
-- [ ] Test sustained generation with the 16000 output ceiling on H and
-  25000 on I;
-  short inherited-default checks do not verify full-ceiling generation.
+- [x] Test H sustained generation with the 16000 ceiling: 13446 output
+  tokens, valid 36-record JSON, 35/36 exact records, 500 seconds. Power loss
+  interrupted the first attempt; the separate retry used mixed placement.
+- [ ] Verify H sustained long output on a fresh GPU-only runner under the
+  current desktop workload. A post-reboot 50K load still offloaded two layers.
+- [ ] Test sustained generation at I's 25000 ceiling if I work resumes.
 - [ ] Compare useful evidence and parent task completion on H/I before
   choosing a quality-based routing default.
 
@@ -98,9 +116,10 @@ I requests overflow; H reaches the stub for all four. Input byte bounds are
   tool reserves above; explicit `num_ctx`/`num_predict` fields override them. H is the
   operational default on the current q4 daemon, not a quality winner.
   Models without saved finite limits use reported 16384/8192 fallbacks.
-- Input checks use a conservative UTF-8 byte bound over system, schema,
-  question/source/history and template, plus a 1024-token margin. It is not
-  a calibrated tokenizer. Oversized requests return `input_overflow`; the
+- H generation input uses matching GGUF/Qwen35 accounting, plus schema bytes
+  and the 1024-token margin. Unsupported models/settings, thinking, unavailable
+  vocabularies and tokenizer-limit failures retain UTF-8 byte accounting;
+  the legacy chat scout also retains it. Oversized requests return `input_overflow`; the
   24000-character packing cap also reports overflow rather than generating
   from silently omitted source. The historical I/25000 reserve rejected all four smoke bundles before
   generation. That is not the new 2048 scout reserve.
@@ -172,7 +191,7 @@ is complete. All required helper, tool-mapping and transaction source reaches
 all four bundles. The final H run returns complete evidence for 2/4 cases;
 tool guards and the locking rejection/caller remain selection failures.
 The H-only follow-up above supersedes these selection/output-budget priorities.
-Input accounting remains conservative. Do not infer an H/I quality winner.
+Byte fallback remains conservative. Do not infer an H/I quality winner.
 
 - [x] Add production MCP context/output/input-budget controls and record
   effective values. Preserve the shared text-returning `generate()` API;
@@ -187,7 +206,7 @@ Input accounting remains conservative. Do not infer an H/I quality winner.
   cases: the saved final bundles contain every required source element.
 - [ ] Repeat matched H/I inputs within I's input reserve, then test larger H
   inputs separately. Check beginning/middle/end evidence and exact citations.
-- [ ] Add finite tasks that need longer output. Record actual tokens, stop
+- [x] Add an H finite inventory needing longer output. Record actual tokens, stop
   reason, completeness, fidelity, repetition and requested-length compliance.
   Keep timeout results separate from retries and changed-deadline cells.
 - [ ] Rotate cache blocks and separate fresh loads from prompt reuse. Freeze
@@ -210,7 +229,7 @@ Input accounting remains conservative. Do not infer an H/I quality winner.
   q8 comparisons: `q8/`; aggregate: `summary.json`.
 - Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
 - Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
-- Current checks: 14 scout, 12 model-budget, 3 feature and 8 Quality Review
+- Current checks: 14 scout, 17 model-budget/tokenizer, 3 feature and 8 Quality Review
   tests pass. Whitespace checks pass. Standard TypeScript checking remains
   blocked by missing `vitest` in an existing experimental test; a temporary
   config excluding only that test checks the remaining source and smoke CLI.

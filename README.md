@@ -79,7 +79,8 @@ model to select up to six evidence line references per question part. The
 server shortlists lines for each evidence requirement, constrains output refs
 to supplied lines, copies quotes from source, and retries once while retaining
 checked partial citations. Coverage checks remain heuristics.
-The parent still interprets behavior.
+Unresolved requirements return `needs_review`, even if nearby citations pass
+coverage checks. The parent still interprets behavior.
 
 Local delegation, summaries and both scout routes default to
 `qwen-context:h-q4_0-50k`. They inherit the selected model's saved `num_ctx`.
@@ -96,15 +97,28 @@ finite ceiling. `generate()` continues to return text.
 Model settings are cached per tag for up to 60 seconds, including concurrent
 requests. Restart the server after editing a tag to refresh them immediately.
 
-Input checks include system text, source/history, schema and template, with a
-1024-token margin and a conservative UTF-8 byte bound. Oversized requests return
+H generation requests use the installed GGUF vocabulary and Qwen35 byte BPE
+to count system text, source and the rendered assistant framing. The matching
+weights and named renderer must be present locally; other configurations,
+thinking requests and tokenizer failures keep the conservative UTF-8 byte
+bound. The legacy chat scout also keeps byte accounting. Schema bytes remain
+an additional reserve, and all routes retain the 1024-token safety margin.
+Oversized requests return
 `input_overflow`; source is never silently omitted and explicit output overrides
 are preserved. Generation tools and the deterministic-first scout report byte
-charges for prompt, system, schema, and template. This bound can reject requests whose actual token count would fit. In particular,
+charges alongside the accounting method. Byte fallback can reject requests
+whose actual token count would fit. In particular,
 Explicitly reserving I's full 25000 ceiling at 32768 context leaves only
 6744 input tokens. KV precision is a daemon
 setting: I needs a q8 daemon; its tag alone cannot change the current q4 daemon.
 See [the context checklist](docs/local-model-context-checklist.md).
+
+`run_ollama_task` and `summarize_output` accept `timeout_ms` from 1000 through
+900000; omission uses the configured server deadline (120 seconds by default).
+Their `_meta.completion` reports stop reason, token counts and raw Ollama
+timings in nanoseconds. A length stop or unfinished generation returns
+`isError: true` with the partial text retained. Completion does not establish
+answer correctness. These tools do not retry timed-out generation automatically.
 
 The model has no tools or shell access in the scout route. The older
 `local_explorer_task` loop remains for historical comparisons.

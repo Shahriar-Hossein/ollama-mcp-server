@@ -29,6 +29,7 @@ numbers behind one specific series.
 | [2026-09-19-explorer-scout-comparison.md](runs/2026-09-19-explorer-scout-comparison.md) | Scout comparison and Qwen's clean 50-call, thinking-enabled rerun; raw outputs remain in ignored `benchmark-data/explorer-scout/` |
 | [2026-09-24-local-explore-repo-smoke.md](runs/2026-09-24-local-explore-repo-smoke.md) | Initial deterministic-first scout smoke and model comparison |
 | [2026-09-25-local-explore-repo-improvements.md](runs/2026-09-25-local-explore-repo-improvements.md) | Evidence bundle and citation changes, with a follow-up smoke check |
+| [2026-10-05-h-tokenizer-heldout.md](runs/2026-10-05-h-tokenizer-heldout.md) | Matching input accounting, frozen cross-file/negative questions, sustained output and outage recovery |
 
 ## The rule for benchmark work
 
