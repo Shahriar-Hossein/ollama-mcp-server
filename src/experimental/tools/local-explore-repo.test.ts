@@ -65,6 +65,17 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
     assert.equal(result.model_calls, 2);
     assert.equal(result.evidence[0].file, "src/pricing.ts");
     assert.equal(readFileSync(join(root, "src/pricing.ts"), "utf8"), before);
+    let unresolvedCalls = 0;
+    const unresolved = await runLocalExploreRepo({ repository_root: root, query: "Where does calculateTotal call chargeTax?" }, async (_model, prompt) => {
+      unresolvedCalls++;
+      const source = promptBundles(prompt).flatMap((bundle) => bundle.sources).find((item) => item.lines.some((line) => line.text.includes("calculateTotal")))!;
+      const ref = source.lines.find((line) => line.text.includes("calculateTotal"))!.ref;
+      return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [ref] }], confidence: "high", unresolved: ["No chargeTax call is present."], next_action: { ref: "" } });
+    });
+    assert.equal(unresolved.status, "needs_review");
+    assert.equal(unresolvedCalls, 2);
+    assert.match(unresolved.warning ?? "", /No chargeTax call/);
+    assert.ok(unresolved.evidence.length, "Keep nearby citations for parent review without marking the request supported.");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

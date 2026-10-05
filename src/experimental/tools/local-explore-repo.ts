@@ -4,7 +4,7 @@ import { relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { evidenceChecklist, missingEvidenceRequirements, directEvidenceForPart, type QuestionPart, type ValidEvidence } from "./local-explore-validation.js";
 import { answerSchemaForRefs, SCOUT_SYSTEM } from "./local-explore-prompt.js";
-import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, checkInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
+import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, checkGenerationInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
 import { indexRepository, type RepositoryIndex } from "../../explorer/indexer.js";
 import { readSymbol } from "../../explorer/read-symbol.js";
 import { hybridRetrieve, type HybridRetrievalResult } from "../../explorer/retrieval.js";
@@ -381,7 +381,7 @@ export async function runLocalExploreRepo(
   if (!query.trim()) throw new Error("Exploration query must not be empty.");
   if (!Number.isInteger(limit) || limit < 8 || limit > 12) throw new Error("Candidate limit must be an integer from 8 through 12.");
   const budget = await resolveBudget(model, { num_ctx, num_predict }, undefined, TOOL_OUTPUT_RESERVES.scout);
-  const input_checks: ReturnType<typeof checkInputBudget>[] = [];
+  const input_checks: Awaited<ReturnType<typeof checkGenerationInputBudget>>[] = [];
   let model_calls = 0;
   const root = resolve(repository_root);
   const index = indexRepository(root);
@@ -429,7 +429,7 @@ export async function runLocalExploreRepo(
       + `Relevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\n`
       + `Return JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. `
       + (lastError ? `Previous output failed: ${lastError}.` : "");
-    const inputCheck = checkInputBudget(budget, { prompt, system: SCOUT_SYSTEM, format });
+    const inputCheck = await checkGenerationInputBudget(budget, { prompt, system: SCOUT_SYSTEM, format });
     input_checks.push(inputCheck);
     if (!inputCheck.fits) return emptyResult("input_overflow", [
       "Input exceeds the conservative budget. Reduce the source/query or explicitly lower num_predict.",
@@ -455,7 +455,7 @@ export async function runLocalExploreRepo(
       answer.selected_ids = [...new Set(answer.evidence.map((item) => item.id))];
       retained = answer;
       const missing = answer.coverage.some((part) => part.status === "missing");
-      if (answer.evidence.length && !answer.rejected_evidence && !missing) {
+      if (answer.evidence.length && !answer.rejected_evidence && !missing && !answer.unresolved.length) {
         return {
           ...base(), ...answer, status: "evidence_selected" as const, model_calls: attempt,
           verification: "Candidate IDs and line numbers checked; returned quotes copied from source. Coverage is model-indicated, not semantic verification.",
@@ -467,6 +467,7 @@ export async function runLocalExploreRepo(
         return `${part.id}: ${missingEvidenceRequirements(part, cited, query).join(", ") || part.evidence_needed}`;
       });
       lastError = answer.rejected_evidence ? `${answer.rejected_evidence} evidence reference(s) did not match supplied source lines.`
+        : answer.unresolved.length ? `Unresolved evidence requirements: ${answer.unresolved.join("; ")}`
         : `Missing direct evidence for: ${missingRequirements.join("; ")}`;
       if (attempt === 1 && missing && answer.next_action) {
         const candidate = candidates.find((item) => item.id === answer.next_action!.candidate_id)!;
