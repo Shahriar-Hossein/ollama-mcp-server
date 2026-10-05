@@ -8,6 +8,7 @@ import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, checkGenerationInputBudget, 
 import { indexRepository } from "../../explorer/indexer.js";
 import { hybridRetrieve } from "../../explorer/retrieval.js";
 import { createRelationshipChecks } from "./local-explore-relationships.js";
+import { operationParts } from "./local-explore-operations.js";
 
 import { buildCandidates, compileEvidenceBundles, checkedFile, MAX_LINE_CHARS, MAX_CONTEXT_CHARS, type Candidate, type EvidenceBundle } from "./local-explore-packing.js";
 
@@ -30,7 +31,9 @@ export interface LocalExploreRepoParams {
 
 export function decomposeQuestion(query: string): QuestionPart[] {
   const clauses = query.trim().replace(/[?!.]+$/, "").split(/,?\s+and\s+(?=(?:is|are|does|do|why|where|which|what|how)\b)/i);
-  return (clauses.length > 1 ? clauses : [query.trim()]).map((question, index) => {
+  const planned: QuestionPart[] = (clauses.length > 1 ? clauses : [query.trim()]).flatMap((question) => {
+    const operations = operationParts(question);
+    if (operations) return operations;
     let evidence_needed = "Direct implementation lines that establish the requested behavior.";
     if (/register/i.test(question)) evidence_needed = "The call that registers the named tool and its guard; an import or function definition alone is insufficient.";
     else if (/enabled by default|default state/i.test(question)) evidence_needed = "The named flag mapping, the helper resolving that mapping, and the expression establishing the master flag default.";
@@ -39,12 +42,29 @@ export function decomposeQuestion(query: string): QuestionPart[] {
     else if (/\bwhere\b.*\bset\b/i.test(question)) evidence_needed = "The executable assignment or request field that sets the value.";
     else if (/\bwhy\b/i.test(question)) evidence_needed = "Source text that explains the reason for the setting.";
     else if (/concurren|duplicate/i.test(question)) evidence_needed = "The transaction wrapper call, its exclusive BEGIN statement, the lock insertion, rejection condition, and a caller using the lock.";
-    const part = { id: `P${index + 1}`, question, evidence_needed };
+    const part: QuestionPart = { id: "", question, evidence_needed };
+    const uncheckedTail = question.replace(/\band\s+(?:return|issue)\s+[a-z][\w$]*[A-Z][\w$]*|\band\s+call(?:s)?\s+[A-Za-z_$][\w$.]*|\band\s+its\s+implementation\b/g, "");
+    if (/\bcall(?:s)?\s+[A-Za-z_$]/.test(question) && /\band\b|\b(?:before|after|while|then|to)\b/.test(uncheckedTail)) {
+      part.completeness = "unchecked";
+    }
     if (evidence_needed === "Direct implementation lines that establish the requested behavior.") {
       const required = missingEvidenceRequirements(part, [], query);
       if (required.length) part.evidence_needed = `Direct executable lines for each element: ${required.join(", ")}.`;
     }
-    return part;
+    return [part];
+  });
+  const seenOperations = new Set<string>();
+  return planned.filter((part) => {
+    if (!part.operation) return true;
+    if (seenOperations.has(part.operation)) return false;
+    seenOperations.add(part.operation);
+    return true;
+  }).map((part, index) => {
+    if (part.operation) {
+      part.question = query.trim();
+      part.evidence_needed = `Direct executable lines for ${part.operation}: ${evidenceChecklist(part, [], query).map((item) => item.requirement).join(", ")}.`;
+    }
+    return { ...part, id: `P${index + 1}` };
   });
 }
 
@@ -109,13 +129,13 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
   }) : [];
   const evidenceRefs = Array.isArray(answer.evidence_refs) ? answer.evidence_refs : partRefs.length ? [...new Set(partRefs)] : null;
   if (evidenceRefs) {
-    for (const ref of evidenceRefs.slice(0, 36)) {
+    for (const ref of evidenceRefs.slice(0, 96)) {
       const located = typeof ref === "string" ? refs.get(ref) : undefined;
       if (!located || located.line.text.trim().length < 6) { rejected_evidence++; continue; }
       evidence.push({ id: located.candidate.id, file: located.candidate.file, line: located.line.line, quote: located.line.text.trim() });
     }
   }
-  for (const rawReference of !evidenceRefs && Array.isArray(answer.evidence) ? answer.evidence.slice(0, 36) : []) {
+  for (const rawReference of !evidenceRefs && Array.isArray(answer.evidence) ? answer.evidence.slice(0, 96) : []) {
     if (!rawReference || typeof rawReference !== "object") { rejected_evidence++; continue; }
     const reference = rawReference as Partial<ModelEvidence>;
     if (typeof reference.id !== "string" || !Number.isInteger(reference.line)) { rejected_evidence++; continue; }
@@ -155,7 +175,7 @@ export function validateModelAnswer(raw: string, candidates: Candidate[], parts:
   const model_confidence = ["high", "medium", "low"].includes(String(answer.confidence))
     ? answer.confidence as "high" | "medium" | "low" : "low";
   const unresolved = Array.isArray(answer.unresolved)
-    ? answer.unresolved.filter((value): value is string => typeof value === "string").slice(0, 3).map((value) => value.slice(0, 300))
+    ? answer.unresolved.filter((value): value is string => typeof value === "string").slice(0, 20).map((value) => value.slice(0, 300))
     : [];
   return { evidence, selected_ids, coverage, next_action, model_confidence, unresolved, rejected_evidence };
 }
@@ -184,7 +204,7 @@ export async function runLocalExploreRepo(
     const retrievalQuery = searchQuery(`${part.question} ${query}`);
     const retrieved = await hybridRetrieve(root, retrievalQuery, limit, "basic", undefined, index);
     retrieved_count += retrieved.results.length;
-    byPart.set(part.id, buildCandidates(root, retrieved.results, index, retrievalQuery));
+    byPart.set(part.id, buildCandidates(root, retrieved.results, index, retrievalQuery, part));
   }
   const compiled = compileEvidenceBundles(parts, byPart);
   const { bundles, candidates } = compiled;
@@ -213,7 +233,9 @@ export async function runLocalExploreRepo(
     const checklistParts = parts.map((part) => {
       const allowed = new Set(bundles.filter((bundle) => bundle.part_id === part.id).flatMap((bundle) => bundle.candidates.map((candidate) => candidate.id)));
       const lines = [...refs].filter(([, { candidate }]) => allowed.has(candidate.id))
-        .map(([ref, { candidate, line }]) => ({ ref, id: candidate.id, file: candidate.file, line: line.line, quote: line.text }));
+        .map(([ref, { candidate, line }]) => ({ ref, id: candidate.id, file: candidate.file, line: line.line, quote: line.text }))
+        .filter((line) => !part.operation || !index.symbols.some((symbol) => symbol.file === line.file
+          && ["interface", "type"].includes(symbol.kind) && symbol.range.start.line <= line.line && symbol.range.end.line >= line.line));
       return { ...part, checklist: evidenceChecklist(part, lines, query)
         .filter((item) => !relationships.replacedRequirements(part).includes(item.requirement)), relationships: relationships.checklist(part, lines) };
     });
@@ -243,7 +265,9 @@ export async function runLocalExploreRepo(
       answer.coverage = answer.coverage.map((coverage) => {
         const part = parts.find((item) => item.id === coverage.part_id)!;
         const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
-        return { ...coverage, status: cited.length && !missingRequirementsFor(part, cited).length ? "supported" as const : "missing" as const };
+        const missing_requirements = missingRequirementsFor(part, cited);
+        return { ...coverage, missing_requirements,
+          status: cited.length && !missing_requirements.length ? "supported" as const : "missing" as const };
       });
       answer.selected_ids = [...new Set(answer.evidence.map((item) => item.id))];
       retained = answer;
@@ -251,7 +275,7 @@ export async function runLocalExploreRepo(
       if (answer.evidence.length && !answer.rejected_evidence && !missing && !answer.unresolved.length) {
         return {
           ...base(), ...answer, status: "evidence_selected" as const, model_calls: attempt,
-          verification: "Quotes copied from checked source lines. Explicit named callers and supported direct object configuration bindings checked; other coverage remains heuristic, not runtime verification.",
+          verification: "Quotes copied from checked source lines. Recognized bounded checklists, named callers and supported direct object configuration bindings checked; not runtime verification.",
         };
       }
       const missingRequirements = answer.coverage.filter((part) => part.status === "missing").map((coverage) => {

@@ -75,12 +75,15 @@ groups; a group-specific `0` can override the master flag.
 
 `local_explore_repo` is the preferred model-backed scout. It retrieves basic
 candidates, merges bounded source windows and caller context, and asks the
-model to select up to six evidence line references per question part. The
+model to select up to sixteen evidence line references per question part. The
 server shortlists lines for each evidence requirement, constrains output refs
 to supplied lines, copies quotes from source, and retries once while retaining
-checked partial citations. Coverage checks remain heuristics.
-Unresolved requirements return `needs_review`, even if nearby citations pass
-coverage checks. The parent still interprets behavior.
+checked partial citations. Image workflows and query/list questions have
+explicit operation checklists and separate source windows. These checklists
+guide selection but do not prove semantic completeness across providers or
+branches. Unchecked completeness, empty checklists and missing requirements
+return `needs_review`. Recognized bounded coverage checks remain heuristics;
+the parent still interprets behavior.
 
 Local delegation, summaries and both scout routes default to
 `qwen-context:h-q4_0-50k`. They inherit the selected model's saved `num_ctx`.

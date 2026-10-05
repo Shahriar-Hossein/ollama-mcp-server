@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { resolveModelBudget, type generate } from "../../ollama-client.js";
-import { compileEvidenceBundles, decomposeQuestion, directEvidenceForPart, runLocalExploreRepo as runScout, validateModelAnswer, type Candidate } from "./local-explore-repo.js";
-import { missingEvidenceRequirements } from "./local-explore-validation.js";
+import { buildCandidates, compileEvidenceBundles, decomposeQuestion, directEvidenceForPart, runLocalExploreRepo as runScout, validateModelAnswer, type Candidate } from "./local-explore-repo.js";
+import { indexRepository } from "../../explorer/indexer.js";
+import { evidenceChecklist, missingEvidenceRequirements } from "./local-explore-validation.js";
 
 const runLocalExploreRepo: typeof runScout = (params, generateAnswer) => runScout(params, generateAnswer,
   (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 50000\nnum_predict 16000" }), reserve));
@@ -315,4 +316,108 @@ test("requires configuration assignment and use separately", () => {
   assert.equal(directEvidenceForPart(part, [cite("displayWidth: 12,")], query), false);
   assert.equal(directEvidenceForPart(part, [cite("displayWidth: 12,"), cite("return policy.displayWidth;")], query), true);
   assert.equal(directEvidenceForPart(part, [cite("// displayWidth: 12,"), cite("return policy.displayWidth;")], query), false);
+});
+
+test("turns ordinary image and query questions into explicit operation checklists", () => {
+  const parts = decomposeQuestion("How does POST /teams accept an image, validate it, upload it, and save its URL and ID?");
+  assert.deepEqual(parts.map((part) => part.operation), ["acceptance", "validation", "upload", "storage"]);
+  assert.ok(parts.every((part) => part.completeness === "unchecked"));
+  assert.deepEqual(evidenceChecklist(parts[3], [], "").map((check) => check.requirement), [
+    "record persistence", "stored image URL", "stored image ID",
+  ]);
+  assert.deepEqual(decomposeQuestion("How does the list turn query parameters into a filter and paginated response?")
+    .map((part) => part.operation), ["transformation", "filter", "pagination", "response"]);
+});
+
+test("empty checklists and unchecked semantic scope cannot establish completeness", () => {
+  const cite = (quote: string) => ({ id: "C1", file: "source.ts", line: 1, quote });
+  const query = "How does calculateTotal apply loyalty discounts?";
+  const part = decomposeQuestion(query)[0];
+  assert.deepEqual(missingEvidenceRequirements(part, [cite("return quantity * 5;")], query), [
+    "semantic completeness unchecked; parent review required",
+  ]);
+  const upload = decomposeQuestion("How does the service upload an image?")[0];
+  assert.equal(directEvidenceForPart(upload, [cite("return client.upload(file.path);")], upload.question), false);
+  assert.equal(evidenceChecklist(upload, [{ ref: "E1", quote: "// client.upload(file.path);" }], "")
+    .every((check) => !check.candidate_refs.length), true);
+});
+
+test("packs separated operations in a long method and refuses unchecked completeness", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-operations-"));
+  try {
+    const source = ["export async function storeImage(file: { path: string }) {",
+      "  const uploaded = await client.upload(file.path);",
+      ...Array.from({ length: 70 }, (_, i) => `  const unrelated${i} = ${i};`),
+      "  return database.create({", "    image: uploaded.secureUrl,", "    imageId: uploaded.publicId,", "  });", "}"].join("\n");
+    writeFileSync(join(root, "image.ts"), source);
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"]);
+    const query = "How does storeImage upload an image and save its URL and ID?";
+    const result = await runLocalExploreRepo({ repository_root: root, query }, async (_model, prompt) => {
+      const lines = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines);
+      const parts = decomposeQuestion(query);
+      const required = ["client.upload(file.path)", "database.create(", "image: uploaded.secureUrl", "imageId: uploaded.publicId"];
+      for (const text of required) assert.ok(lines.some((line) => line.text.includes(text)), `${text} must be packed`);
+      return JSON.stringify({ part_evidence: parts.map((part) => ({
+        part_id: part.id, evidence_refs: [...new Set(lines.filter((line) => required.some((text) => line.text.includes(text))).map((line) => line.ref))],
+      })), confidence: "high", unresolved: [], next_action: { ref: "" } });
+    });
+    assert.equal(result.status, "needs_review");
+    assert.equal(result.model_calls, 2);
+    assert.ok(result.evidence.some((cite) => cite.quote.includes("imageId: uploaded.publicId")));
+    assert.ok(result.unresolved.every((reason) => reason.includes("semantic completeness unchecked")));
+    assert.equal(readFileSync(join(root, "image.ts"), "utf8"), source);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("high-confidence nearby evidence for an unsupported behavior returns review", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-unchecked-"));
+  try {
+    writeFileSync(join(root, "price.ts"), "export function calculateTotal(quantity: number) {\n  return quantity * 5;\n}\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"]);
+    const result = await runLocalExploreRepo({ repository_root: root, query: "How does calculateTotal apply loyalty discounts?" }, async (_model, prompt) => {
+      const line = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines).find((line) => line.text.includes("quantity * 5"))!;
+      return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [line.ref] }], confidence: "high", unresolved: [], next_action: { ref: "" } });
+    });
+    assert.equal(result.status, "needs_review");
+    assert.ok(result.unresolved.some((item) => item.includes("completeness unchecked")));
+    assert.ok(result.evidence.length);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a retrieved inner variable cannot suppress operation windows elsewhere in that file", () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-inner-variable-"));
+  try {
+    const source = ["export async function uploadAndStore(file) {", "  const uploaded = await client.upload(file.path);",
+      ...Array.from({ length: 50 }, (_, i) => `  const filler${i} = ${i};`),
+      "  const marker = 1;", "  return database.create({", "    image: uploaded.secureUrl,", "    imageId: uploaded.publicId,", "  });", "}"].join("\n");
+    writeFileSync(join(root, "image.ts"), source);
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"]);
+    const index = indexRepository(root);
+    const variable = index.symbols.find((symbol) => symbol.name === "marker")!;
+    const part = decomposeQuestion("How does uploadAndStore upload an image?")[0];
+    const candidates = buildCandidates(root, [{ score: 1, sources: [], evidence: { kind: "symbol", file: variable.file, symbol: variable } }], index, "marker", part);
+    assert.ok(candidates.some((candidate) => candidate.lines.some((line) => line.text.includes("client.upload(file.path)"))));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("repeated operations across dependent clauses share a part with full question context", () => {
+  const query = "How does the endpoint accept an image and upload it, and how does it save its URL and ID after upload, and what happens if upload fails?";
+  const parts = decomposeQuestion(query);
+  assert.deepEqual(parts.map((part) => part.operation), ["acceptance", "upload", "storage", "failure"]);
+  assert.ok(parts.every((part) => part.question === query && part.completeness === "unchecked"));
+  assert.equal(compileEvidenceBundles(parts, new Map()).overflow, false);
+});
+
+test("a checked named call cannot silently satisfy additional behavior", () => {
+  const query = "Where does preparePage call renderPage and encrypt the result?";
+  const part = decomposeQuestion(query)[0];
+  assert.equal(part.completeness, "unchecked");
+  assert.equal(directEvidenceForPart(part, [{ id: "C1", file: "page.ts", line: 1, quote: "return renderPage();" }], query), false);
+  assert.equal(decomposeQuestion("Where does preparePage call renderPage and return pageMarkup?")[0].completeness, undefined);
 });

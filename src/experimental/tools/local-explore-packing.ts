@@ -3,7 +3,7 @@ import { relative, resolve, sep } from "node:path";
 import { readSymbol } from "../../explorer/read-symbol.js";
 import type { RepositoryIndex } from "../../explorer/indexer.js";
 import type { HybridRetrievalResult } from "../../explorer/retrieval.js";
-import type { QuestionPart } from "./local-explore-validation.js";
+import { packingPatterns, type QuestionPart } from "./local-explore-validation.js";
 
 const MAX_FILES = 6;
 const MAX_LINES = 20;
@@ -32,31 +32,38 @@ export function checkedFile(root: string, file: string): string {
   return absoluteFile;
 }
 
-function selectedLines(source: string, startLine: number, query: string): EvidenceLine[] {
+function selectedLines(source: string, startLine: number, query: string, patterns: RegExp[] = []): EvidenceLine[] {
   const all = source.split("\n");
   const terms = [...new Set((query.toLowerCase().match(/[a-z0-9_]{4,}/g) ?? []).filter((term) => !["where", "which", "what", "when", "does", "from", "with"].includes(term)))];
   const scores = all.map((line) => terms.reduce((sum, term) => sum + (line.toLowerCase().includes(term) ? term.length : 0), 0));
   const best = scores.indexOf(scores.reduce((maximum, score) => Math.max(maximum, score), 0));
-  const start = Math.max(0, Math.min(best - 5, all.length - MAX_LINES));
-  const lines: EvidenceLine[] = [];
-  let chars = 0;
-  for (let offset = start; offset < Math.min(all.length, start + MAX_LINES); offset++) {
-    const text = all[offset].slice(0, MAX_LINE_CHARS).trimEnd();
-    if (chars + text.length > MAX_CANDIDATE_CHARS) break;
-    lines.push({ line: startLine + offset, text });
-    chars += text.length;
+  const anchors = [...new Set(patterns.flatMap((pattern) => all.flatMap((line, offset) => line.match(pattern) ? [offset] : [])))];
+  const lines = new Map<number, EvidenceLine>();
+  const centers = [...anchors, best];
+  let windows = 0;
+  for (const center of centers) {
+    if (lines.has(startLine + center)) continue;
+    if (windows++ >= 6) break;
+    const start = Math.max(0, Math.min(center - (patterns.length ? 3 : 5), all.length - MAX_LINES));
+    let chars = 0;
+    for (let offset = start; offset < Math.min(all.length, start + MAX_LINES); offset++) {
+      const text = all[offset].slice(0, MAX_LINE_CHARS).trimEnd();
+      if (chars + text.length > MAX_CANDIDATE_CHARS) break;
+      lines.set(startLine + offset, { line: startLine + offset, text });
+      chars += text.length;
+    }
   }
-  return lines;
+  return [...lines.values()].sort((a, b) => a.line - b.line);
 }
 
-function candidateFor(root: string, result: RetrievalResult, index: RepositoryIndex, query: string, id: string): Candidate | null {
+function candidateFor(root: string, result: RetrievalResult, index: RepositoryIndex, query: string, id: string, patterns: RegExp[]): Candidate | null {
   const evidence = result.evidence;
   if (!evidence.file || !["symbol", "documentation", "json"].includes(evidence.kind)) return null;
   const file = evidence.file;
   checkedFile(root, file);
   if (evidence.kind === "symbol" && evidence.symbol) {
     const read = readSymbol(root, evidence.symbol.id, index);
-    return { id, kind: "symbol", file, symbol: evidence.symbol.qualified_name, lines: selectedLines(read.source.text, read.source.range.start.line, query) };
+    return { id, kind: "symbol", file, symbol: evidence.symbol.qualified_name, lines: selectedLines(read.source.text, read.source.range.start.line, query, patterns) };
   }
   const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
   if (evidence.kind === "documentation" && evidence.excerpt) {
@@ -71,7 +78,8 @@ function candidateFor(root: string, result: RetrievalResult, index: RepositoryIn
   return null;
 }
 
-export function buildCandidates(root: string, results: RetrievalResult[], index: RepositoryIndex, query: string): Candidate[] {
+export function buildCandidates(root: string, results: RetrievalResult[], index: RepositoryIndex, query: string, part?: QuestionPart): Candidate[] {
+  const patterns = part?.operation ? packingPatterns(part, query) : [];
   const candidates: Candidate[] = [];
   const files = new Set<string>();
   const add = (candidate: Candidate | null) => {
@@ -105,6 +113,10 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
     return score(b) - score(a) || a.file.localeCompare(b.file);
   });
   for (const match of matches.slice(0, 2)) {
+    if (part?.operation) {
+      add({ id: "", kind: "text_match", file: match.file, lines: selectedLines(match.lines.join("\n"), 1, query, patterns) });
+      continue;
+    }
     const weighted = match.hits.map((hit) => ({ hit, score: match.matchedTerms.reduce((sum, term) => sum + (match.lines[hit].toLowerCase().includes(term) ? term.length / (frequency.get(term) ?? 1) : 0), 0)
       + (/\b(?:function|lock\s*\(|INSERT|SELECT|CREATE TABLE)\b/.test(match.lines[hit]) ? 3 : 0) }));
     weighted.sort((a, b) => b.score - a.score || a.hit - b.hit);
@@ -145,15 +157,22 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
   for (const symbol of namedSymbols.slice(0, 2)) {
     if (!files.has(symbol.file) && files.size >= MAX_FILES) break;
     const read = readSymbol(root, symbol.id, index);
-    add({ id: "", kind: "symbol", file: symbol.file, symbol: symbol.qualified_name, lines: selectedLines(read.source.text, read.source.range.start.line, query) });
+    add({ id: "", kind: "symbol", file: symbol.file, symbol: symbol.qualified_name, lines: selectedLines(read.source.text, read.source.range.start.line, query, patterns) });
   }
-  for (const result of results.slice(0, 2)) add(candidateFor(root, result, index, query, ""));
-  expandCrossFileCandidates(root, index, candidates, query).forEach(add);
+  for (const result of results.slice(0, 2)) add(candidateFor(root, result, index, query, "", patterns));
+  if (part?.operation) {
+    // A retrieved local variable does not represent all operations in its file.
+    for (const file of [...files]) {
+      const source = readFileSync(checkedFile(root, file), "utf8");
+      add({ id: "", kind: "text_match", file, lines: selectedLines(source, 1, query, patterns) });
+    }
+  }
+  expandCrossFileCandidates(root, index, candidates, query, patterns).forEach(add);
   for (const result of results) {
     if (candidates.length >= results.length) break;
     const file = result.evidence.file;
     if (!file || (!files.has(file) && files.size >= MAX_FILES)) continue;
-    add(candidateFor(root, result, index, query, ""));
+    add(candidateFor(root, result, index, query, "", patterns));
     const symbol = result.evidence.symbol;
     if (!symbol || candidates.length >= results.length) continue;
     const call = index.calls.find((edge) => edge.callee_symbol_id === symbol.id && edge.file !== symbol.file);
@@ -183,7 +202,7 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
   return candidates;
 }
 
-function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: Candidate[], query: string): Candidate[] {
+function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: Candidate[], query: string, patterns: RegExp[]): Candidate[] {
   const expanded: Candidate[] = [];
   const visited = new Set(seeds.map((candidate) => candidate.file));
   let frontier = [...visited];
@@ -214,7 +233,7 @@ function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: 
     for (const { file, source } of ranked.slice(0, MAX_FILES - visited.size)) {
       visited.add(file);
       frontier.push(file);
-      expanded.push({ id: "", kind: "dependency", file, lines: selectedLines(source, 1, query) });
+      expanded.push({ id: "", kind: "dependency", file, lines: selectedLines(source, 1, query, patterns) });
     }
   }
   return expanded;

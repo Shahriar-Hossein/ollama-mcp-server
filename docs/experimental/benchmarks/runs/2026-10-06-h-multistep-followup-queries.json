@@ -1,0 +1,158 @@
+{
+  "version": 3,
+  "authorship": "Independently authored source questions; frozen before any post-change validation calls.",
+  "protocol": "One post-change run. Same-source slice; results do not establish whole-repository reliability.",
+  "snapshot_paths": [
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/team.controller.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/team.service.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/dto/query-team.dto.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/config/cloudinary.config.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/common/cloudinary/cloudinary.service.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/common/upload/image-upload.options.ts"
+  ],
+  "questions": [
+    {
+      "id": "update_existing_image",
+      "kind": "positive",
+      "query": "When an existing team is updated with a replacement image, how does the service sequence the new upload, removal of the saved image, and persistence of the replacement URL and identifier, and what does it clean up if removing the old image or saving the update fails?",
+      "required": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 110,
+          "text": "async update(id: string, dto: UpdateTeamDto, file?: Express.Multer.File): Promise<Team> {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 111,
+          "text": "const existingTeam = await this.prisma.team.findUnique({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 126,
+          "text": "if (file) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 127,
+          "text": "uploaded = await this.cloudinaryService.uploadImage(file, this.cloudinaryFolder);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 129,
+          "text": "if (existingTeam.imageId) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 131,
+          "text": "await this.cloudinaryService.deleteImage(existingTeam.imageId);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 133,
+          "text": "await this.cloudinaryService.deleteImage(uploaded.publicId).catch(() => void 0);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 134,
+          "text": "throw new BadRequestException('Failed to replace previous image');"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 140,
+          "text": "return await this.prisma.team.update({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 146,
+          "text": "image: uploaded.secureUrl,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 147,
+          "text": "imageId: uploaded.publicId,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 154,
+          "text": "await this.cloudinaryService.deleteImage(uploaded.publicId).catch(() => void 0);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 156,
+          "text": "throw new BadRequestException('Failed to update team member');"
+        }
+      ]
+    },
+    {
+      "id": "create_missing_or_upload_failure",
+      "kind": "positive",
+      "query": "When a team is created without an image or its remote image upload fails, how far can each path get toward database persistence, and which local temporary-file cleanup does the upload adapter guarantee when an upload is attempted?",
+      "required": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 30,
+          "text": "async create(dto: CreateTeamDto, file?: Express.Multer.File): Promise<Team> {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 31,
+          "text": "if (!file) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 32,
+          "text": "throw new BadRequestException('Team image is required');"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 35,
+          "text": "const uploaded = await this.cloudinaryService.uploadImage("
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 41,
+          "text": "return await this.prisma.team.create({"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 21,
+          "text": "const uploaded = await cloudinary.uploader.upload(file.path, {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 26,
+          "text": "if (!uploaded?.secure_url || !uploaded?.public_id) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 34,
+          "text": "} catch (error) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 38,
+          "text": "throw new BadRequestException('Image upload failed');"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 39,
+          "text": "} finally {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 40,
+          "text": "await this.removeLocalTempFile(file.path);"
+        }
+      ]
+    }
+  ],
+  "files": {
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/team.controller.ts": "807b002f84fe326745322c2d7d064c89048f20af3d0d64ba3c158714a242781d",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/team.service.ts": "287b50b582d9db451e10288f96ad0e099dea446ed44a6ae3ef0de65e10854c93",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/dto/query-team.dto.ts": "d5212a3962a24db2d36a809c431abe31fc364ec56802abf46043671444b280c5",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/config/cloudinary.config.ts": "17c9e897411a0db1fbfbe0e4e875ee49086e1fae30c76c394b758f161a37f4a5",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/common/cloudinary/cloudinary.service.ts": "42ee330cdfaa6cada28ed8fb6f2761aefe7f62eb7c7a628ca604913e933a0afd",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/common/upload/image-upload.options.ts": "fbec85550b10ce3815f378f70436f8d6b957a7aacfc3f1e9db476f1288df5885"
+  },
+  "frozen_at": "2026-10-05T19:54:09.191260+00:00"
+}

@@ -1,0 +1,401 @@
+{
+  "version": 3,
+  "authorship": "Authored independently from the frozen six-file source snapshot; no scout implementation, earlier questions, scores, or benchmark documentation consulted.",
+  "protocol": "One post-change run. Freeze this screen before running any model. Evaluate against this source slice only, not the whole repository. Pre-call rubric granularity audit: citations were reduced to the minimal executable discriminator lines for requested operations and branches; question wording remains unchanged. Final pre-call validity pass removed signature-argument and continuation-only citations; every retained required citation is an executable discriminator with text at least six characters. Removed references are archived in benchmark-data/h-multistep/rubric-audit.json.",
+  "snapshot_paths": [
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/team.controller.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/team.service.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/modules/team/dto/query-team.dto.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/config/cloudinary.config.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/common/cloudinary/cloudinary.service.ts",
+    "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-relationships/real-source/src/common/upload/image-upload.options.ts"
+  ],
+  "questions": [
+    {
+      "id": "create-upload-persistence-failure",
+      "kind": "positive",
+      "query": "Trace what happens when a team is created with an image but the database write fails: explain the file requirement, what image data is sent to persistence after upload, and how the uploaded Cloudinary asset is handled during failure.",
+      "required": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 31,
+          "text": "if (!file) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 32,
+          "text": "throw new BadRequestException('Team image is required');"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 35,
+          "text": "const uploaded = await this.cloudinaryService.uploadImage("
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 41,
+          "text": "return await this.prisma.team.create({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 43,
+          "text": "...dto,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 44,
+          "text": "image: uploaded.secureUrl,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 45,
+          "text": "imageId: uploaded.publicId,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 48,
+          "text": "} catch {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 49,
+          "text": "await this.cloudinaryService.deleteImage(uploaded.publicId).catch(() => void 0);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 50,
+          "text": "throw new BadRequestException('Failed to create team member');"
+        }
+      ]
+    },
+    {
+      "id": "team-image-upload-temp-lifecycle",
+      "kind": "positive",
+      "query": "Follow an accepted team image from multipart setup through Cloudinary upload and local cleanup. Include where Multer stores it, how its name is formed, what the adapter sends and returns, and what happens to the temporary file even when upload handling fails.",
+      "required": [
+        {
+          "file": "src/modules/team/team.controller.ts",
+          "line": 15,
+          "text": "import { teamImageMulterOptions } from 'src/common/upload/image-upload.options';"
+        },
+        {
+          "file": "src/modules/team/team.controller.ts",
+          "line": 28,
+          "text": "@UseInterceptors(FileInterceptor('image', teamImageMulterOptions))"
+        },
+        {
+          "file": "src/modules/team/team.controller.ts",
+          "line": 33,
+          "text": "return this.teamService.create(dto, file);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 35,
+          "text": "const uploaded = await this.cloudinaryService.uploadImage("
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 37,
+          "text": "this.cloudinaryFolder,"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 15,
+          "text": "const tmpUploadDirectory = join(tmpdir(), 'infivro-uploads');"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 27,
+          "text": "const originalExt = extname(originalName);"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 28,
+          "text": "const fallbackExt = extensionByMimeType[mimetype] ?? '';"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 29,
+          "text": "const ext = originalExt || fallbackExt;"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 30,
+          "text": "const uniquePart = `${Date.now()}-${Math.round(Math.random() * 1_000_000_000)}`;"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 31,
+          "text": "return `image-${uniquePart}${ext}`;"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 57,
+          "text": "destination: tmpUploadDirectory,"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 58,
+          "text": "filename: (_req, file, callback) => {"
+        },
+        {
+          "file": "src/common/upload/image-upload.options.ts",
+          "line": 59,
+          "text": "callback(null, generateUploadFileName(file.originalname, file.mimetype));"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 21,
+          "text": "const uploaded = await cloudinary.uploader.upload(file.path, {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 23,
+          "text": "resource_type: 'image',"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 26,
+          "text": "if (!uploaded?.secure_url || !uploaded?.public_id) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 27,
+          "text": "throw new BadRequestException('Image upload failed');"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 30,
+          "text": "return {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 31,
+          "text": "secureUrl: uploaded.secure_url,"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 32,
+          "text": "publicId: uploaded.public_id,"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 34,
+          "text": "} catch (error) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 35,
+          "text": "if (error instanceof BadRequestException) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 38,
+          "text": "throw new BadRequestException('Image upload failed');"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 39,
+          "text": "} finally {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 40,
+          "text": "await this.removeLocalTempFile(file.path);"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 61,
+          "text": "await unlink(path);"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 62,
+          "text": "} catch {"
+        }
+      ]
+    },
+    {
+      "id": "team-list-branching",
+      "kind": "positive",
+      "query": "Explain how the team list response changes depending on the supplied query: cover the active filter and ordering, the condition for pagination, the database work and metadata in that branch, and the result shape when pagination is absent.",
+      "required": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 55,
+          "text": "const where = {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 56,
+          "text": "...(typeof query.isActive === 'boolean' ? { isActive: query.isActive } : {}),"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 58,
+          "text": "const orderBy = [{ order: 'asc' as const }, { createdAt: 'desc' as const }];"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 60,
+          "text": "const hasPagination = typeof query.page === 'number' && typeof query.limit === 'number';"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 61,
+          "text": "if (hasPagination) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 62,
+          "text": "const page = query.page as number;"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 63,
+          "text": "const limit = query.limit as number;"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 64,
+          "text": "const skip = (page - 1) * limit;"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 66,
+          "text": "const [total, teams] = await this.prisma.$transaction(["
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 67,
+          "text": "this.prisma.team.count({ where }),"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 68,
+          "text": "this.prisma.team.findMany({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 72,
+          "text": "take: limit,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 77,
+          "text": "data: this.sortTeamsDeterministically(teams),"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 78,
+          "text": "meta: {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 82,
+          "text": "totalPages: Math.ceil(total / limit),"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 87,
+          "text": "const teams = await this.prisma.team.findMany({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 93,
+          "text": "data: this.sortTeamsDeterministically(teams),"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 94,
+          "text": "meta: null,"
+        }
+      ]
+    },
+    {
+      "id": "restore-old-image-after-update-failure",
+      "kind": "negative",
+      "query": "If replacing a team image succeeds in deleting the previous Cloudinary image but the later database update fails, does this code restore the previous image or its database reference? Answer only from the supplied source slice.",
+      "required": [],
+      "forbidden": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 131,
+          "text": "await this.cloudinaryService.deleteImage(existingTeam.imageId);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 133,
+          "text": "await this.cloudinaryService.deleteImage(uploaded.publicId).catch(() => void 0);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 134,
+          "text": "throw new BadRequestException('Failed to replace previous image');"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 140,
+          "text": "return await this.prisma.team.update({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 152,
+          "text": "} catch {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 153,
+          "text": "if (uploaded?.publicId) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 154,
+          "text": "await this.cloudinaryService.deleteImage(uploaded.publicId).catch(() => void 0);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 156,
+          "text": "throw new BadRequestException('Failed to update team member');"
+        }
+      ]
+    },
+    {
+      "id": "rollback-image-delete-on-team-delete-failure",
+      "kind": "negative",
+      "query": "When removing a team, if Cloudinary deletion succeeds and the Prisma delete then fails, does the service recreate the image or otherwise roll back that external deletion? Use only behavior shown in this source slice.",
+      "required": [],
+      "forbidden": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 170,
+          "text": "await this.cloudinaryService.deleteImage(existingTeam.imageId);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 174,
+          "text": "return await this.prisma.team.delete({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 177,
+          "text": "} catch {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 178,
+          "text": "throw new BadRequestException('Failed to delete team member');"
+        }
+      ]
+    }
+  ],
+  "files": {
+    "src/modules/team/team.controller.ts": "807b002f84fe326745322c2d7d064c89048f20af3d0d64ba3c158714a242781d",
+    "src/modules/team/team.service.ts": "287b50b582d9db451e10288f96ad0e099dea446ed44a6ae3ef0de65e10854c93",
+    "src/modules/team/dto/query-team.dto.ts": "d5212a3962a24db2d36a809c431abe31fc364ec56802abf46043671444b280c5",
+    "src/config/cloudinary.config.ts": "17c9e897411a0db1fbfbe0e4e875ee49086e1fae30c76c394b758f161a37f4a5",
+    "src/common/cloudinary/cloudinary.service.ts": "42ee330cdfaa6cada28ed8fb6f2761aefe7f62eb7c7a628ca604913e933a0afd",
+    "src/common/upload/image-upload.options.ts": "fbec85550b10ce3815f378f70436f8d6b957a7aacfc3f1e9db476f1288df5885"
+  },
+  "frozen_at": "2026-10-05T19:39:07.154411+00:00"
+}

@@ -88,6 +88,12 @@ This is the canonical instructions file for this repo — other agent configs
   direct top-level object initializer/use bindings. Static aliases are supported;
   unresolved member implementations, shadowed imports and complex providers
   require review. These checks do not establish general semantic completeness.
+  `local-explore-operations.ts` supplies explicit image-workflow and query/list
+  operation checklists. Packing preserves separate operation windows within
+  large sources. Natural operation plans and unrecognized questions require
+  review because semantic completeness remains unchecked; empty checklists
+  must never establish support. Selection allows sixteen refs per part while
+  retaining the six-part, character, output and two-call budgets.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
   interprets behavior. The legacy

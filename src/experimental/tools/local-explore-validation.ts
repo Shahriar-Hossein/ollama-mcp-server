@@ -1,9 +1,14 @@
-export type QuestionPart = { id: string; question: string; evidence_needed: string };
+import { operationChecks } from "./local-explore-operations.js";
+
+export type QuestionPart = { id: string; question: string; evidence_needed: string; operation?: string; completeness?: "unchecked" };
 export type ValidEvidence = { id: string; file: string; line: number; quote: string };
 
 type Requirement = { name: string; pattern: RegExp; minimum: number };
 
 function requirements(part: QuestionPart, query: string): Requirement[] {
+  if (part.operation) return operationChecks(part).map((item) => ({
+    ...item, pattern: new RegExp(`^(?!\\s*(?://|\\*|/\\*|import\\b)).*?(?:${item.pattern.source})`, item.pattern.flags),
+  }));
   const require = (name: string, pattern: RegExp, minimum = 1) => ({ name, pattern, minimum });
   const chain: Requirement[] = [];
   const escaped = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -59,7 +64,13 @@ function requirements(part: QuestionPart, query: string): Requirement[] {
     require("competing-worker rejection", /throw.*(?:lock|worker|queue|concurren|already|own)/i),
     require("caller invoking lock", /\.lock\s*\(/),
   ];
+  const definition = part.question.match(/\b(?:is|are)\s+([A-Za-z_$][\w$]*)\s+defined\b/i)?.[1];
+  if (definition) return [require(`${definition} declaration`, new RegExp(`\\b(?:function|class|const|let)\\s+${escaped(definition)}\\b`))];
   return [];
+}
+
+export function packingPatterns(part: QuestionPart, query: string): RegExp[] {
+  return requirements(part, query).map((item) => item.pattern);
 }
 
 export function evidenceChecklist(part: QuestionPart, lines: Array<{ ref: string; quote: string }>, query: string) {
@@ -71,9 +82,11 @@ export function evidenceChecklist(part: QuestionPart, lines: Array<{ ref: string
 }
 
 export function missingEvidenceRequirements(part: QuestionPart, evidence: ValidEvidence[], query: string): string[] {
-  return requirements(part, query).filter(({ pattern, minimum }) =>
+  const checks = requirements(part, query);
+  return [...checks.filter(({ pattern, minimum }) =>
     new Set(evidence.flatMap((item) => item.quote.match(pattern) ?? [])).size < minimum
-  ).map(({ name }) => name);
+  ).map(({ name }) => name), ...(!checks.length || part.completeness === "unchecked"
+    ? ["semantic completeness unchecked; parent review required"] : [])];
 }
 
 export function directEvidenceForPart(part: QuestionPart, evidence: ValidEvidence[], query: string): boolean {

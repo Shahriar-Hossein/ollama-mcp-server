@@ -14,6 +14,19 @@ Each result in the historical three-task series is **one deterministic completio
 (temperature 0, seed 42). This is a failure-mode map, not a reliability
 estimate.
 
+## Ordinary-question H checkpoint — 2026-10-06
+
+| Measurement | Result | Consequence |
+|---|---|---|
+| Operation checklists/windows, development positives | 2/3 complete minimum citation sets | Development gain; natural semantic completeness still requires review |
+| Independent multi-step screen, then fresh correction follow-up | 0/3, then 0/2 complete exact-rubric positives | Provider discovery, conditions and selection remain blockers |
+| Final named caller/provider regression | 2/2 complete supported positives, 2/2 safe negatives | Bounded relationship route remains supported by this fixture |
+| Final placement | 119 loaded samples at 16% CPU / 84% GPU | No GPU-only fidelity or comparable timing claim |
+
+See the [multi-step evidence report](runs/2026-10-06-h-multistep-evidence.md).
+Ordinary-question completeness remains the priority before caller-input calibration
+and sustained GPU-only output work. I comparisons remain paused.
+
 ## Current H checkpoint — 2026-10-05
 
 H is the operational default at 50000 context, 16000 saved output, and
