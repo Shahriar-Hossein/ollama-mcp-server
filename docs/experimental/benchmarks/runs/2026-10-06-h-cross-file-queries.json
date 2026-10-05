@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "frozen_at": "2026-10-06 before implementation and model calls",
+  "protocol": "One post-change H run. New synthetic questions, not real-repository held-out accuracy. Do not tune on this set after its first call. Grade complete required lines, exact source quotes, and negative unresolved status separately. Distractors require manual relevance review.",
+  "files": {
+    "src/invoice.ts": "112f25ca1fd3e1cbf8564e65b64712f5196e5b52b55d63aaefcddd9392469929",
+    "src/pricing.ts": "0c9c73d10df104995dc4c2bfb8fae5f0dd8c891cc774983b678df8d4486991ee",
+    "src/policy.ts": "9adc3bcd4e62ac2f0f4e6576d7a79af2945174dbfe7a378eb1418626d1eb8f77",
+    "src/delivery.ts": "39c9339b2f9fe8bfcc272d7e8e283f80cf34d00c3dca89bd3a097b5e81617f2f",
+    "src/transport.ts": "518ce4132ade0c27c20826caf97023f1ddeb6be2fbd45b89ccd7f0b3be90bf38",
+    "src/delivery-policy.ts": "1b9d70e8b0b1921213b08a08185f99bcc441bb1cade5ae945258b7125823a49c",
+    "src/distractor.ts": "a4a93aff2f31a6aef7dc8d0635c44ebdc71ee00c853e08517e71c0c5abf9c860"
+  },
+  "sources": {
+    "src/invoice.ts": "import { priceInvoice } from './pricing.js';\nexport function submitInvoice(quantity: number) {\n  const amount = priceInvoice(quantity);\n  return { invoiceTotal: amount };\n}\n",
+    "src/pricing.ts": "import { billingPolicy } from './policy.js';\nexport function priceInvoice(quantity: number) {\n  const base = quantity * billingPolicy.unitPrice;\n  return base * (1 + billingPolicy.taxRate);\n}\n",
+    "src/policy.ts": "export const billingPolicy = {\n  unitPrice: 7,\n  taxRate: 0.17,\n};\n",
+    "src/delivery.ts": "import { sendParcel } from './transport.js';\nexport function dispatchParcel(address: string) {\n  const receipt = sendParcel(address);\n  return { trackingCode: receipt.id };\n}\n",
+    "src/transport.ts": "import { deliveryPolicy } from './delivery-policy.js';\nexport function sendParcel(address: string) {\n  const attempts = deliveryPolicy.retryLimit;\n  return { id: address + ':' + attempts };\n}\n",
+    "src/delivery-policy.ts": "export const deliveryPolicy = {\n  retryLimit: 4,\n};\n",
+    "src/distractor.ts": "export const demoPolicy = { taxRate: 0.99, retryLimit: 99 };\nexport function previewInvoice() {\n  return { invoiceTotal: 0 };\n}\nexport function previewParcel() {\n  return { trackingCode: 'demo' };\n}\n"
+  },
+  "questions": [
+    {
+      "id": "invoice-chain",
+      "kind": "positive",
+      "query": "Where does submitInvoice call priceInvoice and return invoiceTotal, and how is billingPolicy taxRate configured and used in priceInvoice?",
+      "required": [
+        {
+          "file": "src/invoice.ts",
+          "line": 3,
+          "text": "const amount = priceInvoice(quantity);"
+        },
+        {
+          "file": "src/invoice.ts",
+          "line": 4,
+          "text": "return { invoiceTotal: amount };"
+        },
+        {
+          "file": "src/pricing.ts",
+          "line": 4,
+          "text": "return base * (1 + billingPolicy.taxRate);"
+        },
+        {
+          "file": "src/policy.ts",
+          "line": 3,
+          "text": "taxRate: 0.17,"
+        }
+      ]
+    },
+    {
+      "id": "parcel-chain",
+      "kind": "positive",
+      "query": "Where does dispatchParcel call sendParcel and return trackingCode, and how is deliveryPolicy retryLimit configured and used in sendParcel?",
+      "required": [
+        {
+          "file": "src/delivery.ts",
+          "line": 3,
+          "text": "const receipt = sendParcel(address);"
+        },
+        {
+          "file": "src/delivery.ts",
+          "line": 4,
+          "text": "return { trackingCode: receipt.id };"
+        },
+        {
+          "file": "src/transport.ts",
+          "line": 3,
+          "text": "const attempts = deliveryPolicy.retryLimit;"
+        },
+        {
+          "file": "src/delivery-policy.ts",
+          "line": 2,
+          "text": "retryLimit: 4,"
+        }
+      ]
+    },
+    {
+      "id": "missing-refund",
+      "kind": "negative",
+      "query": "Where does submitInvoice call refundInvoice to reverse the invoice? Show the refundInvoice call.",
+      "required": []
+    },
+    {
+      "id": "missing-cancel",
+      "kind": "negative",
+      "query": "Where does dispatchParcel call cancelParcel? Show the cancelParcel call and its implementation.",
+      "required": []
+    }
+  ]
+}

@@ -76,11 +76,17 @@ This is the canonical instructions file for this repo — other agent configs
   tests. See [docs/quality-review.md](docs/quality-review.md).
 - `src/tools/*.ts` — one file per MCP tool.
 - `src/experimental/tools/local-explore-repo.ts` — opt-in deterministic-first
-  scout. It separates question parts, packs bounded source/caller bundles, and
-  lets `qwen3.5:4b` select cited lines. One bounded source expansion is allowed.
+  scout. It separates question parts and lets H select cited lines.
+  `local-explore-packing.ts` follows static calls and local imports in both
+  directions for at most two hops, capped at six files per part. Packing
+  preserves each retrieved chain file, merges shared lines, and refuses
+  overflow before generation. Import adjacency does not prove runtime calls.
+  One bounded source expansion is allowed within the same character cap.
   Candidate IDs and line numbers are checked, and quotes are copied from source;
-  unresolved requirements must return `needs_review` even when nearby citations
-  pass generic coverage checks. The parent still interprets behavior. The legacy
+  named call/configuration and token-operation checklists guide selection.
+  Unresolved requirements must return `needs_review` even when nearby citations
+  pass generic coverage checks. These checks are heuristic; the parent still
+  interprets behavior. The legacy
   tool below remains for benchmarks.
 - `src/experimental/tools/local-explorer-task.ts` — read-only repo-discovery worker
   (glob/grep/ast-grep/read tool loop against a local Ollama model), promoted from the

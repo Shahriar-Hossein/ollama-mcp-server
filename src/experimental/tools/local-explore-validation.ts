@@ -5,6 +5,33 @@ type Requirement = { name: string; pattern: RegExp; minimum: number };
 
 function requirements(part: QuestionPart, query: string): Requirement[] {
   const require = (name: string, pattern: RegExp, minimum = 1) => ({ name, pattern, minimum });
+  const chain: Requirement[] = [];
+  const escaped = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const match of part.question.matchAll(/\bcall(?:s)?\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/g)) {
+    const name = match[1].split(".").at(-1)!;
+    if (["the", "a", "each", "its", "to", "and", "or", "site"].includes(name)) continue;
+    chain.push(require(`${match[1]} call`, new RegExp(`^(?!\\s*(?:\\*|//|import\\b|(?:export\\s+)?(?:async\\s+)?function\\b))(?!.*\\b${escaped(name)}\\([^)]*\\)\\s*(?::[^=]*)?\\{\\s*$).*\\b${escaped(name)}\\s*\\(`)));
+  }
+  for (const match of part.question.matchAll(/\b(?:return|issue)\s+([A-Za-z_$][\w$]*[A-Z][\w$]*)\b/g)) {
+    chain.push(require(`${match[1]} output`, new RegExp(`\\b${escaped(match[1])}\\s*:`)));
+  }
+  if (/\b(?:sign|signing)\b|issue\s+accessToken/i.test(part.question)) chain.push(require("signing call", /\.(?:sign|signAsync)\s*\(/));
+  if (/\bverif(?:y|ied|ication)\b/i.test(part.question)) chain.push(require("verification call", /\.(?:verify|verifyAsync)\s*\(/));
+  if (/\bBearer\b/.test(part.question)) chain.push(require("Bearer extraction", /return.*['"]Bearer['"]|fromAuthHeaderAsBearerToken\s*\(/));
+  if (/assign.*request\.user/i.test(part.question)) chain.push(require("request.user assignment", /request(?:\.user|\[['"]user['"]\])\s*=/));
+  if (/\bextract\b/i.test(part.question) && /\bStrategy\b|\w+Strategy\b/.test(part.question)) chain.push(require("extraction configuration", /jwtFromRequest\s*:/));
+  if (/\bvalidate\b.*payload/i.test(part.question)) chain.push(require("validated payload return", /return.*payload\./));
+  if (/\bexpir(?:y|ation)\b/i.test(part.question)) chain.push(require("expiry configuration", /\bexpiresIn\s*:/));
+  if (/configur|setting/i.test(part.question)) {
+    const settings = [...part.question.matchAll(/\b([a-z][\w$]*[A-Z][\w$]*)\s+configured\b|\b(?:configure|configures|setting)\s+([a-z][\w$]*[A-Z][\w$]*)\b/g)].map((match) => match[1] ?? match[2]);
+    for (const name of new Set(settings)) {
+      chain.push(require(`${name} configuration`, new RegExp(`\\b${escaped(name)}\\s*[:=]`)));
+      if (/\bused\b/.test(part.question)) chain.push(require(`${name} use`, new RegExp(`\\.\\s*${escaped(name)}\\b(?!\\s*[:=])`)));
+    }
+  }
+  if (chain.length) return chain.map((item) => ({
+    ...item, pattern: new RegExp(`^(?!\\s*(?://|\\*|/\\*)).*?(?:${item.pattern.source})`, item.pattern.flags),
+  }));
   if (/register/i.test(part.question)) return [
     require("registration call", /^(?!.*\b(?:function|import|const)\b).*\bregister[A-Za-z0-9_]+\s*\(/),
     require("registration guard", /if\s*\(/),

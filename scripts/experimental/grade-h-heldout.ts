@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 const [fixturePath, runPath, sourceRoot, outputPath] = process.argv.slice(2);
@@ -9,6 +10,20 @@ if (!outputPath)
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
 const run = JSON.parse(readFileSync(runPath, "utf8"));
 if (!run.complete) throw new Error("Refusing to grade an incomplete run.");
+if (run.results.length !== 1) throw new Error("Grade one model per artifact.");
+for (const [file, hash] of Object.entries(fixture.files ?? {})) {
+  if (createHash("sha256").update(readFileSync(resolve(sourceRoot, file))).digest("hex") !== hash) {
+    throw new Error(`Frozen source changed: ${file}`);
+  }
+}
+if (run.protocol.fixture_sha256 && run.protocol.fixture_sha256 !== createHash("sha256").update(readFileSync(fixturePath)).digest("hex")) {
+  throw new Error("Frozen fixture differs from the evaluated fixture.");
+}
+const actualIds = run.results[0].questions.map((cell: any) => cell.id);
+const expectedIds = fixture.questions.map((question: any) => question.id);
+if (new Set(actualIds).size !== actualIds.length || JSON.stringify([...actualIds].sort()) !== JSON.stringify([...expectedIds].sort())) {
+  throw new Error("Run must contain every frozen question exactly once.");
+}
 const scores = run.results[0].questions.map((cell: any) => {
   const expected = fixture.questions.find((q: any) => q.id === cell.id);
   if (!expected) throw new Error(`Unknown question ${cell.id}`);
@@ -61,6 +76,7 @@ const scores = run.results[0].questions.map((cell: any) => {
     complete_evidence:
       expected.kind === "positive" && missing.length === 0 && exactQuotes,
     appropriate_abstention: expected.kind === "negative" && abstained,
+    generation_completed: cell.calls.every((call: any) => call.metrics?.done === true && call.metrics?.done_reason === "stop"),
     non_required_citations: selected.filter(
       (e) =>
         !required.some((item) => item.file === e.file && item.line === e.line),
@@ -73,7 +89,7 @@ writeFileSync(
   JSON.stringify(
     {
       protocol:
-        "v1: frozen required lines; non-required citations require manual relevance review; scout status is not an answer-quality score",
+        "v2: complete question set and source/fixture hashes checked; frozen required lines; non-required citations require manual relevance review; scout status is not an answer-quality score",
       scores,
     },
     null,

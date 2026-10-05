@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { resolveModelBudget, type generate } from "../../ollama-client.js";
 import { compileEvidenceBundles, decomposeQuestion, directEvidenceForPart, runLocalExploreRepo as runScout, validateModelAnswer, type Candidate } from "./local-explore-repo.js";
+import { missingEvidenceRequirements } from "./local-explore-validation.js";
 
 const runLocalExploreRepo: typeof runScout = (params, generateAnswer) => runScout(params, generateAnswer,
   (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 50000\nnum_predict 16000" }), reserve));
@@ -233,4 +234,85 @@ test("combines checked partial locking citations across the bounded retry", asyn
   assert.equal(calls, 2);
   assert.equal(result.status, "evidence_selected");
   assert.equal(result.evidence.length, 5);
+});
+
+test("packs every chain file for each part instead of dividing file slots between parts", () => {
+  const parts = decomposeQuestion("Where is a, and where is b, and where is c, and where is d?");
+  const pool: Candidate[] = Array.from({ length: 6 }, (_, index) => ({
+    id: `C${index + 1}`, kind: "symbol", file: `file${index}.ts`, lines: [{ line: 1, text: `export const item${index} = 1;` }],
+  }));
+  const packed = compileEvidenceBundles(parts, new Map(parts.map((part) => [part.id, pool])));
+  assert.equal(packed.overflow, false);
+  assert.equal(packed.candidates.length, 6);
+  assert.ok(packed.bundles.every((bundle) => bundle.candidates.length === 6));
+  const overlapping = { ...pool[0], lines: [...pool[0].lines, { line: 2, text: "export const extra = 2;" }] };
+  const merged = compileEvidenceBundles(parts, new Map([["P1", [pool[0]]], ["P2", [overlapping]]]));
+  assert.equal(merged.candidates.length, 1);
+  assert.equal(merged.candidates[0].lines.length, 2);
+  assert.equal(merged.bundles[0].candidates[0], merged.bundles[1].candidates[0]);
+  const tooMany = Array.from({ length: 7 }, (_, i) => ({ id: `P${i}`, question: "Where?", evidence_needed: "source" }));
+  assert.equal(compileEvidenceBundles(tooMany, new Map()).overflow, true);
+});
+
+test("named calls require an executable call rather than a declaration or comment", () => {
+  const query = "Where does preparePage call renderPage?";
+  const part = decomposeQuestion(query)[0];
+  const cite = (quote: string) => ({ id: "C1", file: "page.ts", line: 1, quote });
+  for (const quote of ["export function renderPage() {", "async renderPage(): Promise<void> {", "// return renderPage();", "import { renderPage } from './render.js';"]) {
+    assert.deepEqual(missingEvidenceRequirements(part, [cite(quote)], query), ["renderPage call"]);
+  }
+  assert.equal(directEvidenceForPart(part, [cite("return renderPage(input);")], query), true);
+});
+
+test("missing operation is retained as unresolved even when the model claims complete nearby evidence", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-missing-call-"));
+  try {
+    writeFileSync(join(root, "page.ts"), "export function preparePage() {\n  return { pageMarkup: 'ready' };\n}\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "page.ts"]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"]);
+    let calls = 0;
+    const result = await runLocalExploreRepo({ repository_root: root, query: "Where does preparePage call renderPage?" }, async (_model, prompt) => {
+      calls++;
+      if (calls === 2) assert.match(prompt, /Unresolved evidence requirements: P1: renderPage call/);
+      const lines = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines);
+      return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [lines.find((line) => line.text.includes("pageMarkup"))!.ref] }], confidence: "high", unresolved: [], next_action: { ref: "" } });
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.status, "needs_review");
+    assert.ok(result.unresolved.some((item) => item.includes("renderPage call")));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("follows two local import hops to configuration without promoting adjacency to a resolved call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-chain-"));
+  try {
+    const sources = {
+      "page.ts": "import { renderPage as render } from './render.js';\nexport function preparePage() {\n  return { pageMarkup: render() };\n}\n",
+      "render.ts": "import { policy } from './policy.js';\nexport function renderPage() {\n  return 'page'.repeat(policy.maxDepth);\n}\n",
+      "policy.ts": "export const policy = {\n  maxDepth: 3,\n};\n",
+    };
+    for (const [file, source] of Object.entries(sources)) writeFileSync(join(root, file), source);
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"]);
+    const result = await runLocalExploreRepo({ repository_root: root, query: "How does preparePage return pageMarkup?" }, async (_model, prompt) => {
+      const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
+      assert.ok(sources.some((source) => source.file === "policy.ts" && source.lines.some((line) => line.text.includes("maxDepth: 3"))));
+      assert.match(prompt, /import adjacency does not prove a runtime call/);
+      const line = sources.flatMap((source) => source.lines).find((line) => line.text.includes("pageMarkup: render()"))!;
+      return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [line.ref] }], unresolved: [], next_action: { ref: "" } });
+    });
+    assert.equal(result.status, "evidence_selected");
+    for (const [file, source] of Object.entries(sources)) assert.equal(readFileSync(join(root, file), "utf8"), source);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("requires configuration assignment and use separately", () => {
+  const query = "How is displayWidth configured and used in renderPage?";
+  const part = decomposeQuestion(query)[0];
+  const cite = (quote: string) => ({ id: "C1", file: "render.ts", line: 1, quote });
+  assert.equal(directEvidenceForPart(part, [cite("displayWidth: 12,")], query), false);
+  assert.equal(directEvidenceForPart(part, [cite("displayWidth: 12,"), cite("return policy.displayWidth;")], query), true);
+  assert.equal(directEvidenceForPart(part, [cite("// displayWidth: 12,"), cite("return policy.displayWidth;")], query), false);
 });

@@ -1,36 +1,21 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { readFileSync, realpathSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { z } from "zod";
 import { evidenceChecklist, missingEvidenceRequirements, directEvidenceForPart, type QuestionPart, type ValidEvidence } from "./local-explore-validation.js";
 import { answerSchemaForRefs, SCOUT_SYSTEM } from "./local-explore-prompt.js";
 import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, checkGenerationInputBudget, generate, resolveModelBudget } from "../../ollama-client.js";
-import { indexRepository, type RepositoryIndex } from "../../explorer/indexer.js";
-import { readSymbol } from "../../explorer/read-symbol.js";
-import { hybridRetrieve, type HybridRetrievalResult } from "../../explorer/retrieval.js";
+import { indexRepository } from "../../explorer/indexer.js";
+import { hybridRetrieve } from "../../explorer/retrieval.js";
 
+import { buildCandidates, compileEvidenceBundles, checkedFile, MAX_LINE_CHARS, MAX_CONTEXT_CHARS, type Candidate, type EvidenceBundle } from "./local-explore-packing.js";
+
+export { buildCandidates, compileEvidenceBundles } from "./local-explore-packing.js";
+export type { Candidate, EvidenceBundle } from "./local-explore-packing.js";
 export { directEvidenceForPart } from "./local-explore-validation.js";
 export type { QuestionPart } from "./local-explore-validation.js";
 
-const MAX_FILES = 6;
-const MAX_LINES = 20;
-const MAX_LINE_CHARS = 180;
-const MAX_CANDIDATE_CHARS = 1_400;
-const MAX_BUNDLES = 6;
-const MAX_CONTEXT_CHARS = 24_000;
-
-type RetrievalResult = HybridRetrievalResult["results"][number];
-type EvidenceLine = { line: number; text: string };
-export type Candidate = {
-  id: string;
-  kind: "symbol" | "documentation" | "json" | "callsite" | "configuration" | "text_match";
-  file: string;
-  symbol?: string;
-  lines: EvidenceLine[];
-};
-
-export type EvidenceBundle = { id: string; part_id: string; why_retrieved: string; relationship: string; candidates: Candidate[] };
-
+type EvidenceLine = Candidate["lines"][number];
 type ModelEvidence = Omit<ValidEvidence, "file">;
 
 export interface LocalExploreRepoParams {
@@ -40,31 +25,6 @@ export interface LocalExploreRepoParams {
   limit?: number;
   num_ctx?: number;
   num_predict?: number;
-}
-
-function checkedFile(root: string, file: string): string {
-  const absoluteRoot = realpathSync(root);
-  const absoluteFile = realpathSync(resolve(root, file));
-  const rel = relative(absoluteRoot, absoluteFile);
-  if (!rel || rel === ".." || rel.startsWith(`..${sep}`)) throw new Error(`Indexed file is outside repository: ${file}`);
-  return absoluteFile;
-}
-
-function selectedLines(source: string, startLine: number, query: string): EvidenceLine[] {
-  const all = source.split("\n");
-  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9_]{4,}/g) ?? []).filter((term) => !["where", "which", "what", "when", "does", "from", "with"].includes(term)))];
-  const scores = all.map((line) => terms.reduce((sum, term) => sum + (line.toLowerCase().includes(term) ? term.length : 0), 0));
-  const best = scores.indexOf(scores.reduce((maximum, score) => Math.max(maximum, score), 0));
-  const start = Math.max(0, Math.min(best - 5, all.length - MAX_LINES));
-  const lines: EvidenceLine[] = [];
-  let chars = 0;
-  for (let offset = start; offset < Math.min(all.length, start + MAX_LINES); offset++) {
-    const text = all[offset].slice(0, MAX_LINE_CHARS).trimEnd();
-    if (chars + text.length > MAX_CANDIDATE_CHARS) break;
-    lines.push({ line: startLine + offset, text });
-    chars += text.length;
-  }
-  return lines;
 }
 
 export function decomposeQuestion(query: string): QuestionPart[] {
@@ -78,7 +38,12 @@ export function decomposeQuestion(query: string): QuestionPart[] {
     else if (/\bwhere\b.*\bset\b/i.test(question)) evidence_needed = "The executable assignment or request field that sets the value.";
     else if (/\bwhy\b/i.test(question)) evidence_needed = "Source text that explains the reason for the setting.";
     else if (/concurren|duplicate/i.test(question)) evidence_needed = "The transaction wrapper call, its exclusive BEGIN statement, the lock insertion, rejection condition, and a caller using the lock.";
-    return { id: `P${index + 1}`, question, evidence_needed };
+    const part = { id: `P${index + 1}`, question, evidence_needed };
+    if (evidence_needed === "Direct implementation lines that establish the requested behavior.") {
+      const required = missingEvidenceRequirements(part, [], query);
+      if (required.length) part.evidence_needed = `Direct executable lines for each element: ${required.join(", ")}.`;
+    }
+    return part;
   });
 }
 
@@ -87,188 +52,9 @@ function searchQuery(question: string): string {
   if (/concurren|duplicate|exclusive|mutual|worker/i.test(question)) related.push("lock", "worker_lock", "mutex");
   if (/enabled by default|default state/i.test(question)) related.push("default", "ENABLE_EXPERIMENTAL");
   if (/environment variables?|\benv\b/i.test(question)) related.push("process.env", "ENABLED");
+  if (/expir/i.test(question)) related.push("expiresIn");
   for (const identifier of question.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/gi) ?? []) related.push(identifier.replace(/_/g, ""));
   return `${question} ${related.join(" ")}`.trim();
-}
-
-function candidateFor(root: string, result: RetrievalResult, index: RepositoryIndex, query: string, id: string): Candidate | null {
-  const evidence = result.evidence;
-  if (!evidence.file || !["symbol", "documentation", "json"].includes(evidence.kind)) return null;
-  const file = evidence.file;
-  checkedFile(root, file);
-  if (evidence.kind === "symbol" && evidence.symbol) {
-    const read = readSymbol(root, evidence.symbol.id, index);
-    return { id, kind: "symbol", file, symbol: evidence.symbol.qualified_name, lines: selectedLines(read.source.text, read.source.range.start.line, query) };
-  }
-  const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
-  if (evidence.kind === "documentation" && evidence.excerpt) {
-    const line = lines.findIndex((value) => value.includes(evidence.excerpt!));
-    if (line >= 0) return { id, kind: "documentation", file, lines: [{ line: line + 1, text: lines[line].slice(0, MAX_LINE_CHARS).trimEnd() }] };
-  }
-  if (evidence.kind === "json" && evidence.json_pointer) {
-    const key = evidence.json_pointer.split("/").at(-1) ?? "";
-    const line = lines.findIndex((value) => value.includes(JSON.stringify(key)));
-    if (line >= 0) return { id, kind: "json", file, lines: [{ line: line + 1, text: lines[line].slice(0, MAX_LINE_CHARS).trimEnd() }] };
-  }
-  return null;
-}
-
-export function buildCandidates(root: string, results: RetrievalResult[], index: RepositoryIndex, query: string): Candidate[] {
-  const candidates: Candidate[] = [];
-  const files = new Set<string>();
-  const add = (candidate: Candidate | null) => {
-    if (!candidate?.lines.length || (!files.has(candidate.file) && files.size >= MAX_FILES)) return;
-    files.add(candidate.file);
-    candidate.id = `C${candidates.length + 1}`;
-    candidates.push(candidate);
-  };
-  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9_]{4,}/g) ?? []).filter((term) => !["repository", "registered", "variables", "where", "which", "what", "does", "with", "from", "that", "each", "tools", "tool", "quality", "review"].includes(term)))];
-  const sourceFiles = [...new Set(index.symbols.map((symbol) => symbol.file))].filter((file) => !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file));
-  const matches = terms.length ? sourceFiles.flatMap((file) => {
-    const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
-    const hits = lines.flatMap((line, offset) => terms.some((term) => line.toLowerCase().includes(term)) ? [offset] : []);
-    if (!hits.length) return [];
-    const matchedTerms = terms.filter((term) => hits.some((offset) => lines[offset].toLowerCase().includes(term)));
-    return [{ file, lines, hits, matchedTerms }];
-  }) : [];
-  const registrationLines = new Map<string, number[]>();
-  for (const call of index.calls) {
-    if (!call.callee_name.startsWith("register")) continue;
-    const lines = registrationLines.get(call.file) ?? [];
-    lines.push(call.range.start.line);
-    registrationLines.set(call.file, lines);
-  }
-  const frequency = new Map(terms.map((term) => [term, matches.filter((match) => match.matchedTerms.includes(term)).length]));
-  matches.sort((a, b) => {
-    const score = (value: typeof a) => value.matchedTerms.reduce((sum, term) => sum + term.length / (frequency.get(term) ?? 1), 0)
-      + (/register|gate|enabled/i.test(query) && registrationLines.get(value.file)?.some((line) => value.hits.some((hit) => Math.abs(line - hit - 1) <= 10)) ? 10 : 0)
-      + terms.reduce((sum, term) => sum + (value.file.toLowerCase().includes(term.replace(/_/g, "-")) ? 8 : 0), 0)
-      + (/quality.review/i.test(query) && value.file.includes("quality-review/") ? 40 : 0);
-    return score(b) - score(a) || a.file.localeCompare(b.file);
-  });
-  for (const match of matches.slice(0, 2)) {
-    const weighted = match.hits.map((hit) => ({ hit, score: match.matchedTerms.reduce((sum, term) => sum + (match.lines[hit].toLowerCase().includes(term) ? term.length / (frequency.get(term) ?? 1) : 0), 0)
-      + (/\b(?:function|lock\s*\(|INSERT|SELECT|CREATE TABLE)\b/.test(match.lines[hit]) ? 3 : 0) }));
-    weighted.sort((a, b) => b.score - a.score || a.hit - b.hit);
-    const covered = new Set<number>();
-    let windows = 0;
-    for (const { hit } of weighted) {
-      if (covered.has(hit)) continue;
-      if (windows >= 3) break;
-      const start = Math.max(0, hit - 4);
-      const end = Math.min(match.lines.length, start + MAX_LINES);
-      let chars = 0;
-      const lines: EvidenceLine[] = [];
-      for (let offset = start; offset < end; offset++) {
-        const source = match.lines[offset].slice(0, MAX_LINE_CHARS).trimEnd();
-        if (chars + source.length > MAX_CANDIDATE_CHARS) break;
-        lines.push({ line: offset + 1, text: source });
-        chars += source.length;
-        covered.add(offset);
-      }
-      add({ id: "", kind: "text_match", file: match.file, lines });
-      windows++;
-    }
-  }
-  if (/environment|\benv\b|gate|enabled by default/i.test(query)) {
-    const configured = sourceFiles.flatMap((file) => {
-      const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
-      const hits = lines.flatMap((line, offset) => /["'](?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)["']/.test(line) ? [offset] : []);
-      return hits.length ? [{ file, lines, hits }] : [];
-    }).sort((a, b) => b.hits.length - a.hits.length || a.file.localeCompare(b.file))[0];
-    if (configured && (files.has(configured.file) || files.size < MAX_FILES)) {
-      const start = Math.max(0, configured.hits[0] - 3);
-      const excerpt = configured.lines.slice(start, start + MAX_LINES).join("\n");
-      add({ id: "", kind: "configuration", file: configured.file, lines: selectedLines(excerpt, start + 1, query) });
-    }
-  }
-  const namedSymbols = index.symbols.filter((symbol) => terms.includes(symbol.name.toLowerCase())
-    && (!/quality.review/i.test(query) || symbol.file.includes("quality-review/")));
-  for (const symbol of namedSymbols.slice(0, 2)) {
-    if (!files.has(symbol.file) && files.size >= MAX_FILES) break;
-    const read = readSymbol(root, symbol.id, index);
-    add({ id: "", kind: "symbol", file: symbol.file, symbol: symbol.qualified_name, lines: selectedLines(read.source.text, read.source.range.start.line, query) });
-  }
-  for (const result of results) {
-    if (candidates.length >= results.length) break;
-    const file = result.evidence.file;
-    if (!file || (!files.has(file) && files.size >= MAX_FILES)) continue;
-    add(candidateFor(root, result, index, query, ""));
-    const symbol = result.evidence.symbol;
-    if (!symbol || candidates.length >= results.length) continue;
-    const call = index.calls.find((edge) => edge.callee_symbol_id === symbol.id && edge.file !== symbol.file);
-    if (!call || (!files.has(call.file) && files.size >= MAX_FILES)) continue;
-    const source = readFileSync(checkedFile(root, call.file), "utf8").split("\n");
-    const start = Math.max(1, call.range.start.line - 10);
-    const excerpt = source.slice(start - 1, call.range.start.line + 4).join("\n");
-    const callsite: Candidate = { id: "", kind: "callsite", file: call.file, symbol: symbol.qualified_name, lines: selectedLines(excerpt, start, query) };
-    add(callsite);
-    const guard = source.slice(start - 1, call.range.start.line).reverse().find((line) => /if\s*\(\s*features\./.test(line));
-    const featureKey = guard?.match(/if\s*\(\s*features\.([A-Za-z][A-Za-z0-9_]*)/)?.[1];
-    for (const key of featureKey ? [featureKey] : []) {
-      if (candidates.length >= results.length) break;
-      const property = index.symbols.find((record) => record.kind === "property" && record.name === key);
-      if (!property || (!files.has(property.file) && files.size >= MAX_FILES)) continue;
-      const config = readFileSync(checkedFile(root, property.file), "utf8").split("\n");
-      const selected = new Set<number>();
-      for (let i = 0; i < config.length; i++) {
-        if (config[i].includes(`const experimental =`) || config[i].includes(`${key}: experimentalFeature(`)) {
-          for (let j = Math.max(0, i - 1); j <= Math.min(config.length - 1, i + 1); j++) selected.add(j);
-        }
-      }
-      const lines = [...selected].sort((a, b) => a - b).slice(0, MAX_LINES).map((offset) => ({ line: offset + 1, text: config[offset].slice(0, MAX_LINE_CHARS).trimEnd() }));
-      add({ id: "", kind: "configuration", file: property.file, symbol: key, lines });
-    }
-  }
-  return candidates;
-}
-
-export function compileEvidenceBundles(parts: QuestionPart[], byPart: Map<string, Candidate[]>): { bundles: EvidenceBundle[]; candidates: Candidate[]; overflow: boolean } {
-  const bundles: EvidenceBundle[] = [];
-  const candidates: Candidate[] = [];
-  const seen = new Map<string, Candidate>();
-  const perPart = Math.max(1, Math.floor(MAX_BUNDLES / parts.length));
-  let usedChars = 0;
-  let overflow = false;
-  for (const part of parts) {
-    const pool = byPart.get(part.id) ?? [];
-    const usedFiles = new Set<string>();
-    let count = 0;
-    for (const seed of pool) {
-      if (count >= perPart || bundles.length >= MAX_BUNDLES || usedFiles.has(seed.file)) continue;
-      const related = pool.find((candidate) => candidate !== seed && candidate.symbol && candidate.symbol === seed.symbol && candidate.file !== seed.file)
-        ?? pool.find((candidate) => candidate !== seed && candidate.file === seed.file && candidate.kind !== seed.kind);
-      const relatedItems = [...new Set([...pool.filter((candidate) => candidate.file === seed.file), ...(related ? [related] : [])])];
-      const items = [...new Set(relatedItems.map((item) => item.file))].map((file) => {
-        const sources = relatedItems.filter((item) => item.file === file);
-        const lines = [...new Map(sources.flatMap((item) => item.lines).map((line) => [line.line, line])).values()].sort((a, b) => a.line - b.line);
-        return { ...sources[0], lines };
-      });
-      const keyFor = (item: Candidate) => `${item.file}:${item.lines.map((line) => line.line).join(",")}`;
-      const newChars = items.filter((item) => !seen.has(keyFor(item))).reduce((sum, item) => sum + item.lines.reduce((n, line) => n + line.text.length, 0), 0);
-      if (usedChars + newChars > MAX_CONTEXT_CHARS) { overflow = true; continue; }
-      const packed = items.map((item) => {
-        const key = keyFor(item);
-        const prior = seen.get(key);
-        if (prior) return prior;
-        const candidate = { ...item, id: `C${candidates.length + 1}` };
-        seen.set(key, candidate);
-        candidates.push(candidate);
-        return candidate;
-      });
-      bundles.push({
-        id: `B${bundles.length + 1}`,
-        part_id: part.id,
-        why_retrieved: seed.kind === "text_match" ? "source text matches query terms" : "ranked symbol or structural match",
-        relationship: related ? (related.file === seed.file ? "same source file" : "matching symbol and call site") : "single source location",
-        candidates: packed,
-      });
-      usedChars += newChars;
-      usedFiles.add(seed.file);
-      count++;
-    }
-  }
-  return { bundles, candidates, overflow };
 }
 
 function expandCandidate(root: string, candidate: Candidate, line: number, nextId: string): Candidate {
@@ -466,17 +252,25 @@ export async function runLocalExploreRepo(
         const cited = answer.evidence.filter((item) => coverage.evidence_locations.includes(`${item.file}:${item.line}`));
         return `${part.id}: ${missingEvidenceRequirements(part, cited, query).join(", ") || part.evidence_needed}`;
       });
-      lastError = answer.rejected_evidence ? `${answer.rejected_evidence} evidence reference(s) did not match supplied source lines.`
-        : answer.unresolved.length ? `Unresolved evidence requirements: ${answer.unresolved.join("; ")}`
-        : `Missing direct evidence for: ${missingRequirements.join("; ")}`;
+      answer.unresolved = [...new Set([...answer.unresolved, ...missingRequirements])];
+      lastError = [
+        ...(answer.rejected_evidence ? [`${answer.rejected_evidence} evidence reference(s) did not match supplied source lines.`] : []),
+        ...(answer.unresolved.length ? [`Unresolved evidence requirements: ${answer.unresolved.join("; ")}`] : []),
+      ].join(" ");
       if (attempt === 1 && missing && answer.next_action) {
         const candidate = candidates.find((item) => item.id === answer.next_action!.candidate_id)!;
         const expanded = expandCandidate(root, candidate, answer.next_action.line, `C${candidates.length + 1}`);
+        const contextChars = candidates.reduce((sum, item) => sum + item.lines.reduce((n, line) => n + line.text.length, 0), 0);
+        if (contextChars + expanded.lines.reduce((sum, line) => sum + line.text.length, 0) > MAX_CONTEXT_CHARS) {
+          compiled.overflow = true;
+          return emptyResult("input_overflow", ["Bounded follow-up exceeded the evidence character cap. Narrow the query."]);
+        }
         candidates.push(expanded);
-        bundles.push({
-          id: `B${bundles.length + 1}`, part_id: answer.coverage.find((part) => part.status === "missing")!.part_id,
+        const partId = answer.coverage.find((part) => part.status === "missing")!.part_id;
+        const bundle = bundles.find((item) => item.part_id === partId)!;
+        Object.assign(bundle, {
           why_retrieved: "bounded follow-up read", relationship: `expanded source around ${candidate.id}:${answer.next_action.line}`,
-          candidates: [expanded],
+          candidates: [...bundle.candidates, expanded],
         });
         continue;
       }

@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import axios from "axios";
 import { OLLAMA_HOST, REQUEST_TIMEOUT_MS } from "../../src/ollama-client.js";
 import { runLocalExploreRepo } from "../../src/experimental/tools/local-explore-repo.js";
 
-type Fixture = { version: number; questions: Array<{ id: string; query: string }> };
+type Fixture = { version: number; files?: Record<string, string>; questions: Array<{ id: string; query: string }> };
 
 const arguments_ = process.argv.slice(2);
 function pathOption(name: string) {
@@ -38,6 +39,11 @@ if (!outputPath || !models.length) {
 const root = repositoryRoot ?? process.cwd();
 const fixturePath = fixtureOverride ?? resolve(process.cwd(), "docs/experimental/benchmarks/runs/2026-09-24-local-explore-repo-queries.json");
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as Fixture;
+for (const [file, hash] of Object.entries(fixture.files ?? {})) {
+  if (createHash("sha256").update(readFileSync(resolve(root, file))).digest("hex") !== hash) {
+    throw new Error(`Frozen source changed: ${file}`);
+  }
+}
 const runCommand = (command: string, args: string[], cwd = process.cwd()) => {
   try {
     return execFileSync(command, args, { encoding: "utf8", cwd }).trim();
@@ -54,13 +60,14 @@ const modelDigests = new Map(
 const protocol = {
   fixture_path: fixturePath,
   fixture_version: fixture.version,
+  fixture_sha256: createHash("sha256").update(readFileSync(fixturePath)).digest("hex"),
   repository_root: root,
   commit_hash: runCommand("git", ["rev-parse", "HEAD"]),
   working_tree_diff: runCommand("git", ["diff", "--binary"]),
   target_commit_hash: runCommand("git", ["rev-parse", "HEAD"], root),
   target_working_tree_diff: runCommand("git", ["diff", "--binary"], root),
   limit: 10,
-  route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx, num_predict, think, invalid_evidence_retries: 1 },
+  route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, reserve_all_chain_files: true, import_call_expansion_hops: 2, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx, num_predict, think, invalid_evidence_retries: 1 },
   ollama_version: runCommand("ollama", ["--version"]),
 };
 const results: unknown[] = [];

@@ -1,6 +1,6 @@
 # Local model context and MCP improvement checklist
 
-Updated: 2026-10-05. Active work focuses on H; I comparisons are paused.
+Updated: 2026-10-06. Active work focuses on H; I comparisons are paused.
 
 H now uses `qwen-context:h-q4_0-50k`, with saved 50000 context and 16000
 output tokens. The old 64K alias was removed on 2026-10-05. The 64K load spilled during the first scout request; the
@@ -35,13 +35,19 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   another repository. Complete evidence: 0/2 positives; safe unresolved
   status: 0/2 negatives before the fix. Nearby citations falsely passed
   despite explicit unresolved requirements; the wrapper now requires review.
-- [ ] Next: improve generic cross-file packing and missing-chain selection;
-  validate on newly frozen unseen questions. Current failures are development
-  examples after this run, not an untouched test set.
+- [x] Add bounded caller/callee/import expansion, preserve retrieved chain
+  files across parts, and require missing call/configuration elements.
+  Previous positives now select complete evidence in 2/2 development cases;
+  the newly frozen synthetic screen completes 2/2 positives and safely
+  abstains on 2/2 negatives. This is not independent real-repo held-out quality.
+- [ ] Next: freeze independently authored questions on a fresh sanitized real
+  repository. Check chain relevance and configuration provenance, including
+  misleading executable matches and unresolved member calls.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
+Current evidence work: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).
+Earlier results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
 The two negative development reruns now require review. The inventory stops
 naturally at 13446 output tokens with 35/36 exact records; it ran on a mixed
 post-reboot runner. GPU-only long-output fidelity remains unverified.
@@ -229,7 +235,7 @@ Byte fallback remains conservative. Do not infer an H/I quality winner.
   q8 comparisons: `q8/`; aggregate: `summary.json`.
 - Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
 - Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
-- Current checks: 14 scout, 17 model-budget/tokenizer, 3 feature and 8 Quality Review
+- Current checks: 19 scout, 17 model-budget/tokenizer, 3 feature and 8 Quality Review
   tests pass. Whitespace checks pass. Standard TypeScript checking remains
   blocked by missing `vitest` in an existing experimental test; a temporary
   config excluding only that test checks the remaining source and smoke CLI.
