@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, OLLAMA_HOST, REQUEST_TIMEOUT_MS, checkInputBudget, generate, resolveModelBudget } from "../ollama-client.js";
+import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, OLLAMA_HOST, REQUEST_TIMEOUT_MS, checkGenerationInputBudget, generateResult, requestTimeout, resolveModelBudget } from "../ollama-client.js";
 
 const DEFAULT_SYSTEM_PROMPT =
   "You condense large, noisy text (logs, command output, file dumps) into a short, faithful summary. " +
@@ -17,22 +17,24 @@ export function registerSummarizeOutput(server: McpServer) {
       focus: z.string().optional().describe("What to focus on, e.g. 'errors and failing tests only'."),
       num_ctx: z.number().int().positive().optional().describe("Context override; inherits the model setting when omitted."),
       num_predict: z.number().int().positive().optional().describe("Output ceiling override; defaults to the smaller of the saved model ceiling and 8192 tokens."),
+      timeout_ms: z.number().int().min(1000).max(900000).optional().describe("Request deadline in milliseconds; defaults to the server's configured deadline (120 seconds by default)."),
       model: z.string().default(DEFAULT_LOCAL_MODEL).describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
     },
-    async ({ text, focus, model, num_ctx, num_predict }) => {
+    async ({ text, focus, model, num_ctx, num_predict, timeout_ms }) => {
       const prompt = focus
         ? `Focus: ${focus}\n\nText to summarize:\n${text}`
         : `Text to summarize:\n${text}`;
       try {
         const budget = await resolveModelBudget(model, { num_ctx, num_predict }, undefined, TOOL_OUTPUT_RESERVES.summary);
-        const input = checkInputBudget(budget, { prompt, system: DEFAULT_SYSTEM_PROMPT });
+        const input = await checkGenerationInputBudget(budget, { prompt, system: DEFAULT_SYSTEM_PROMPT });
         if (!input.fits) return { isError: true, content: [{ type: "text", text: JSON.stringify({ status: "input_overflow", budget: input }) }] };
-        const summary = await generate(model, prompt, DEFAULT_SYSTEM_PROMPT, undefined, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict });
-        return { content: [{ type: "text", text: summary }], _meta: { model_budget: input } };
+        const deadline = requestTimeout(timeout_ms);
+        const { text: summary, completion } = await generateResult(model, prompt, DEFAULT_SYSTEM_PROMPT, undefined, false, { num_ctx: budget.num_ctx, num_predict: budget.num_predict }, deadline);
+        return { ...(completion.status === "incomplete" ? { isError: true } : {}), content: [{ type: "text", text: summary }], _meta: { model_budget: input, completion, timeout_ms: deadline } };
       } catch (error: any) {
         const message =
           error.code === "ECONNABORTED"
-            ? `Ollama request timed out after ${REQUEST_TIMEOUT_MS}ms (model: ${model}).`
+            ? `Ollama request timed out after ${timeout_ms ?? REQUEST_TIMEOUT_MS}ms (model: ${model}).`
             : `Failed to reach Ollama at ${OLLAMA_HOST}: ${error.message}. Make sure 'ollama serve' is running.`;
         return { isError: true, content: [{ type: "text", text: message }] };
       }

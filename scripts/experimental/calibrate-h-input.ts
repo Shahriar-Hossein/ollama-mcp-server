@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import axios from "axios";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { DEFAULT_LOCAL_MODEL } from "../../src/ollama-client.js";
+import { DEFAULT_LOCAL_MODEL, OLLAMA_HOST } from "../../src/ollama-client.js";
 import { registerRunOllamaTask } from "../../src/tools/run-ollama-task.js";
 import { registerSummarizeOutput } from "../../src/tools/summarize-output.js";
 
@@ -51,19 +51,23 @@ const protocol = {
   commit_hash: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   working_tree_diff: execFileSync("git", ["diff", "--binary"], { encoding: "utf8" }),
   input_origin: "sanitized synthetic source/log/Unicode/JSON through registered MCP handlers; no private session context",
+  request_timeout_ms: 240000,
+  model_settings: (await originalPost(`${OLLAMA_HOST}/api/show`, { model: DEFAULT_LOCAL_MODEL }, { timeout: 10000 })).data,
 };
 const results: unknown[] = [];
 for (const cell of cases) {
   calls = [];
   const started = performance.now();
   process.stderr.write(`Starting ${cell.id}\n`);
-  const result = await cell.invoke({ ...cell.params, model: DEFAULT_LOCAL_MODEL });
+  const result = await cell.invoke({ ...cell.params, model: DEFAULT_LOCAL_MODEL, timeout_ms: protocol.request_timeout_ms });
   const text = result.content[0].text;
   const budget = result._meta?.model_budget;
   const actual = calls.at(-1)?.metrics.prompt_eval_count;
   results.push({ id: cell.id, elapsed_ms: Math.round(performance.now() - started), result, calls,
     exact_contract: !result.isError && cell.verify(text),
-    calibration: budget && actual ? { bound: budget.input_token_bound, actual, bound_to_actual: budget.input_token_bound / actual, actual_fits: actual <= budget.input_budget } : null,
+    calibration: budget && actual ? { accounting: budget.accounting, bound: budget.input_token_bound, actual,
+      predicted_prompt_tokens: budget.prompt_tokens, prediction_error: budget.prompt_tokens === undefined ? null : budget.prompt_tokens - actual,
+      bound_to_actual: budget.input_token_bound / actual, actual_fits: actual <= budget.input_budget } : null,
   });
   mkdirSync(resolve(outputPath, ".."), { recursive: true });
   writeFileSync(outputPath, JSON.stringify({ protocol, results, complete: results.length === cases.length }, null, 2));

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import axios from "axios";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { checkInputBudget, clearModelSettingsCache, generateWithModelBudget, resolveModelBudget } from "./ollama-client.js";
+import { checkInputBudget, checkGenerationInputBudget, clearModelSettingsCache, generateWithModelBudget, resolveModelBudget } from "./ollama-client.js";
 import { registerRunOllamaTask } from "./tools/run-ollama-task.js";
 import { registerSummarizeOutput } from "./tools/summarize-output.js";
 import { runLocalExplorerTask } from "./experimental/tools/local-explorer-task.js";
@@ -167,4 +167,52 @@ test("reports prompt, system, schema and template bytes without changing the con
     schema: Buffer.byteLength(JSON.stringify(content.format)), template: Buffer.byteLength(budget.template),
   });
   assert.equal(checked.input_token_bound, checkInputBudget(budget, content.prompt + content.system + JSON.stringify(content.format)).input_token_bound);
+});
+
+test("matching tokenizer recovers capacity, charges schema and preserves explicit output reserves", async () => {
+  const budget = { ...await resolveModelBudget("fixture", { num_predict: 16000 }, async () => settings("H")), tokenizer_path: "/fixture" };
+  const content = { prompt: "x".repeat(49912), system: "System", format: { type: "object" } };
+  assert.equal(checkInputBudget(budget, content).fits, false);
+  const checked = await checkGenerationInputBudget(budget, content, false, async (_path, prompt, system) => {
+    assert.equal(prompt, content.prompt); assert.equal(system, content.system); return 21007;
+  });
+  assert.equal(checked.fits, true);
+  assert.equal(checked.accounting, "qwen35_gguf");
+  assert.equal(checked.num_predict, 16000);
+  assert.equal(checked.input_token_bound, 21007 + Buffer.byteLength(JSON.stringify(content.format)));
+  const overflow = await checkGenerationInputBudget(budget, content, false, async () => budget.input_budget + 1);
+  assert.equal(overflow.fits, false);
+});
+
+test("unsupported requests, tokenizer failure and invalid counts retain the byte refusal", async () => {
+  const budget = { ...await resolveModelBudget("fixture", {}, async () => settings("H")), tokenizer_path: "/fixture" };
+  const input = { prompt: "x".repeat(50000), system: "System" };
+  for (const count of [async () => { throw new Error("unavailable"); }, async () => NaN, async () => -1, async () => 1.5]) {
+    const checked = await checkGenerationInputBudget(budget, input, false, count);
+    assert.equal(checked.fits, false); assert.equal(checked.accounting, "utf8_byte_bound");
+  }
+  const forbidden = async () => { throw new Error("must not run"); };
+  assert.equal((await checkGenerationInputBudget(budget, input, true, forbidden)).accounting, "utf8_byte_bound");
+  assert.equal((await checkGenerationInputBudget({ ...budget, tokenizer_path: undefined }, input, false, forbidden)).accounting, "utf8_byte_bound");
+});
+
+test("basic tools expose truncation, raw metrics and an explicit bounded deadline", async (t) => {
+  const deadlines: number[] = [];
+  t.mock.method(axios, "post", async (url: string, _body: unknown, config: { timeout: number }) => {
+    if (url.endsWith("/api/show")) return { data: settings("H") };
+    deadlines.push(config.timeout);
+    return { data: { response: "partial", done: true, done_reason: "length", eval_count: 8192, prompt_eval_count: 10 } };
+  });
+  for (const register of [registerRunOllamaTask, registerSummarizeOutput]) {
+    let invoke!: (params: Record<string, unknown>) => Promise<any>;
+    register({ tool: (_name: string, _description: string, _fields: unknown, callback: typeof invoke) => { invoke = callback; } } as unknown as McpServer);
+    const result = await invoke({ model: "H", prompt: "Task", text: "Log", timeout_ms: 240000 });
+    assert.equal(result.isError, true); assert.equal(result.content[0].text, "partial");
+    assert.equal(result._meta.completion.status, "incomplete");
+    assert.equal(result._meta.completion.eval_count, 8192);
+    assert.equal(result._meta.timeout_ms, 240000);
+    const invalid = await invoke({ model: "H", prompt: "Task", text: "Log", timeout_ms: 900001 });
+    assert.equal(invalid.isError, true);
+  }
+  assert.deepEqual(deadlines, [240000, 240000]);
 });
