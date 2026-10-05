@@ -92,12 +92,13 @@ silently reducing requested output. Its actual 21007 tokens fit; matching
 Qwen tokenizer accounting is the next way to recover capacity safely.
 Do not restore a marginal 64K default merely to satisfy this byte estimate.
 
-The old `qwen-context:h-q4_0-64k` name is retained as a compatibility alias,
-now pointing to the same **50000/16000** configuration. Existing clients
-inherit the lower context after their settings cache refreshes. Restart the
-MCP server to load the canonical default and previous code improvements.
+The old `qwen-context:h-q4_0-64k` name initially remained as a compatibility
+alias for the same **50000/16000** configuration. It was removed on
+2026-10-05 to avoid a misleading entry in `ollama list`. Clients using that
+tag must switch to `qwen-context:h-q4_0-50k`. Restart the MCP server to load
+the canonical default and previous code improvements.
 Explicit `num_ctx` overrides can still request a larger, potentially spilling
-window; the old tag's name no longer describes its saved context.
+window.
 
 ## Evidence and checks
 
