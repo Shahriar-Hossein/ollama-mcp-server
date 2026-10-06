@@ -30,7 +30,7 @@ export interface LocalExploreRepoParams {
 }
 
 export function decomposeQuestion(query: string): QuestionPart[] {
-  const clauses = query.trim().replace(/[?!.]+$/, "").split(/,?\s+and\s+(?=(?:is|are|does|do|why|where|which|what|how)\b)/i);
+  const clauses = operationParts(query) ? [query.trim()] : query.trim().replace(/[?!.]+$/, "").split(/,?\s+and\s+(?=(?:is|are|does|do|why|where|which|what|how)\b)/i);
   const planned: QuestionPart[] = (clauses.length > 1 ? clauses : [query.trim()]).flatMap((question) => {
     const operations = operationParts(question);
     if (operations) return operations;

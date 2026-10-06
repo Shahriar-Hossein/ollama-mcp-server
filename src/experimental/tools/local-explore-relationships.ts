@@ -5,11 +5,13 @@ import TypeScript from "tree-sitter-typescript";
 import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
 import { checkedFile } from "./local-explore-packing.js";
 import type { QuestionPart, ValidEvidence } from "./local-explore-validation.js";
+import { operationChecks, operationTarget } from "./local-explore-operations.js";
 
 type Location = { file: string; line: number };
 type Relationship = { requirement: string; alternatives: Location[][] };
 const callableKinds = new Set(["function", "method", "constructor"]);
 const identifier = "[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*";
+const scopedOperations = new Set(["storage", "replacement", "provider-deletion", "cleanup-failure", "upload", "failure"]);
 
 export function createRelationshipChecks(root: string, index: RepositoryIndex) {
   const symbols = new Map(index.symbols.map((symbol) => [symbol.id, symbol]));
@@ -38,6 +40,35 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
   const callRequests = (part: QuestionPart) => [...part.question.matchAll(new RegExp(
     `\\b(?:does|do)\\s+(${identifier})\\s+call\\s+(${identifier})|\\b(${identifier})\\s+calls\\s+(${identifier})`, "g",
   ))].map((match) => ({ callerName: match[1] ?? match[3], calleeName: match[2] ?? match[4] }));
+
+  const operationOwners = (part: QuestionPart) => {
+    const target = operationTarget(part);
+    if (!target || !scopedOperations.has(part.operation ?? "")) return [];
+    return index.symbols.filter((symbol) => callableKinds.has(symbol.kind) && matchesName(symbol, target)
+      && !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(symbol.file));
+  };
+  const scopesOperation = (part: QuestionPart) => Boolean(operationTarget(part)
+    && scopedOperations.has(part.operation ?? ""));
+  function operationPlan(part: QuestionPart, owners = operationOwners(part)): Relationship[] {
+    return operationChecks(part).map(({ name, pattern }) => ({
+      requirement: name,
+      alternatives: owners.flatMap((owner) => {
+        const source = treeFor(owner.file).rootNode.text.split("\n");
+        const declaration = { file: owner.file, line: owner.selection_range.start.line };
+        if (name === "requested method declaration") return [[declaration]];
+        return source.slice(owner.range.start.line - 1, owner.range.end.line).flatMap((quote, offset) => {
+          const line = owner.range.start.line + offset;
+          if (/^\s*(?:\/\/|\*|\/\*|import\b)/.test(quote) || !quote.match(pattern)) return [];
+          // A nested callable or type cannot supply its enclosing method's guard.
+          if (index.symbols.some((symbol) => symbol.id !== owner.id && symbol.file === owner.file
+            && (callableKinds.has(symbol.kind) || ["interface", "type"].includes(symbol.kind))
+            && symbol.range.start.byte > owner.range.start.byte && symbol.range.end.byte < owner.range.end.byte
+            && symbol.range.start.line <= line && symbol.range.end.line >= line)) return [];
+          return [[declaration, { file: owner.file, line }]];
+        });
+      }),
+    }));
+  }
 
   function isShadowed(node: Parser.SyntaxNode, file: string, name: string, bindingId: string): boolean {
     for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
@@ -87,10 +118,16 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
   }
 
   function plan(part: QuestionPart): Relationship[] {
-    const cached = plans.get(part.question);
+    const key = `${part.operation ?? ""}:${part.question}`;
+    const cached = plans.get(key);
     if (cached) return cached;
+    if (scopesOperation(part)) {
+      const checks = operationPlan(part);
+      plans.set(key, checks);
+      return checks;
+    }
     const checks: Relationship[] = [];
-    for (const { callerName, calleeName } of callRequests(part)) {
+    for (const { callerName, calleeName } of part.operation ? [] : callRequests(part)) {
       const callers = index.symbols.filter((symbol) => callableKinds.has(symbol.kind) && matchesName(symbol, callerName));
       const alternatives: Location[][] = [];
       if (callers.length === 1) for (const call of index.calls) {
@@ -131,17 +168,23 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         });
       }
     }
-    plans.set(part.question, checks);
+    plans.set(key, checks);
     return checks;
   }
 
   return {
     replacedRequirements(part: QuestionPart) {
+      if (scopesOperation(part)) return operationChecks(part).map((check) => check.name);
       return callRequests(part).map(({ calleeName }) => `${calleeName} call`);
     },
     missing(part: QuestionPart, evidence: ValidEvidence[]) {
-      return plan(part).filter((check) => !check.alternatives.some((pair) => pair.every((item) => evidence.some((cite) => sameLocation(item, cite)))))
-        .map((check) => check.requirement);
+      const satisfied = (check: Relationship) => check.alternatives.some((pair) => pair.every((item) => evidence.some((cite) => sameLocation(item, cite))));
+      const missing = plan(part).filter((check) => !satisfied(check)).map((check) => check.requirement);
+      if (scopesOperation(part) && !missing.length
+        && !operationOwners(part).some((owner) => operationPlan(part, [owner]).every(satisfied))) {
+        missing.push(`operation evidence must belong to one requested method: ${operationTarget(part)}`);
+      }
+      return missing;
     },
     checklist(part: QuestionPart, lines: Array<ValidEvidence & { ref: string }>) {
       return plan(part).map((check) => ({

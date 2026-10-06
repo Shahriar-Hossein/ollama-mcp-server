@@ -22,10 +22,14 @@ estimate.
 | Independent multi-step screen, then fresh correction follow-up | 0/3, then 0/2 complete exact-rubric positives | Provider discovery, conditions and selection remain blockers |
 | Final named caller/provider regression | 2/2 complete supported positives, 2/2 safe negatives | Bounded relationship route remains supported by this fixture |
 | Final placement | 119 loaded samples at 16% CPU / 84% GPU | No GPU-only fidelity or comparable timing claim |
+| Named-operation scoping, reused provider-condition questions | 1/2 complete minimum positive citation sets; negative selects 13/13 and avoids its frozen distractor | Development gains; absent-file selection still omits the guarded upload assignment |
+| Operation-scoping placement | 83 loaded samples at 22% CPU / 78% GPU | Mixed placement; no GPU-only fidelity or speedup claim |
 
 See the [multi-step evidence report](runs/2026-10-06-h-multistep-evidence.md).
+The latest H-only implementation and regression are in the
+[operation-scoping checkpoint](runs/2026-10-06-h-operation-scoping.md).
 Ordinary-question completeness remains the priority before caller-input calibration
-and sustained GPU-only output work. I comparisons remain paused.
+and sustained GPU-only output work. Current work focuses on H.
 
 ## Current H checkpoint — 2026-10-05
 

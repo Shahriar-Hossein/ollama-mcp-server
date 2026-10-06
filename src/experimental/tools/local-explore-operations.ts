@@ -31,6 +31,16 @@ const operations: Operation[] = [
     check("previous image condition", /\bif\s*\(.*(?:existing|previous|old).*\b(?:imageId|publicId|id)\b/i),
     check("previous image deletion", /\.(?:deleteImage|destroy|removeImage)\s*\(.*(?:existing|previous|old)/i),
   ] },
+  { id: "provider-deletion", requested: /\bdeleteImage\b|\b(?:delet\w*|destroy\w*)\b.*\b(?:image|provider)\b/i, checks: [
+    check("provider deletion invocation", /\.(?:destroy|deleteImage|removeImage)\s*\(/),
+    check("deletion resource option", /\bresource_type\s*:/),
+    check("deletion invalidation option", /\binvalidate\s*:/),
+    check("deletion result status", /\b(?:const|let)\s+\w+\s*=\s*\w+\?\.result/),
+    check("accepted deletion statuses", /\bif\s*\(.*['"]ok['"].*['"]not found['"]/),
+    check("unexpected deletion result", /\bthrow\b.*(?:Unexpected|unexpected).*delet/i),
+    check("provider error branch", /\bcatch\b/),
+    check("deletion failure reported", /\bthrow\b.*delet.*fail/i),
+  ] },
   { id: "failure", requested: /\bfail\w*\b|\b(?:rollback|clean\w*|reject\w*)\b/i, checks: [
     check("failure branch", /\bcatch\b/),
     check("failure cleanup", /\.(?:deleteImage|destroy|removeImage)\s*\(.*(?:uploaded|newImage|result).*\b(?:publicId|public_id|id)\b/i),
@@ -40,6 +50,10 @@ const operations: Operation[] = [
     check("unconditional cleanup branch", /\bfinally\b/),
     check("temporary file cleanup call", /\b(?:removeLocalTempFile|unlink|rm)\s*\(/),
     check("filesystem deletion", /\b(?:unlink|rm)\s*\(/),
+  ] },
+  { id: "cleanup-failure", requested: /\b(?:temp\w*|local file)\b.{0,50}\bfail\w*\b|\b(?:cleanup|unlink)\s+fail\w*\b/i, checks: [
+    check("cleanup filesystem deletion", /\b(?:unlink|rm)\s*\(/),
+    check("cleanup error branch", /\bcatch\b/),
   ] },
   { id: "transformation", requested: /\b(?:transform\w*|convert\w*)\b|\bturn\b.*\bquery\b/i, checks: [
     check("numeric query transformation", /\bNumber\s*\(\s*value\s*\)/),
@@ -63,6 +77,23 @@ const operations: Operation[] = [
   ] },
 ];
 
+export function withoutReplacement(question: string): boolean {
+  return /\b(?:without|no|absent)\s+(?:a\s+|any\s+|the\s+)?(?:new\s+|replacement\s+)?(?:file|image)\b|\bwithout\s+(?:upload\w*|replac\w*)\s+(?:an?\s+)?(?:file|image)\b/i.test(question)
+    && /\b(?:updat\w*|replac\w*)\b/i.test(question);
+}
+
+export function operationTarget(part: QuestionPart): string | undefined {
+  const quoted = part.question.match(/\b(?:when|if|does|method|function)\s+`([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)`/i)?.[1];
+  if (quoted) return quoted;
+  if (part.operation === "storage" && withoutReplacement(part.question)) return "update";
+  if (part.operation === "provider-deletion" && /\bdeleteImage\b/.test(part.question)) return "deleteImage";
+  if (part.operation === "cleanup-failure") return "removeLocalTempFile";
+  if (["upload", "failure"].includes(part.operation ?? "")
+    && /\b(?:temp\w*|local file)\b/i.test(part.question) && /\bupload\w*\b/i.test(part.question)
+    && !/\b(?:creat\w*|updat\w*|replac\w*|persist\w*|record)\b/i.test(part.question)) return "uploadImage";
+  return undefined;
+}
+
 export function operationChecks(part: QuestionPart): OperationCheck[] {
   const checks = operations.find((operation) => operation.id === part.operation)?.checks ?? [];
   const additional: OperationCheck[] = [];
@@ -80,21 +111,44 @@ export function operationChecks(part: QuestionPart): OperationCheck[] {
     additional.push(check("upload result validity guard", /\bif\s*\(.*!\w+\?\.(?:secure_url|public_id|secureUrl|publicId)/));
     additional.push(check("upload failure reported", /\bthrow\b.*(?:upload.*fail|fail.*upload)/i));
   }
+  if (part.operation === "failure" && /\b(?:temp\w*|local file)\b/i.test(part.question) && /\bupload\w*\b/i.test(part.question)) {
+    additional.push(check("upload error passthrough guard", /\bif\s*\(\s*error\s+instanceof\s+\w+/));
+    additional.push(check("upload error passthrough", /\bthrow\s+error\b/));
+  }
   if (part.operation === "storage" && /\b(?:updat\w*|replac\w*)\b/i.test(part.question)) {
     additional.push(check("existing record lookup", /\.(?:findUnique|findOne|findById)\s*\(/));
     additional.push(check("missing record guard", /\bif\s*\(\s*!(?:existing\w*|record|team|member)\s*\)/i));
     additional.push(check("missing record rejection", /\bthrow\b.*(?:NotFound|not found)/i));
     additional.push(check("optional image guard", /\bif\s*\(\s*(?:file|image)\s*\)/));
     additional.push(check("conditional image fields", /^\s*\.\.\.\s*\(\s*(?:uploaded|newImage|result)\s*$/));
+    if (withoutReplacement(part.question)) {
+      additional.push(check("optional upload state", /\b(?:let|const)\s+(?:uploaded|newImage|result)\s*[:=]/));
+      additional.push(check("undefined upload state", /\|\s*undefined\s*;|=\s*undefined\s*;/));
+      additional.push(check("ordinary update fields", /\.\.\.\s*(?:dto|data)\b/));
+      additional.push(check("empty image fallback", /:\s*\{\s*\}\s*\)/));
+    }
   }
-  return [...checks.filter((item) => item.name !== "failure cleanup"
-    || /\b(?:creat\w*|updat\w*|replac\w*|record|persist\w*|stor\w*|sav\w*)\b/i.test(part.question)), ...additional];
+  const target = operationTarget(part);
+  if (target) {
+    const name = target.split(".").at(-1)!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    additional.unshift(check("requested method declaration", new RegExp(`^\\s*(?:(?:export|default|public|private|protected|static|async|function)\\s+)*${name}\\s*\\([^;]*`)));
+  }
+  return [...additional.filter((item) => item.name === "requested method declaration"),
+    ...checks.filter((item) => item.name !== "failure cleanup"
+      || /\b(?:creat\w*|updat\w*|replac\w*|record|persist\w*|stor\w*|sav\w*)\b/i.test(part.question)),
+    ...additional.filter((item) => item.name !== "requested method declaration")];
 }
 
 export function operationParts(question: string): QuestionPart[] | null {
   // Preserve the separately checked named-call/configuration route.
-  if (/\bcall(?:s)?\s+[A-Za-z_$]|\bconfigured\b|\bsetting\b|\bpayload\b|\bBearer\b|request\.user/i.test(question)) return null;
-  const selected = operations.filter((operation) => operation.requested.test(question));
+  const providerCall = /\bcall(?:s)?\s+[A-Z][\w$]*\b(?![.\w$]|\s*\()/.test(question)
+    && /\b(?:image|upload\w*|deleteImage)\b/i.test(question);
+  if ((!providerCall && /\bcall(?:s)?\s+[A-Za-z_$]/i.test(question))
+    || /\bconfigured\b|\bsetting\b|\bpayload\b|\bBearer\b|request\.user/i.test(question)) return null;
+  const positive = question.replace(/\b(?:without|no|absent)\s+(?:a\s+|any\s+|the\s+)?(?:new\s+|replacement\s+)?(?:file|image)\b/gi, "")
+    .replace(/\bwithout\s+(?:upload\w*|replac\w*)\b(?:\s+(?:an?\s+)?(?:file|image))?/gi, "");
+  const selected = operations.filter((operation) => operation.requested.test(positive)
+    || (operation.id === "storage" && withoutReplacement(question)));
   if (!selected.length) return null;
   return selected.map((operation) => {
     const part: QuestionPart = { id: "", question, operation: operation.id, evidence_needed: "", completeness: "unchecked" };

@@ -129,3 +129,7 @@ to the requested method. Keep this screen as development evidence and freeze
 new questions for validation. Broader H reliability, parent review effort,
 representative caller calibration and GPU-only long-output fidelity remain
 unmeasured. I comparisons remain paused.
+
+The subsequent H-only implementation and development regression are recorded in
+[the operation-scoping checkpoint](2026-10-06-h-operation-scoping.md). This report
+and its original frozen follow-up remain unchanged evidence for the earlier route.

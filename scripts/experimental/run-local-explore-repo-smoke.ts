@@ -73,7 +73,7 @@ const protocol = {
   target_commit_hash: runCommand("git", ["rev-parse", "HEAD"], root),
   target_working_tree_diff: runCommand("git", ["diff", "--binary"], root),
   limit: 10,
-  route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, operation_checklists: true, operation_provider_hints: true, explicit_image_conditions: true, unchecked_completeness_requires_review: true, max_refs_per_part: 16, max_operation_windows_per_source: 6, reserve_all_chain_files: true, import_call_expansion_hops: 2, named_caller_identity: true, direct_object_provider_pairs: true, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx, num_predict, think, invalid_evidence_retries: 1 },
+  route_controls: { retrieval_mode: "basic", max_files_per_part: 6, max_bundles: 6, max_context_chars: 24_000, question_parts: true, operation_checklists: true, operation_provider_hints: true, explicit_image_conditions: true, negated_image_operations: true, whole_operation_question: true, named_operation_method_pairs: true, same_method_coverage: true, requirement_window_priority: true, cleanup_error_contrast: true, unchecked_completeness_requires_review: true, max_refs_per_part: 16, max_operation_windows_per_source: 6, reserve_all_chain_files: true, import_call_expansion_hops: 2, named_caller_identity: true, direct_object_provider_pairs: true, bundled_context_dedup: true, evidence_line_refs: true, bounded_expansion_rounds: 1, structured_output: true, num_ctx, num_predict, think, invalid_evidence_retries: 1 },
   ollama_version: runCommand("ollama", ["--version"]),
 };
 const results: unknown[] = [];

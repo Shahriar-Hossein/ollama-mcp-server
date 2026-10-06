@@ -37,7 +37,9 @@ function selectedLines(source: string, startLine: number, query: string, pattern
   const terms = [...new Set((query.toLowerCase().match(/[a-z0-9_]{4,}/g) ?? []).filter((term) => !["where", "which", "what", "when", "does", "from", "with"].includes(term)))];
   const scores = all.map((line) => terms.reduce((sum, term) => sum + (line.toLowerCase().includes(term) ? term.length : 0), 0));
   const best = scores.indexOf(scores.reduce((maximum, score) => Math.max(maximum, score), 0));
-  const anchors = [...new Set(patterns.flatMap((pattern) => all.flatMap((line, offset) => line.match(pattern) ? [offset] : [])))];
+  const matches = patterns.map((pattern) => all.flatMap((line, offset) => line.match(pattern) ? [offset] : []));
+  // Give each requirement a window before repeated matches consume the cap.
+  const anchors = [...new Set([...matches.flatMap((hits) => hits.slice(0, 1)), ...matches.flatMap((hits) => hits.slice(1))])];
   const lines = new Map<number, EvidenceLine>();
   const centers = [...anchors, best];
   let windows = 0;

@@ -80,6 +80,11 @@ server shortlists lines for each evidence requirement, constrains output refs
 to supplied lines, copies quotes from source, and retries once while retaining
 checked partial citations. Image workflows and query/list questions have
 explicit operation checklists and separate source windows. These checklists
+preserve absent-file fallback branches and recognize provider-name phrasing.
+Recognized named image operations require method declarations and conditions/errors
+from the same indexed method. Cleanup-error contrasts keep upload and helper
+evidence separate; the parent inspects the helper to establish suppression.
+These checks
 guide selection but do not prove semantic completeness across providers or
 branches. Unchecked completeness, empty checklists and missing requirements
 return `needs_review`. Recognized bounded coverage checks remain heuristics;

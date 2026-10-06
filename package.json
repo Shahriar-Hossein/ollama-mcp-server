@@ -26,7 +26,7 @@
     "test:features": "node --import tsx --test src/config/*.test.ts",
     "quality": "node --env-file-if-exists=.env --import tsx src/quality-review/cli.ts",
     "test:quality": "node --import tsx --test src/quality-review/*.test.ts",
-    "test:local-explore": "node --import tsx --test src/experimental/tools/local-explore-repo.test.ts src/experimental/tools/local-explore-relationships.test.ts src/experimental/tools/local-explore-operations.test.ts",
+    "test:local-explore": "node --import tsx --test src/experimental/tools/local-explore-repo.test.ts src/experimental/tools/local-explore-relationships.test.ts src/experimental/tools/local-explore-operations.test.ts src/experimental/tools/local-explore-conditions.test.ts",
     "test:h-grader": "node --import tsx --test scripts/experimental/grade-h-heldout.test.ts",
     "test:models": "node --import tsx --test src/model-budget.test.ts src/qwen-tokenizer.test.ts"
   },

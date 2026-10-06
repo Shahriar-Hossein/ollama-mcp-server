@@ -1,0 +1,230 @@
+{
+  "version": 4,
+  "authorship": "Fresh-context read-only Luna source review. Lead removed brace-only and other unselectable lines and added uploaded declaration/conditional image mapping lines during pre-call rubric audit; question wording unchanged.",
+  "protocol": "Development regression: reuse the preceding provider-condition questions and unchanged line rubrics after targeted fixes. No independent accuracy or speedup claim. Freeze implementation before calls; no tuning after this screen.",
+  "files": {
+    "src/common/cloudinary/cloudinary.service.ts": "42ee330cdfaa6cada28ed8fb6f2761aefe7f62eb7c7a628ca604913e933a0afd",
+    "src/common/upload/image-upload.options.ts": "fbec85550b10ce3815f378f70436f8d6b957a7aacfc3f1e9db476f1288df5885",
+    "src/config/cloudinary.config.ts": "17c9e897411a0db1fbfbe0e4e875ee49086e1fae30c76c394b758f161a37f4a5",
+    "src/modules/team/dto/query-team.dto.ts": "d5212a3962a24db2d36a809c431abe31fc364ec56802abf46043671444b280c5",
+    "src/modules/team/team.controller.ts": "807b002f84fe326745322c2d7d064c89048f20af3d0d64ba3c158714a242781d",
+    "src/modules/team/team.service.ts": "287b50b582d9db451e10288f96ad0e099dea446ed44a6ae3ef0de65e10854c93"
+  },
+  "questions": [
+    {
+      "id": "provider_delete_results",
+      "kind": "positive",
+      "query": "When `deleteImage` calls Cloudinary, which result statuses count as success, what options are sent, and how are other results or provider errors reported?",
+      "required": [
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 44,
+          "text": "async deleteImage(publicId: string): Promise<void> {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 46,
+          "text": "const result = await cloudinary.uploader.destroy(publicId, {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 47,
+          "text": "resource_type: 'image',"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 48,
+          "text": "invalidate: true,"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 50,
+          "text": "const status = result?.result;"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 51,
+          "text": "if (status !== 'ok' && status !== 'not found') {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 52,
+          "text": "throw new Error('Unexpected Cloudinary delete result');"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 54,
+          "text": "} catch {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 55,
+          "text": "throw new BadRequestException('Image delete failed');"
+        }
+      ]
+    },
+    {
+      "id": "update_without_file",
+      "kind": "positive",
+      "query": "If `update` is called without a replacement file, what happens when the team does not exist, and which image fields are written when it does exist?",
+      "required": [
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 110,
+          "text": "async update(id: string, dto: UpdateTeamDto, file?: Express.Multer.File): Promise<Team> {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 111,
+          "text": "const existingTeam = await this.prisma.team.findUnique({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 112,
+          "text": "where: { id },"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 115,
+          "text": "if (!existingTeam) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 116,
+          "text": "throw new NotFoundException('Team member not found');"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 119,
+          "text": "let uploaded:"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 124,
+          "text": "| undefined;"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 126,
+          "text": "if (file) {"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 127,
+          "text": "uploaded = await this.cloudinaryService.uploadImage(file, this.cloudinaryFolder);"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 140,
+          "text": "return await this.prisma.team.update({"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 143,
+          "text": "...dto,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 144,
+          "text": "...(uploaded"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 146,
+          "text": "image: uploaded.secureUrl,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 147,
+          "text": "imageId: uploaded.publicId,"
+        },
+        {
+          "file": "src/modules/team/team.service.ts",
+          "line": 149,
+          "text": ": {}),"
+        }
+      ]
+    },
+    {
+      "id": "temp_cleanup_failure",
+      "kind": "negative",
+      "query": "If removing the local temporary upload file fails after a Cloudinary upload, is that failure reported to the caller? Contrast it with a Cloudinary upload failure.",
+      "required": [
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 21,
+          "text": "const uploaded = await cloudinary.uploader.upload(file.path, {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 26,
+          "text": "if (!uploaded?.secure_url || !uploaded?.public_id) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 27,
+          "text": "throw new BadRequestException('Image upload failed');"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 34,
+          "text": "} catch (error) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 35,
+          "text": "if (error instanceof BadRequestException) {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 36,
+          "text": "throw error;"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 38,
+          "text": "throw new BadRequestException('Image upload failed');"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 39,
+          "text": "} finally {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 40,
+          "text": "await this.removeLocalTempFile(file.path);"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 59,
+          "text": "private async removeLocalTempFile(path: string): Promise<void> {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 61,
+          "text": "await unlink(path);"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 62,
+          "text": "} catch {"
+        },
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 63,
+          "text": "// Ignore temp file cleanup failures."
+        }
+      ],
+      "forbidden": [
+        {
+          "file": "src/common/cloudinary/cloudinary.service.ts",
+          "line": 55
+        }
+      ],
+      "absence": "removeLocalTempFile catches unlink failure without rethrowing; upload errors are surfaced. Full method source must be reviewed to establish absence."
+    }
+  ],
+  "frozen_at": "2026-10-06T16:33:09.410904+00:00",
+  "prior_fixture_sha256": "4629feccbed00775849f8ea088be632329588f16133868b2d7b3962ef7cdf507"
+}

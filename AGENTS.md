@@ -94,7 +94,13 @@ This is the canonical instructions file for this repo — other agent configs
   import paths and matching unresolved method names for provider context;
   these hints do not resolve aliases, injected providers or runtime calls.
   Image checklists include missing-input, optional-file, record-lookup and
-  upload-result guards. Natural operation plans and unrecognized questions require
+  upload-result guards. Negated replacement requests preserve optional-upload
+  state and empty fallback windows. Provider-name phrasing uses operation hints,
+  not a literal provider function requirement. Recognized named image operations
+  pair declarations with conditions/errors in one indexed method; nested indexed
+  callables and competing methods cannot complete that method's checklist.
+  Cleanup-error contrasts separate upload errors from the cleanup helper's catch;
+  suppression still requires parent inspection. Natural operation plans and unrecognized questions require
   review because semantic completeness remains unchecked; empty checklists
   must never establish support. Selection allows sixteen refs per part while
   retaining the six-part, character, output and two-call budgets.
