@@ -167,7 +167,7 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
       add({ id: "", kind: "text_match", file, lines: selectedLines(source, 1, query, patterns) });
     }
   }
-  expandCrossFileCandidates(root, index, candidates, query, patterns).forEach(add);
+  expandCrossFileCandidates(root, index, candidates, query, patterns, Boolean(part?.operation)).forEach(add);
   for (const result of results) {
     if (candidates.length >= results.length) break;
     const file = result.evidence.file;
@@ -202,11 +202,17 @@ export function buildCandidates(root: string, results: RetrievalResult[], index:
   return candidates;
 }
 
-function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: Candidate[], query: string, patterns: RegExp[]): Candidate[] {
+function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: Candidate[], query: string, patterns: RegExp[], discoverProviders = false): Candidate[] {
   const expanded: Candidate[] = [];
   const visited = new Set(seeds.map((candidate) => candidate.file));
   let frontier = [...visited];
   const terms = query.toLowerCase().match(/[a-z0-9_]{4,}/g) ?? [];
+  const indexedFiles = new Set(index.symbols.map((symbol) => symbol.file));
+  const sources = new Map<string, string>();
+  const sourceFor = (file: string) => {
+    if (!sources.has(file)) sources.set(file, readFileSync(checkedFile(root, file), "utf8"));
+    return sources.get(file)!;
+  };
   for (let depth = 0; depth < 2 && visited.size < MAX_FILES; depth++) {
     const neighbors = new Map<string, number>();
     const offer = (file: string | null, score: number) => {
@@ -216,8 +222,26 @@ function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: 
     for (const dependency of index.dependencies) {
       if (frontier.includes(dependency.file)) offer(dependency.target_file, 2);
       if (dependency.target_file && frontier.includes(dependency.target_file)) offer(dependency.file, 1);
+      if (discoverProviders && !dependency.target_file && frontier.includes(dependency.file)) {
+        // An indexed path hint supplies context; it does not resolve an alias or provider.
+        const hint = dependency.module_specifier.replace(/\.[cm]?[jt]sx?$/, "");
+        if (hint.startsWith("src/") && !hint.split("/").includes("..")) {
+          for (const file of indexedFiles) {
+            if (file.replace(/\.[cm]?[jt]sx?$/, "").replace(/\/index$/, "") === hint) offer(file, 4);
+          }
+        }
+      }
     }
     for (const call of index.calls) {
+      if (discoverProviders && frontier.includes(call.file) && !call.callee_symbol_id) {
+        const line = sourceFor(call.file).split("\n")[call.range.start.line - 1];
+        if (patterns.some((pattern) => line?.match(pattern))) {
+          const name = call.callee_name.split(".").at(-1);
+          for (const symbol of index.symbols) {
+            if (["method", "function"].includes(symbol.kind) && symbol.name === name) offer(symbol.file, 3);
+          }
+        }
+      }
       if (!call.callee_symbol_id || !["exact", "static"].includes(call.resolution)) continue;
       const callee = index.symbols.find((symbol) => symbol.id === call.callee_symbol_id);
       if (!callee) continue;
@@ -225,7 +249,7 @@ function expandCrossFileCandidates(root: string, index: RepositoryIndex, seeds: 
       if (frontier.includes(callee.file)) offer(call.file, 3);
     }
     const ranked = [...neighbors].map(([file, edgeScore]) => {
-      const source = readFileSync(checkedFile(root, file), "utf8");
+      const source = sourceFor(file);
       const score = edgeScore + new Set(terms.filter((term) => source.toLowerCase().includes(term))).size;
       return { file, source, score };
     }).sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));
@@ -269,7 +293,7 @@ export function compileEvidenceBundles(parts: QuestionPart[], byPart: Map<string
     if (packed.length) bundles.push({
       id: `B${bundles.length + 1}`, part_id: part.id,
       why_retrieved: "ranked source with bounded caller/callee/import expansion",
-      relationship: "candidate context; import adjacency does not prove a runtime call",
+      relationship: "candidate context; import adjacency does not prove a runtime call; unresolved import paths and method-name matches are provider hints only",
       candidates: packed,
     });
   }

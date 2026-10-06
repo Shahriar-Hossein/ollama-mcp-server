@@ -31,6 +31,7 @@ numbers behind one specific series.
 | [2026-09-25-local-explore-repo-improvements.md](runs/2026-09-25-local-explore-repo-improvements.md) | Evidence bundle and citation changes, with a follow-up smoke check |
 | [2026-10-05-h-tokenizer-heldout.md](runs/2026-10-05-h-tokenizer-heldout.md) | Matching input accounting, frozen cross-file/negative questions, sustained output and outage recovery |
 | [2026-10-06-h-multistep-evidence.md](runs/2026-10-06-h-multistep-evidence.md) | Operation checklists, source windows, safe review gates and fresh completeness failures |
+| [2026-10-06-h-provider-conditions.md](runs/2026-10-06-h-provider-conditions.md) | Provider search hints, explicit image conditions and a frozen follow-up screen |
 
 ## The rule for benchmark work
 

@@ -46,13 +46,22 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   Complete minimum evidence: 0/3 positives; appropriate status: 2/2 negatives.
   One negative retains a distractor, and two incomplete positives still return
   `evidence_selected`. These are open gaps, not broader reliability evidence.
-- [ ] Next: improve natural question decomposition and source windows within
-  large methods. Require review when evidence completeness cannot be checked;
-  validate on new independently authored questions, preserving this screen.
+- [x] Improve natural question decomposition and source windows within large
+  methods. Require review for unchecked completeness; freeze new source-slice
+  questions. Development improves to 2/3 complete minimum selections, but fresh
+  exact-rubric positives remain incomplete. See the [multi-step report](experimental/benchmarks/runs/2026-10-06-h-multistep-evidence.md).
+- [x] Add operation-driven provider search hints and explicit image conditions.
+  The missing adapter now supplies 11/11 development requirements, selecting
+  10/11. Fresh exact-rubric positives remain 0/2 complete; the negative safely
+  requires review but retains a distractor. See the [provider/condition report](experimental/benchmarks/runs/2026-10-06-h-provider-conditions.md).
+- [ ] Next: recognize negated operation requests and provider-name phrasing;
+  preserve condition/fallback windows and bind branch/error citations to the
+  requested method. Freeze new independently authored validation questions.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current evidence work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).
+Current evidence work: [provider discovery and image conditions](experimental/benchmarks/runs/2026-10-06-h-provider-conditions.md).
+Earlier work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).
 Earlier improvement: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).
 Earlier results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
 The two negative development reruns now require review. The inventory stops
@@ -242,7 +251,7 @@ Byte fallback remains conservative. Do not infer an H/I quality winner.
   q8 comparisons: `q8/`; aggregate: `summary.json`.
 - Clean q4 placement scripts/results: `benchmark-data/qwen-context/gpu-fit/`.
 - Clean q8 placement script/log/results: `benchmark-data/qwen-context/q8-gpu-fit/`.
-- Current checks: 28 scout/relationship, 17 model-budget/tokenizer, 3 feature,
+- Current checks: 38 scout/relationship/operation, 17 model-budget/tokenizer, 3 feature,
   8 Quality Review and 2 grader CLI tests pass. Whitespace checks pass. Standard TypeScript checking remains
   blocked by missing `vitest` in an existing experimental test; a temporary
   config excluding only that test checks the remaining source and smoke CLI.

@@ -26,6 +26,8 @@ const operations: Operation[] = [
     check("stored image ID", /\b(?:imageId|publicId|id)\s*:\s*\w+\.(?:publicId|public_id|id)/),
   ] },
   { id: "replacement", requested: /\breplac\w*\b/i, checks: [
+    check("existing record lookup", /\.(?:findUnique|findOne|findById)\s*\(/),
+    check("optional image guard", /\bif\s*\(\s*(?:file|image)\s*\)/),
     check("previous image condition", /\bif\s*\(.*(?:existing|previous|old).*\b(?:imageId|publicId|id)\b/i),
     check("previous image deletion", /\.(?:deleteImage|destroy|removeImage)\s*\(.*(?:existing|previous|old)/i),
   ] },
@@ -69,6 +71,21 @@ export function operationChecks(part: QuestionPart): OperationCheck[] {
   }
   if (part.operation === "filter" && /\blist\b/i.test(part.question)) {
     additional.push(check("list request dispatch", /return\s+(?:await\s+)?this\.\w+\.(?:findAll|list)\s*\(/));
+  }
+  if (part.operation === "upload" && /\b(?:without|missing|absent|no)\b.*\b(?:image|file)\b/i.test(part.question)) {
+    additional.push(check("missing image guard", /\bif\s*\(\s*!(?:file|image)(?:\?\.(?:path|buffer))?\s*\)/));
+    additional.push(check("missing image rejection", /\bthrow\b.*(?:required|Invalid.*(?:image|file))/i));
+  }
+  if (part.operation === "upload" && /\b(?:fail\w*|reject\w*|invalid|missing)\b/i.test(part.question)) {
+    additional.push(check("upload result validity guard", /\bif\s*\(.*!\w+\?\.(?:secure_url|public_id|secureUrl|publicId)/));
+    additional.push(check("upload failure reported", /\bthrow\b.*(?:upload.*fail|fail.*upload)/i));
+  }
+  if (part.operation === "storage" && /\b(?:updat\w*|replac\w*)\b/i.test(part.question)) {
+    additional.push(check("existing record lookup", /\.(?:findUnique|findOne|findById)\s*\(/));
+    additional.push(check("missing record guard", /\bif\s*\(\s*!(?:existing\w*|record|team|member)\s*\)/i));
+    additional.push(check("missing record rejection", /\bthrow\b.*(?:NotFound|not found)/i));
+    additional.push(check("optional image guard", /\bif\s*\(\s*(?:file|image)\s*\)/));
+    additional.push(check("conditional image fields", /^\s*\.\.\.\s*\(\s*(?:uploaded|newImage|result)\s*$/));
   }
   return [...checks.filter((item) => item.name !== "failure cleanup"
     || /\b(?:creat\w*|updat\w*|replac\w*|record|persist\w*|stor\w*|sav\w*)\b/i.test(part.question)), ...additional];

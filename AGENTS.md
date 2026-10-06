@@ -90,7 +90,11 @@ This is the canonical instructions file for this repo — other agent configs
   require review. These checks do not establish general semantic completeness.
   `local-explore-operations.ts` supplies explicit image-workflow and query/list
   operation checklists. Packing preserves separate operation windows within
-  large sources. Natural operation plans and unrecognized questions require
+  large sources. Operation plans also search indexed root-relative `src/`
+  import paths and matching unresolved method names for provider context;
+  these hints do not resolve aliases, injected providers or runtime calls.
+  Image checklists include missing-input, optional-file, record-lookup and
+  upload-result guards. Natural operation plans and unrecognized questions require
   review because semantic completeness remains unchecked; empty checklists
   must never establish support. Selection allows sixteen refs per part while
   retaining the six-part, character, output and two-call budgets.
