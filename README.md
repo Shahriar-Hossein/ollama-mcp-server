@@ -91,13 +91,21 @@ return `needs_review`. Recognized bounded coverage checks remain heuristics;
 the parent still interprets behavior.
 
 Local delegation, summaries and both scout routes default to
-`qwen-context:h-q4_0-50k`. They inherit the selected model's saved `num_ctx`.
+`qwen-context:h-q4_0-24k`. They inherit the selected model's saved `num_ctx`.
 Default output reserves are the smaller of its finite saved ceiling and 8192
 for delegation/summaries or 2048 for either scout. Optional request fields
 override these limits explicitly; long output needs a larger `num_predict`.
-H is set to 50000 context / 16000 saved output for additional GPU fit margin.
-The [placement report](docs/experimental/benchmarks/runs/2026-10-05-h-cpu-placement.md)
-explains the 64K offload and lower-context verification. Budget metadata
+H defaults to 24576 context / 16000 saved output. The
+[desktop GPU report](docs/experimental/benchmarks/runs/2026-10-06-h-desktop-gpu.md)
+records the 50K/32K offload and verified 24K placement. The retained
+`qwen-context:h-q4_0-50k` is an explicit option for larger inputs; it can offload
+under desktop memory pressure. At the default output reserves, 24K leaves 15360
+input tokens for delegation/summaries and 21504 for scouts, before prompt/schema
+charges. Oversized inputs still return `input_overflow`.
+Restart the MCP server through your client to load the new default. In Codex for
+VS Code, run **Developer: Reload Window** from the command palette to start a fresh
+server process. Existing clients explicitly requesting 50K must select the new tag
+or omit `model`. Budget metadata
 identifies limits from the model, tool policy, or request. Advanced
 discovery/verification also inherit saved settings. Missing saved limits use
 reported 16384/8192 fallbacks; unbounded output defaults require an explicit

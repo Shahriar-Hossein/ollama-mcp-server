@@ -2,13 +2,12 @@
 
 Updated: 2026-10-06. Active work focuses on H; I comparisons are paused.
 
-H now uses `qwen-context:h-q4_0-50k`, with saved 50000 context and 16000
-output tokens. The old 64K alias was removed on 2026-10-05. The 64K load spilled during the first scout request; the
-[placement diagnosis](experimental/benchmarks/runs/2026-10-05-h-cpu-placement.md)
-records the reason and lower-context checks. Selection now returns complete source-backed evidence for all
-four development questions in three runs, both at the saved output ceiling
-and at the new 2048 scout reserve. This does not establish held-out quality.
-See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-improvements.md).
+H now uses `qwen-context:h-q4_0-24k`, with saved 24576 context and 16000
+output tokens. The retained 50K tag is an explicit larger-context option.
+The [desktop GPU report](experimental/benchmarks/runs/2026-10-06-h-desktop-gpu.md)
+records why 50K and 32K can spill and the verified 24K loads. GPU residency
+under other desktop workloads still needs checking. Current evidence selection
+remains incomplete; see the [operation-scoping checkpoint](experimental/benchmarks/runs/2026-10-06-h-operation-scoping.md).
 
 ## Active H-only work
 
@@ -17,8 +16,8 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   the bounded retry; require an actual competing-worker rejection.
 - [x] Apply default output reserves: 8192 for delegation/summaries, 2048 for
   both scouts, capped by the saved finite ceiling. Explicit overrides remain
-  available. H input allowances are 40784 and 46928 respectively, before
-  charging prompt overhead. The output ceiling is unchanged; context was lowered from 64000 to 50000.
+  available. H/24K input allowances are 15360 and 21504 respectively, before
+  charging prompt/schema overhead. The 16000 saved output ceiling is unchanged.
 - [x] Report prompt/system/schema/template byte charges and calibrate actual
   MCP handler requests using sanitized synthetic code, logs, Unicode and JSON.
   Keep the conservative byte bound; these samples do not justify a universal
@@ -54,13 +53,16 @@ See the [H-only improvement report](experimental/benchmarks/runs/2026-10-05-h-im
   The missing adapter now supplies 11/11 development requirements, selecting
   10/11. Fresh exact-rubric positives remain 0/2 complete; the negative safely
   requires review but retains a distractor. See the [provider/condition report](experimental/benchmarks/runs/2026-10-06-h-provider-conditions.md).
-- [ ] Next: recognize negated operation requests and provider-name phrasing;
-  preserve condition/fallback windows and bind branch/error citations to the
-  requested method. Freeze new independently authored validation questions.
+- [x] Recognize negated operation requests and provider-name phrasing; preserve
+  condition/fallback windows and bind branch/error citations to the requested
+  method. Reused development positives complete 1/2 minimum citation sets; the
+  absent-file path still omits its guarded upload assignment.
+- [ ] Freeze structurally different validation questions from another repository
+  before further evidence-selection tuning.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current evidence work: [provider discovery and image conditions](experimental/benchmarks/runs/2026-10-06-h-provider-conditions.md).
+Current evidence work: [operation scoping](experimental/benchmarks/runs/2026-10-06-h-operation-scoping.md).
 Earlier work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).
 Earlier improvement: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).
 Earlier results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
@@ -80,29 +82,32 @@ ceiling has now been exercised in the current report above.
 
 On 2026-10-03, H changed from 50K to 64000 context and 16000 output
 tokens. On 2026-10-05 it returned to 50000 context after the 64K load
-offloaded two layers. The 16000 output ceiling and sampling are retained.
+offloaded two layers. On 2026-10-06 H moved to 24576 as the desktop default; 50K remains explicit.
+The 16000 output ceiling and sampling are retained.
 
-Both variants use the same Qwen 3.5 4B Q4_K_M weights and template.
+The variants use the same Qwen 3.5 4B Q4_K_M weights and template.
 Q4/Q8 below describe **KV-cache precision**, not weight quantization.
 Context is the total input/output window. Output ceilings are maxima;
 request concise results unless the task requires long output.
 
 | Tag | KV cache | Context tokens | Output ceiling | Input budget with full output reserve and 1024 margin |
 |---|---|---:|---:|---:|
-| `qwen-context:h-q4_0-50k` | q4_0 | 50000 | 16000 | 32976 |
+| `qwen-context:h-q4_0-24k` (default) | q4_0 | 24576 | 16000 | 7552 |
+| `qwen-context:h-q4_0-50k` (explicit) | q4_0 | 50000 | 16000 | 32976 |
 | `qwen-context:i-q8_0-32k` | q8_0 | 32768 | 25000 | 6744 |
 
 - [x] Install H/I and verify inherited context/output parameters.
 - [x] Delete A–G context tags and Modelfile folders. Retain base
   `qwen3.5:4b` (ID `2a654d98e6fb`, full digest in raw artifacts).
 - [x] Keep Modelfiles, registry and setup README under
-  `/home/shahriar/ollama-models/qwen-context/` consistent with H/I only.
-- [x] Verify GPU placement for H/50000 and q8/32768.
+  `/home/shahriar/ollama-models/qwen-context/` consistent with the current H default and retained explicit profiles.
+- [x] Verify repeated H/24576 GPU-only loads under bounded desktop memory pressure.
+  Previous H/50000 and q8/32768 observations remain historical evidence.
 - [x] Test H sustained generation with the 16000 ceiling: 13446 output
   tokens, valid 36-record JSON, 35/36 exact records, 500 seconds. Power loss
   interrupted the first attempt; the separate retry used mixed placement.
 - [ ] Verify H sustained long output on a fresh GPU-only runner under the
-  current desktop workload. A post-reboot 50K load still offloaded two layers.
+  current desktop workload at the new 24K default. Earlier 50K runs used mixed placement.
 - [ ] Test sustained generation at I's 25000 ceiling if I work resumes.
 - [ ] Compare useful evidence and parent task completion on H/I before
   choosing a quality-based routing default.

@@ -10,7 +10,7 @@ import { indexRepository } from "../../explorer/indexer.js";
 import { evidenceChecklist, missingEvidenceRequirements } from "./local-explore-validation.js";
 
 const runLocalExploreRepo: typeof runScout = (params, generateAnswer) => runScout(params, generateAnswer,
-  (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 50000\nnum_predict 16000" }), reserve));
+  (model, overrides, _load, reserve) => resolveModelBudget(model, overrides, async () => ({ parameters: model.includes(":h-q4_0-24k") ? "num_ctx 24576\nnum_predict 16000" : model.includes(":i-") ? "num_ctx 32768\nnum_predict 25000" : "num_ctx 50000\nnum_predict 16000" }), reserve));
 
 type PromptSource = { file: string; lines: Array<{ ref: string; line: number; text: string }> };
 type PromptBundle = { why_retrieved: string; sources: PromptSource[] };
@@ -52,10 +52,10 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
     let calls = 0;
     const stub: typeof generate = async (model, prompt, _system, format, think, options) => {
       calls++;
-      assert.equal(model, "qwen-context:h-q4_0-50k");
+      assert.equal(model, "qwen-context:h-q4_0-24k");
       assert.equal(typeof format, "object");
       assert.equal(think, false);
-      assert.deepEqual(options, { num_ctx: 50_000, num_predict: 2_048 });
+      assert.deepEqual(options, { num_ctx: 24_576, num_predict: 2_048 });
       const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
       const source = sources.find((item) => item.lines.some((line) => line.text.includes("calculateTotal")));
       assert.ok(source);
@@ -90,7 +90,7 @@ test("decomposes independent evidence requirements", () => {
   ]);
 });
 
-test("lock question includes the SQLite lock and its caller in source bundles", async () => {
+test("lock question packs source and caller with an explicit 50K byte budget", async () => {
   const root = process.cwd();
   const stub: typeof generate = async (_model, prompt) => {
     const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
@@ -107,7 +107,7 @@ test("lock question includes the SQLite lock and its caller in source bundles", 
     const callerRef = caller.lines.find((line) => line.text.includes("this.store.lock()"))!.ref;
     return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [...refs, callerRef] }], confidence: "medium", unresolved: [], next_action: { ref: "" } });
   };
-  const result = await runLocalExploreRepo({ repository_root: root, query: "How does Quality Review prevent duplicate concurrent workers?" }, stub);
+  const result = await runLocalExploreRepo({ repository_root: root, query: "How does Quality Review prevent duplicate concurrent workers?", num_ctx: 50000 }, stub);
   assert.equal(result.status, "evidence_selected");
 });
 
@@ -223,9 +223,9 @@ test("unrelated throws do not establish competing-worker rejection", () => {
   assert.equal(directEvidenceForPart(decomposeQuestion(query)[0], evidence, query), false);
 });
 
-test("combines checked partial locking citations across the bounded retry", async () => {
+test("combines checked partial locking citations with an explicit 50K byte budget", async () => {
   let calls = 0;
-  const result = await runLocalExploreRepo({ repository_root: process.cwd(), query: "How does Quality Review prevent duplicate concurrent workers?" }, async (_model, prompt) => {
+  const result = await runLocalExploreRepo({ repository_root: process.cwd(), query: "How does Quality Review prevent duplicate concurrent workers?", num_ctx: 50000 }, async (_model, prompt) => {
     calls++;
     const lines = promptBundles(prompt).flatMap((bundle) => bundle.sources).flatMap((source) => source.lines);
     const texts = calls === 1 ? ["this.transaction(", "BEGIN IMMEDIATE", "INSERT INTO worker_lock"] : ["Another scan/worker owns the queue", "this.store.lock()"];

@@ -33,6 +33,7 @@ numbers behind one specific series.
 | [2026-10-06-h-multistep-evidence.md](runs/2026-10-06-h-multistep-evidence.md) | Operation checklists, source windows, safe review gates and fresh completeness failures |
 | [2026-10-06-h-provider-conditions.md](runs/2026-10-06-h-provider-conditions.md) | Provider search hints, explicit image conditions and a frozen follow-up screen |
 | [2026-10-06-h-operation-scoping.md](runs/2026-10-06-h-operation-scoping.md) | Negated operation planning, method-bound conditions/errors and H development regression |
+| [2026-10-06-h-desktop-gpu.md](runs/2026-10-06-h-desktop-gpu.md) | H/24K GPU default, desktop-pressure fit, fixed-input timing and capacity tradeoffs |
 
 ## The rule for benchmark work
 

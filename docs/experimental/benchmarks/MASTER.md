@@ -16,6 +16,13 @@ estimate.
 
 ## Ordinary-question H checkpoint — 2026-10-06
 
+The operational default is now H/24576 via `qwen-context:h-q4_0-24k`, retaining
+16000 saved output and the existing tool reserves. 50K remains explicit.
+See the [desktop GPU report](runs/2026-10-06-h-desktop-gpu.md): 3/3 pressure cold
+loads are GPU-only; synthetic median output decoding is 48.0 versus 30.4 tokens/s,
+while total request time is 47.85 versus 48.45 seconds. These are limited timing
+observations, not plugin quality or sustained-output evidence.
+
 | Measurement | Result | Consequence |
 |---|---|---|
 | Operation checklists/windows, development positives | 2/3 complete minimum citation sets | Development gain; natural semantic completeness still requires review |
@@ -31,9 +38,9 @@ The latest H-only implementation and regression are in the
 Ordinary-question completeness remains the priority before caller-input calibration
 and sustained GPU-only output work. Current work focuses on H.
 
-## Current H checkpoint — 2026-10-05
+## Earlier H checkpoint — 2026-10-05
 
-H is the operational default at 50000 context, 16000 saved output, and
+H was the operational default at 50000 context, 16000 saved output, and
 8192 delegation/2048 scout reserves. This is not a quality-based routing win.
 See the [tokenizer and held-out report](runs/2026-10-05-h-tokenizer-heldout.md).
 

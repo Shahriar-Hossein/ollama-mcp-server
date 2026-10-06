@@ -28,11 +28,15 @@ This is the canonical instructions file for this repo — other agent configs
   this tree. Keep new work out unless an experimental feature is explicitly
   resumed.
 - Local delegation, summaries and both scout routes default to
-  `qwen-context:h-q4_0-50k`. Read selected model settings via `/api/show`;
+  `qwen-context:h-q4_0-24k`. Read selected model settings via `/api/show`;
   inherit saved context limits; output defaults use the smaller of the saved
   finite ceiling and 8192 for delegation/summaries or 2048 for scouts. Explicit
   request limits override these reserves. Report input overflow instead of
   dropping evidence or reducing explicit output limits.
+  H defaults to 24576 context / 16000 saved output for desktop GPU fit. The
+  retained `qwen-context:h-q4_0-50k` is an explicit large-context option and can
+  offload under desktop memory pressure. Verify placement rather than forcing
+  GPU layers; smaller output limits alone do not change allocated context.
   KV cache precision remains a daemon setting; an I tag does not enable q8.
 - H generation input uses `src/qwen-tokenizer.ts` against its pinned local
   GGUF vocabulary and Qwen35 renderer framing. Unsupported settings, thinking,

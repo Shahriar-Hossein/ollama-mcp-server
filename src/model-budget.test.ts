@@ -7,7 +7,7 @@ import { registerRunOllamaTask } from "./tools/run-ollama-task.js";
 import { registerSummarizeOutput } from "./tools/summarize-output.js";
 import { runLocalExplorerTask } from "./experimental/tools/local-explorer-task.js";
 
-const settings = (model: string) => ({ parameters: `num_ctx ${model.includes(":i-") ? 32768 : 50000}\nnum_predict ${model.includes(":i-") ? 25000 : 16000}`, template: "{{ .System }}{{ .Prompt }}" });
+const settings = (model: string) => ({ parameters: `num_ctx ${model.includes(":h-q4_0-24k") ? 24576 : model.includes(":i-") ? 32768 : 50000}\nnum_predict ${model.includes(":i-") ? 25000 : 16000}`, template: "{{ .System }}{{ .Prompt }}" });
 beforeEach(() => clearModelSettingsCache());
 
 test("shares concurrent settings requests per tag without caching budget overrides", async (t) => {
@@ -56,7 +56,7 @@ test("does not cache failed settings requests", async (t) => {
 });
 
 test("inherits H/I settings and reserves their full output ceiling", async () => {
-  for (const [model, input_budget] of [["qwen-context:h-q4_0-50k", 32976], ["qwen-context:i-q8_0-32k", 6744]] as const) {
+  for (const [model, input_budget] of [["qwen-context:h-q4_0-24k", 7552], ["qwen-context:h-q4_0-50k", 32976], ["qwen-context:i-q8_0-32k", 6744]] as const) {
     const budget = await resolveModelBudget(model, {}, async () => settings(model));
     assert.equal(budget.input_budget, input_budget);
     assert.equal(budget.num_predict, model.includes(":i-") ? 25000 : 16000);
@@ -93,13 +93,13 @@ test("basic MCP tools apply bounded tool reserves and preserve explicit override
     let invoke!: (params: Record<string, unknown>) => Promise<any>;
     let schema!: Record<string, any>;
     register({ tool: (_name: string, _description: string, fields: Record<string, unknown>, handler: typeof invoke) => { schema = fields; invoke = handler; } } as unknown as McpServer);
-    assert.equal(schema.model.parse(undefined), "qwen-context:h-q4_0-50k");
-    for (const model of ["qwen-context:h-q4_0-50k", "qwen-context:i-q8_0-32k"]) {
+    assert.equal(schema.model.parse(undefined), "qwen-context:h-q4_0-24k");
+    for (const [model, context] of [["qwen-context:h-q4_0-24k", 24576], ["qwen-context:h-q4_0-50k", 50000], ["qwen-context:i-q8_0-32k", 32768]] as const) {
       const result = await invoke({ model, prompt: "Short task", text: "Short log" });
       assert.equal(result.content[0].text, "OK");
       assert.equal(result._meta.model_budget.sources.num_ctx, "model");
       assert.equal(result._meta.model_budget.sources.num_predict, "tool");
-      assert.deepEqual(requests.at(-1)!.options, { num_ctx: settings(model).parameters.includes("32768") ? 32768 : 50000, num_predict: 8192 });
+      assert.deepEqual(requests.at(-1)!.options, { num_ctx: context, num_predict: 8192 });
     }
     const explicit = await invoke({ model: "qwen-context:h-q4_0-50k", prompt: "Short task", text: "Short log", num_predict: 16000 });
     assert.equal(explicit._meta.model_budget.sources.num_predict, "request");
