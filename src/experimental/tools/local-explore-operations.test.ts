@@ -10,7 +10,9 @@ import {
   compileEvidenceBundles,
   decomposeQuestion,
   directEvidenceForPart,
+  unindexedLanguages,
 } from "./local-explore-repo.js";
+import { operationParts } from "./local-explore-operations.js";
 import { evidenceChecklist, missingEvidenceRequirements } from "./local-explore-validation.js";
 
 test("operation discovery finds unresolved root-path imports without resolving the provider", () => {
@@ -162,4 +164,30 @@ test("image failure and replacement checklists require explicit conditions", () 
     ].includes(item.requirement),
   ))
     assert.ok(item.candidate_refs.length, item.requirement);
+});
+
+test("generic storage verbs outside image or query workflows add no operation checklist", () => {
+  assert.equal(
+    operationParts("How does the cache store outlines in Redis and what TTL invalidates them?"),
+    null,
+  );
+  assert.deepEqual(
+    operationParts("Where is the uploaded image stored?")?.map((part) => part.operation),
+    ["upload", "storage"],
+  );
+});
+
+test("questions about tracked but unindexed languages are flagged", () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-unindexed-"));
+  try {
+    writeFileSync(join(root, "plugin.php"), "<?php echo 1;\n");
+    writeFileSync(join(root, "admin.js"), "export const a = 1;\n");
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root });
+    assert.deepEqual(unindexedLanguages(root, "How does the PHP admin sanitize sort?"), ["PHP"]);
+    assert.deepEqual(unindexedLanguages(root, "Which Python module loads config?"), []);
+    assert.deepEqual(unindexedLanguages(root, "How is admin.js exported?"), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

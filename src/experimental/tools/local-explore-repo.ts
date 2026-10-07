@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
@@ -36,6 +37,28 @@ export { buildCandidates, compileEvidenceBundles } from "./local-explore-packing
 export type { Candidate, EvidenceBundle } from "./local-explore-packing.js";
 export { directEvidenceForPart } from "./local-explore-validation.js";
 export type { QuestionPart } from "./local-explore-validation.js";
+
+const UNINDEXED_LANGUAGES: [string, RegExp, string][] = [
+  ["PHP", /\bphp\b|\bwordpress\b/i, ".php"],
+  ["Python", /\bpython\b|\.py\b/i, ".py"],
+  ["Ruby", /\bruby\b|\brails\b|\.rb\b/i, ".rb"],
+  ["Go", /\bgolang\b|\.go\b/i, ".go"],
+  ["Java", /\bjava\b|\.java\b/i, ".java"],
+  ["Rust", /\brust\b|\.rs\b/i, ".rs"],
+  ["C#", /\bc#|\.cs\b/i, ".cs"],
+];
+
+// The index covers TS/JS only; flag questions about tracked sources it cannot search.
+export function unindexedLanguages(root: string, query: string): string[] {
+  const named = UNINDEXED_LANGUAGES.filter(([, pattern]) => pattern.test(query));
+  if (!named.length) return [];
+  const files = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split(
+    "\0",
+  );
+  return named
+    .filter(([, , ext]) => files.some((file) => file.toLowerCase().endsWith(ext)))
+    .map(([name]) => name);
+}
 
 type EvidenceLine = Candidate["lines"][number];
 type ModelEvidence = Omit<ValidEvidence, "file">;
@@ -151,12 +174,10 @@ function expandCandidate(
     kind: "text_match",
     file: candidate.file,
     symbol: candidate.symbol,
-    lines: source
-      .slice(start - 1, end)
-      .map((text, offset) => ({
-        line: start + offset,
-        text: text.slice(0, MAX_LINE_CHARS).trimEnd(),
-      })),
+    lines: source.slice(start - 1, end).map((text, offset) => ({
+      line: start + offset,
+      text: text.slice(0, MAX_LINE_CHARS).trimEnd(),
+    })),
   };
 }
 
@@ -441,6 +462,11 @@ export async function runLocalExploreRepo(
     return emptyResult("input_overflow", [
       "Evidence packing exceeded its character cap; source was omitted. Narrow the query before generation.",
     ]);
+  const unindexed = unindexedLanguages(root, query);
+  if (unindexed.length)
+    return emptyResult("no_evidence", [
+      `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript only; read those files directly.`,
+    ]);
   if (!candidates.length)
     return emptyResult("no_evidence", ["Deterministic retrieval supplied no readable candidates."]);
 
@@ -661,7 +687,9 @@ export function registerLocalExploreRepo(server: McpServer) {
         .min(8)
         .max(12)
         .default(10)
-        .describe("Deterministic candidates to retrieve before model interpretation."),
+        .describe(
+          "Deterministic candidates to retrieve per question part before model interpretation (8–12, default 10).",
+        ),
     },
     async (params) => {
       try {

@@ -271,6 +271,13 @@ export function operationParts(question: string): QuestionPart[] | null {
     /\bconfigured\b|\bsetting\b|\bpayload\b|\bBearer\b|request\.user/i.test(question)
   )
     return null;
+  // Checklists cover image-upload and query/list workflows only; generic verbs like "store" elsewhere add noise.
+  if (
+    !/\b(?:image\w*|upload\w*|file\w*|deleteImage|multer|cloudinary|quer\w*|list\w*|filter\w*|paginat\w*|search\w*)\b/i.test(
+      question,
+    )
+  )
+    return null;
   const positive = question
     .replace(
       /\b(?:without|no|absent)\s+(?:a\s+|any\s+|the\s+)?(?:new\s+|replacement\s+)?(?:file|image)\b/gi,
