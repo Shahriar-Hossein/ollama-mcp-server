@@ -183,7 +183,8 @@ Claude's own quota is spent only on work that actually benefits from it.
 
 - No build/lint pipeline is required. `npm start` runs the MCP server;
   `npm run test:features` checks feature configuration, `npm run test:quality`
-  tests Quality Review, and `npx tsc --noEmit` checks TypeScript.
+  tests Quality Review, `npm run lint` runs Biome (lint only, no formatter),
+  and `npm run typecheck` checks TypeScript (`npm run check` runs both).
 - For a benchmark that can outlive this command interface's ~30-second attachment window, launch one detached `setsid nohup flock -n` supervisor with stdout/stderr redirected to an ignored `benchmark-data/` log. Poll that log and its final artifact; do not retry while its lock is held. Before starting the next model, confirm the prior artifact is complete and the lock-owning process is gone.
 - Keep changes minimal; this is meant to stay a thin bridge, not grow into a
   framework.
