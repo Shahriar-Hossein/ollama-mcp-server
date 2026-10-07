@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import Parser from "tree-sitter";
+import { parseSource } from "../../explorer/parse.js";
 import JavaScript from "tree-sitter-javascript";
 import TypeScript from "tree-sitter-typescript";
 import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
@@ -43,7 +44,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
             : TypeScript.typescript
           : JavaScript,
       );
-      tree = parser.parse(readFileSync(checkedFile(root, file), "utf8"));
+      tree = parseSource(parser, readFileSync(checkedFile(root, file), "utf8"));
       trees.set(file, tree);
     }
     return tree;

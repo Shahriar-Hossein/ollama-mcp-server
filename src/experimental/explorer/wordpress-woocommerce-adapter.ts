@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import Parser from "tree-sitter";
+import { parseSource } from "../../explorer/parse.js";
 import JavaScript from "tree-sitter-javascript";
 import TypeScript from "tree-sitter-typescript";
 import {
@@ -274,7 +275,7 @@ function priceMutationFact(
 
 function extractFileFacts(file: string, source: string, symbols: SymbolRecord[]): AdapterFact[] {
   const facts: AdapterFact[] = [];
-  const tree = parserFor(file).parse(source);
+  const tree = parseSource(parserFor(file), source);
   const visit = (node: Parser.SyntaxNode): void => {
     if (node.type === "call_expression") {
       const name = functionName(node.childForFieldName("function"));

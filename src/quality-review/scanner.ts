@@ -1,4 +1,5 @@
 import Parser from "tree-sitter";
+import { parseSource } from "../explorer/parse.js";
 import JavaScript from "tree-sitter-javascript";
 import TypeScript from "tree-sitter-typescript";
 import { createHash } from "node:crypto";
@@ -70,7 +71,7 @@ export function discover(file: string, source: string): SymbolInput[] {
   parser.setLanguage(
     ts ? (file.endsWith(".tsx") ? TypeScript.tsx : TypeScript.typescript) : JavaScript,
   );
-  const tree = parser.parse(source);
+  const tree = parseSource(parser, source);
   if (tree.rootNode.hasError) throw new Error(`Parse error in ${file}; scan not committed`);
   const result: SymbolInput[] = [];
   const names = new Map<string, number>();

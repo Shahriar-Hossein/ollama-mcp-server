@@ -6,6 +6,7 @@ import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
 import PHP from "tree-sitter-php";
 import TypeScript from "tree-sitter-typescript";
+import { parseSource } from "./parse.js";
 
 export const SYMBOL_SCHEMA_VERSION = 1;
 
@@ -477,7 +478,7 @@ function collectTests(
     }
     for (const child of node.namedChildren) visit(child);
   };
-  visit(parserFor(language, file).parse(source).rootNode);
+  visit(parseSource(parserFor(language, file), source).rootNode);
 
   for (const test of fileTests.filter((record) => record.kind === "test")) {
     const targets = new Map<string, ResolutionQuality>();
@@ -549,7 +550,7 @@ function collectStructuralRecords(
   inheritance: InheritanceEdge[],
   calls: CallEdge[],
 ): void {
-  const tree = parserFor(language, file).parse(source);
+  const tree = parseSource(parserFor(language, file), source);
   const declarationRanges = new Set(records.map((record) => record.selection_range.start.byte));
   const imports = new Map<string, ImportBinding>();
   const symbolsByName = new Map<string, SymbolRecord[]>();
@@ -831,7 +832,7 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
     const relPath = relative(root, absolutePath).split(sep).join("/");
     const source = readFileSync(absolutePath, "utf8");
     sources.set(relPath, { language, source });
-    const tree = parserFor(language, file).parse(source);
+    const tree = parseSource(parserFor(language, file), source);
     const before = records.length;
     collectSymbols(tree.rootNode, source, relPath, language, commitHash, null, records, new Map());
     for (const record of records.slice(before)) {
