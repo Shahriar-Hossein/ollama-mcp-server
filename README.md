@@ -14,7 +14,7 @@ The default MCP surface is intentionally small.
 ### Basic Ollama tools
 
 - `run_ollama_task` sends one stateless task to an Ollama model.
-- `summarize_output` condenses large text through Ollama.
+- `summarize_output` condenses large text through Ollama. Pass `text`, or `repository_root` + `path` to read a file (max 2 MB) inside the bridge.
 - `list_ollama_models` lists available local or signed-in models.
 
 ### Quality Review

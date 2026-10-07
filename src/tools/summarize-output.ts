@@ -1,3 +1,5 @@
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
@@ -17,13 +19,38 @@ const DEFAULT_SYSTEM_PROMPT =
   "When the text is split into labeled files or sections, attribute each fact to its own label. " +
   "Omit anything the text does not state. Drop repetition and boilerplate. Be terse.";
 
+const MAX_FILE_BYTES = 2_000_000;
+
+export function readFileWithinRoot(root: string, path: string): string {
+  const realRoot = realpathSync(root);
+  const real = realpathSync(resolve(realRoot, path));
+  const rel = relative(realRoot, real);
+  if (rel.startsWith("..") || isAbsolute(rel)) throw new Error("path is outside repository_root");
+  const size = statSync(real).size;
+  if (size > MAX_FILE_BYTES) throw new Error(`file is ${size} bytes; limit is ${MAX_FILE_BYTES}`);
+  return readFileSync(real, "utf8");
+}
+
 export function registerSummarizeOutput(server: McpServer) {
   server.tool(
     "summarize_output",
     "Condenses large text (logs, command output, file dumps) into a short summary using a local Ollama model, " +
-      "so the full text never has to enter the caller's own context.",
+      "so the full text never has to enter the caller's own context. Pass `text`, or `repository_root` + `path` to read a file inside the bridge.",
     {
-      text: z.string().describe("The large text to summarize (log output, file contents, etc.)."),
+      text: z
+        .string()
+        .optional()
+        .describe("The large text to summarize. Omit when using repository_root + path."),
+      repository_root: z
+        .string()
+        .optional()
+        .describe("Absolute directory that confines `path`; required with `path`."),
+      path: z
+        .string()
+        .optional()
+        .describe(
+          "File (log, source) under repository_root, read here so it stays out of the caller's context. Max 2 MB.",
+        ),
       focus: z
         .string()
         .optional()
@@ -57,7 +84,34 @@ export function registerSummarizeOutput(server: McpServer) {
         .default(DEFAULT_LOCAL_MODEL)
         .describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
     },
-    async ({ text, focus, model, num_ctx, num_predict, timeout_ms, format }) => {
+    async ({
+      text,
+      repository_root,
+      path,
+      focus,
+      model,
+      num_ctx,
+      num_predict,
+      timeout_ms,
+      format,
+    }) => {
+      if ((text === undefined) === (path === undefined) || (path !== undefined && !repository_root))
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: "Provide either `text`, or both `repository_root` and `path`." },
+          ],
+        };
+      if (path !== undefined) {
+        try {
+          text = readFileWithinRoot(repository_root as string, path);
+        } catch (error: any) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: `Failed to read ${path}: ${error.message}` }],
+          };
+        }
+      }
       const prompt = focus
         ? `Focus: ${focus}\n\nText to summarize:\n${text}`
         : `Text to summarize:\n${text}`;
