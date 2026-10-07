@@ -10,11 +10,13 @@ import {
   requestTimeout,
   resolveModelBudget,
 } from "../ollama-client.js";
+import { outputFormat } from "./run-ollama-task.js";
 
 const DEFAULT_SYSTEM_PROMPT =
   "You condense large, noisy text (logs, command output, file dumps) into a short, faithful summary. " +
   "Preserve concrete details that matter (errors, file paths, line numbers, failing test names, exit codes). " +
-  "Drop repetition and boilerplate. Be terse.";
+  "When the text is split into labeled files or sections, attribute each fact to its own label. " +
+  "Omit anything the text does not state. Drop repetition and boilerplate. Be terse.";
 
 export function registerSummarizeOutput(server: McpServer) {
   server.tool(
@@ -50,12 +52,13 @@ export function registerSummarizeOutput(server: McpServer) {
         .describe(
           "Request deadline in milliseconds; defaults to the server's configured deadline (120 seconds by default).",
         ),
+      format: outputFormat,
       model: z
         .string()
         .default(DEFAULT_LOCAL_MODEL)
         .describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
     },
-    async ({ text, focus, model, num_ctx, num_predict, timeout_ms }) => {
+    async ({ text, focus, model, num_ctx, num_predict, timeout_ms, format }) => {
       const prompt = focus
         ? `Focus: ${focus}\n\nText to summarize:\n${text}`
         : `Text to summarize:\n${text}`;
@@ -69,6 +72,7 @@ export function registerSummarizeOutput(server: McpServer) {
         const input = await checkGenerationInputBudget(budget, {
           prompt,
           system: DEFAULT_SYSTEM_PROMPT,
+          format,
         });
         if (!input.fits)
           return {
@@ -82,7 +86,7 @@ export function registerSummarizeOutput(server: McpServer) {
           model,
           prompt,
           DEFAULT_SYSTEM_PROMPT,
-          undefined,
+          format,
           false,
           { num_ctx: budget.num_ctx, num_predict: budget.num_predict },
           deadline,

@@ -11,6 +11,13 @@ import {
   resolveModelBudget,
 } from "../ollama-client.js";
 
+export const outputFormat = z
+  .union([z.literal("json"), z.record(z.string(), z.unknown())])
+  .optional()
+  .describe(
+    'Constrain output: "json" for any JSON, or a JSON Schema object to force an exact shape.',
+  );
+
 export function registerRunOllamaTask(server: McpServer) {
   server.tool(
     "run_ollama_task",
@@ -44,12 +51,13 @@ export function registerRunOllamaTask(server: McpServer) {
         .describe(
           "Request deadline in milliseconds; defaults to the server's configured deadline (120 seconds by default).",
         ),
+      format: outputFormat,
       model: z
         .string()
         .default(DEFAULT_LOCAL_MODEL)
         .describe("The Ollama model tag to invoke. Use list_ollama_models to see what's pulled."),
     },
-    async ({ prompt, system_prompt, model, num_ctx, num_predict, timeout_ms }) => {
+    async ({ prompt, system_prompt, model, num_ctx, num_predict, timeout_ms, format }) => {
       try {
         const system = system_prompt || "You are a specialized sub-agent assistant.";
         const budget = await resolveModelBudget(
@@ -58,7 +66,7 @@ export function registerRunOllamaTask(server: McpServer) {
           undefined,
           TOOL_OUTPUT_RESERVES.delegation,
         );
-        const input = await checkGenerationInputBudget(budget, { prompt, system });
+        const input = await checkGenerationInputBudget(budget, { prompt, system, format });
         if (!input.fits)
           return {
             isError: true,
@@ -71,7 +79,7 @@ export function registerRunOllamaTask(server: McpServer) {
           model,
           prompt,
           system,
-          undefined,
+          format,
           false,
           { num_ctx: budget.num_ctx, num_predict: budget.num_predict },
           deadline,
