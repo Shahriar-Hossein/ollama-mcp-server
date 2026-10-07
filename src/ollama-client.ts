@@ -1,5 +1,6 @@
 import axios from "axios";
 import { countQwenInput, matchingQwenPath } from "./qwen-tokenizer.js";
+import { isCloudModel, runExclusive } from "./request-queue.js";
 
 export const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 export const REQUEST_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120_000;
@@ -186,6 +187,31 @@ async function streamErrorBody(error: any) {
 }
 
 export async function generateResult(
+  model: string,
+  prompt: string,
+  system: string,
+  format?: "json" | Record<string, unknown>,
+  think = false,
+  modelOptions?: ModelOptions,
+  timeout_ms?: number,
+) {
+  if (isCloudModel(model))
+    return generateNow(model, prompt, system, format, think, modelOptions, timeout_ms);
+  const start = Date.now();
+  return runExclusive(timeout_ms, () =>
+    generateNow(
+      model,
+      prompt,
+      system,
+      format,
+      think,
+      modelOptions,
+      timeout_ms && Math.max(1000, timeout_ms - (Date.now() - start)),
+    ),
+  );
+}
+
+async function generateNow(
   model: string,
   prompt: string,
   system: string,

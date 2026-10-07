@@ -47,6 +47,7 @@ This is the canonical instructions file for this repo — other agent configs
   streams, so length stops and timeouts return partial text with `isError`
   (`done_reason: "timeout"`; no text yet gives the timeout error).
   Both accept an optional `format` (`"json"` or a JSON Schema) for exact shape.
+- `src/request-queue.ts` — serializes local-model generation across MCP processes (lock dir in tmp, stale-pid steal); cloud tags skip it. Queue wait counts against `timeout_ms`.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
   `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
   embedding model unloads right after each call — without it, Ollama kept the
