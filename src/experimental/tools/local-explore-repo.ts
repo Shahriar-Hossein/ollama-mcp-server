@@ -446,8 +446,10 @@ export async function runLocalExploreRepo(
     status: Status,
     unresolved: string[],
     warning?: string,
+    drop_retrieval = false,
   ) => ({
     ...base(),
+    ...(drop_retrieval ? { bundles: [], candidates: [], retrieved_count: 0 } : {}),
     status,
     evidence: [],
     selected_ids: [],
@@ -463,9 +465,14 @@ export async function runLocalExploreRepo(
     ]);
   const unindexed = unindexedLanguages(root, query);
   if (unindexed.length)
-    return emptyResult("no_evidence", [
-      `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript/PHP only; read those files directly.`,
-    ]);
+    return emptyResult(
+      "no_evidence",
+      [
+        `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript/PHP only; read those files directly.`,
+      ],
+      undefined,
+      true,
+    );
   if (!candidates.length)
     return emptyResult("no_evidence", ["Deterministic retrieval supplied no readable candidates."]);
 

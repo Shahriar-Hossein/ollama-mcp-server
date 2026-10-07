@@ -167,6 +167,38 @@ test("retrieves before calling the model, then retries a bad evidence ref once",
   }
 });
 
+test("unsupported-language no_evidence carries no unrelated retrieval", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-unindexed-"));
+  try {
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src/pricing.ts"), "export function calculateTotal() {}\n");
+    writeFileSync(join(root, "main.go"), "package main\n");
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", [
+      "-C",
+      root,
+      "-c",
+      "user.name=T",
+      "-c",
+      "user.email=t@e.c",
+      "commit",
+      "-qm",
+      "f",
+    ]);
+    const result = await runLocalExploreRepo(
+      { repository_root: root, query: "Where is calculateTotal defined in the golang code?" },
+      async () => assert.fail("model must not be called"),
+    );
+    assert.equal(result.status, "no_evidence");
+    assert.deepEqual(result.bundles, []);
+    assert.deepEqual(result.candidates, []);
+    assert.equal(result.retrieved_count, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("decomposes independent evidence requirements", () => {
   assert.deepEqual(decomposeQuestion("Where is x registered, and is it enabled by default?"), [
     {
