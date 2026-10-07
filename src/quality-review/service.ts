@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { relative } from 'node:path';
-import { Store } from './storage.js';
+import type { Store } from './storage.js';
 import { readSymbols, scanFiles, sourcePath, type SymbolInput } from './scanner.js';
 import { buildContext, callModel, DEFAULT_MODEL, markdown, PROMPT_VERSION, validateReview, type ModelCall } from './reviewer.js';
 
