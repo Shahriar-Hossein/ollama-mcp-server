@@ -2,7 +2,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { spawnSync } from "node:child_process";
 import { OLLAMA_HOST } from "../../ollama-client.js";
-import { ALLOWLIST_DESCRIPTION, parseAllowedGitCommand, WORKER_SYSTEM_PROMPT } from "./shell-allowlist.js";
+import {
+  ALLOWLIST_DESCRIPTION,
+  parseAllowedGitCommand,
+  WORKER_SYSTEM_PROMPT,
+} from "./shell-allowlist.js";
 
 // Tier 2 from docs/experimental/planning/local-claude-worker-experiment.md: a hand-rolled
 // tool loop against Ollama's /api/chat, no Claude Code harness. ~10s for a
@@ -35,7 +39,8 @@ function runShellTool(command: string, cwd: string): string {
   // model's command string can't do anything - there's no shell to interpret it.
   const result = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", timeout: 30_000, cwd });
   if (result.error) return `Command failed to start: ${result.error.message}`;
-  if (result.status !== 0) return `Command failed (exit ${result.status}): ${result.stdout || ""}${result.stderr || ""}`;
+  if (result.status !== 0)
+    return `Command failed (exit ${result.status}): ${result.stdout || ""}${result.stderr || ""}`;
   return result.stdout.trim() || "(no output)";
 }
 
@@ -46,9 +51,19 @@ export function registerRunLocalWorkerTask(server: McpServer) {
       "model with its own bash tool loop - no confirmation prompts, verify the result yourself afterward. " +
       "Fast (seconds) but has no safety net beyond the command allowlist. Requires LOCAL_WORKER_ENABLED=1.",
     {
-      task: z.string().describe("The task to perform, e.g. 'stage and commit src/foo.ts with message X'."),
-      cwd: z.string().optional().describe("Working directory to run in. Defaults to the MCP server's own cwd."),
-      model: z.string().default("qwen3.5:4b").describe("Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:3b does not)."),
+      task: z
+        .string()
+        .describe("The task to perform, e.g. 'stage and commit src/foo.ts with message X'."),
+      cwd: z
+        .string()
+        .optional()
+        .describe("Working directory to run in. Defaults to the MCP server's own cwd."),
+      model: z
+        .string()
+        .default("qwen3.5:4b")
+        .describe(
+          "Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:3b does not).",
+        ),
       max_turns: z.number().default(6),
     },
     async ({ task, cwd, model, max_turns }) => {
@@ -70,7 +85,14 @@ export function registerRunLocalWorkerTask(server: McpServer) {
 
         if (!message.tool_calls || message.tool_calls.length === 0) {
           const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-          return { content: [{ type: "text", text: `${message.content}\n\n[done in ${elapsed}s, ${turn + 1} turn(s)]` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `${message.content}\n\n[done in ${elapsed}s, ${turn + 1} turn(s)]`,
+              },
+            ],
+          };
         }
 
         for (const call of message.tool_calls) {
@@ -79,7 +101,12 @@ export function registerRunLocalWorkerTask(server: McpServer) {
         }
       }
 
-      return { isError: true, content: [{ type: "text", text: `Gave up after ${max_turns} turns without a final answer.` }] };
-    }
+      return {
+        isError: true,
+        content: [
+          { type: "text", text: `Gave up after ${max_turns} turns without a final answer.` },
+        ],
+      };
+    },
   );
 }

@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { indexRepository, type RepositoryIndex, type SourceRange, type SymbolRecord } from "./indexer.js";
+import {
+  indexRepository,
+  type RepositoryIndex,
+  type SourceRange,
+  type SymbolRecord,
+} from "./indexer.js";
 
 export interface SourceSnippet {
   range: SourceRange;
@@ -48,7 +53,11 @@ function indexedFilePath(repositoryRoot: string, file: string): string {
   return path;
 }
 
-export function readSymbol(repositoryRoot: string, symbolId: string, index: RepositoryIndex = indexRepository(repositoryRoot)): SymbolRead {
+export function readSymbol(
+  repositoryRoot: string,
+  symbolId: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): SymbolRead {
   if (!symbolId.trim()) throw new Error("Symbol ID must not be empty.");
 
   const symbol = index.symbols.find((candidate) => candidate.id === symbolId);

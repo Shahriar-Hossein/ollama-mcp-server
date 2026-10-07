@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { indexRepository, type RepositoryIndex, type SymbolRecord } from "../../explorer/indexer.js";
+import {
+  indexRepository,
+  type RepositoryIndex,
+  type SymbolRecord,
+} from "../../explorer/indexer.js";
 
 export interface HistoryCommit {
   hash: string;
@@ -45,12 +49,14 @@ function git(root: string, args: string[]): Buffer {
 function requiredRepositoryRoot(repositoryRoot: string): string {
   const root = resolve(repositoryRoot);
   const gitRoot = git(root, ["rev-parse", "--show-toplevel"]).toString("utf8").trim();
-  if (resolve(gitRoot) !== root) throw new Error(`Repository root must be the Git root: ${gitRoot}`);
+  if (resolve(gitRoot) !== root)
+    throw new Error(`Repository root must be the Git root: ${gitRoot}`);
   return root;
 }
 
 function requiredTrackedFile(root: string, file: string): string {
-  if (!file || isAbsolute(file) || file.includes("\0")) throw new Error("File must be a non-empty repository-relative path.");
+  if (!file || isAbsolute(file) || file.includes("\0"))
+    throw new Error("File must be a non-empty repository-relative path.");
   const candidate = resolve(root, file);
   const normalized = relative(root, candidate).split(sep).join("/");
   if (!normalized || normalized === ".." || normalized.startsWith("../")) {
@@ -79,12 +85,20 @@ function targetForSymbol(symbolId: string, index: RepositoryIndex): HistoryTarge
 }
 
 function parseCommit(root: string, hash: string): HistoryCommit {
-  const fields = git(root, ["show", "--no-ext-diff", "--format=%H%x00%s%x00%aI", "--name-status", "-z", "--find-renames", hash])
+  const fields = git(root, [
+    "show",
+    "--no-ext-diff",
+    "--format=%H%x00%s%x00%aI",
+    "--name-status",
+    "-z",
+    "--find-renames",
+    hash,
+  ])
     .toString("utf8")
     .split("\0");
   const [commitHash, subject, authoredAt, ...entries] = fields;
   const files: HistoryCommit["files"] = [];
-  for (let index = 0; index < entries.length;) {
+  for (let index = 0; index < entries.length; ) {
     const status = entries[index++].replace(/^\n/, "");
     if (!status) continue;
     if (status.startsWith("R") || status.startsWith("C")) {
@@ -110,8 +124,9 @@ function historyHashesForFile(root: string, file: string): string[] {
 function historyHashesForSymbol(root: string, symbol: SymbolRecord): string[] {
   const start = symbol.range.start.line;
   const end = Math.max(start, symbol.range.end.line - 1);
-  const output = git(root, ["log", `-L${start},${end}:${symbol.file}`, "--format=%H"])
-    .toString("utf8");
+  const output = git(root, ["log", `-L${start},${end}:${symbol.file}`, "--format=%H"]).toString(
+    "utf8",
+  );
   return [...new Set(output.split("\n").filter((line) => /^[0-9a-f]{40,64}$/.test(line)))];
 }
 
@@ -127,39 +142,70 @@ function indexedRoot(repositoryRoot: string): { root: string; index: RepositoryI
 }
 
 /** Finds the oldest commit that introduced a tracked file, following renames. */
-export function gitFindFileIntroduction(repositoryRoot: string, file: string): GitIntroductionResult {
+export function gitFindFileIntroduction(
+  repositoryRoot: string,
+  file: string,
+): GitIntroductionResult {
   const root = requiredRepositoryRoot(repositoryRoot);
   const target = targetForFile(root, file);
   const hashes = historyHashes(root, target);
-  return { commit_hash: git(root, ["rev-parse", "HEAD"]).toString("utf8").trim(), target, introduction: hashes.at(-1) ? parseCommit(root, hashes.at(-1)!) : null };
+  return {
+    commit_hash: git(root, ["rev-parse", "HEAD"]).toString("utf8").trim(),
+    target,
+    introduction: hashes.at(-1) ? parseCommit(root, hashes.at(-1)!) : null,
+  };
 }
 
 /** Finds the oldest line-history commit for the indexed range of one symbol. */
-export function gitFindSymbolIntroduction(repositoryRoot: string, symbolId: string): GitIntroductionResult {
+export function gitFindSymbolIntroduction(
+  repositoryRoot: string,
+  symbolId: string,
+): GitIntroductionResult {
   const { root, index } = indexedRoot(repositoryRoot);
   const target = targetForSymbol(symbolId, index);
   const hashes = historyHashes(root, target);
-  return { commit_hash: index.commit_hash, target, introduction: hashes.at(-1) ? parseCommit(root, hashes.at(-1)!) : null };
+  return {
+    commit_hash: index.commit_hash,
+    target,
+    introduction: hashes.at(-1) ? parseCommit(root, hashes.at(-1)!) : null,
+  };
 }
 
 /** Returns newest-first commits affecting a tracked file, following renames. */
-export function gitFindRecentFileChanges(repositoryRoot: string, file: string, limit = 10): GitRecentChangesResult {
+export function gitFindRecentFileChanges(
+  repositoryRoot: string,
+  file: string,
+  limit = 10,
+): GitRecentChangesResult {
   const root = requiredRepositoryRoot(repositoryRoot);
   const target = targetForFile(root, file);
   const hashes = historyHashes(root, target).slice(0, requiredLimit(limit));
-  return { commit_hash: git(root, ["rev-parse", "HEAD"]).toString("utf8").trim(), target, commits: hashes.map((hash) => parseCommit(root, hash)) };
+  return {
+    commit_hash: git(root, ["rev-parse", "HEAD"]).toString("utf8").trim(),
+    target,
+    commits: hashes.map((hash) => parseCommit(root, hash)),
+  };
 }
 
 /** Returns newest-first commits that Git's line history attributes to an indexed symbol range. */
-export function gitFindRecentSymbolChanges(repositoryRoot: string, symbolId: string, limit = 10): GitRecentChangesResult {
+export function gitFindRecentSymbolChanges(
+  repositoryRoot: string,
+  symbolId: string,
+  limit = 10,
+): GitRecentChangesResult {
   const { root, index } = indexedRoot(repositoryRoot);
   const target = targetForSymbol(symbolId, index);
   const hashes = historyHashes(root, target).slice(0, requiredLimit(limit));
-  return { commit_hash: index.commit_hash, target, commits: hashes.map((hash) => parseCommit(root, hash)) };
+  return {
+    commit_hash: index.commit_hash,
+    target,
+    commits: hashes.map((hash) => parseCommit(root, hash)),
+  };
 }
 
 function requiredLimit(limit: number): number {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error("Limit must be an integer from 1 through 100.");
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    throw new Error("Limit must be an integer from 1 through 100.");
   return limit;
 }
 
@@ -169,7 +215,9 @@ export function gitBlameSymbol(repositoryRoot: string, symbolId: string): GitBla
   const symbol = requiredSymbol(symbolId, index);
   const start = symbol.range.start.line;
   const end = Math.max(start, symbol.range.end.line - 1);
-  const rows = git(root, ["blame", "--line-porcelain", `-L${start},${end}`, "--", symbol.file]).toString("utf8").split("\n");
+  const rows = git(root, ["blame", "--line-porcelain", `-L${start},${end}`, "--", symbol.file])
+    .toString("utf8")
+    .split("\n");
   const lines: GitBlameLine[] = [];
   let commit_hash = "";
   let original_line = 0;

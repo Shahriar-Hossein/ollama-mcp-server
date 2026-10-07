@@ -1,7 +1,17 @@
 export const ANSWER_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
-    part_evidence: { type: "array", items: { type: "object", properties: { part_id: { type: "string" }, evidence_refs: { type: "array", maxItems: 16, items: { type: "string" } } }, required: ["part_id", "evidence_refs"] } },
+    part_evidence: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          part_id: { type: "string" },
+          evidence_refs: { type: "array", maxItems: 16, items: { type: "string" } },
+        },
+        required: ["part_id", "evidence_refs"],
+      },
+    },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
     unresolved: { type: "array", items: { type: "string" } },
     next_action: { type: "object", properties: { ref: { type: "string" } }, required: ["ref"] },
@@ -17,17 +27,28 @@ export function answerSchemaForRefs(partIds: string[], refs: string[]): Record<s
     properties: {
       ...(ANSWER_SCHEMA.properties as Record<string, unknown>),
       part_evidence: {
-        type: "array", minItems: partIds.length, maxItems: partIds.length,
+        type: "array",
+        minItems: partIds.length,
+        maxItems: partIds.length,
         items: {
           type: "object",
           properties: {
             part_id: { type: "string", enum: partIds },
-            evidence_refs: { type: "array", maxItems: 16, uniqueItems: true, items: { type: "string", enum: refs } },
+            evidence_refs: {
+              type: "array",
+              maxItems: 16,
+              uniqueItems: true,
+              items: { type: "string", enum: refs },
+            },
           },
           required: ["part_id", "evidence_refs"],
         },
       },
-      next_action: { type: "object", properties: { ref: { type: "string", enum: ["", ...refs] } }, required: ["ref"] },
+      next_action: {
+        type: "object",
+        properties: { ref: { type: "string", enum: ["", ...refs] } },
+        required: ["ref"],
+      },
     },
   };
 }

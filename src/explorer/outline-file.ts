@@ -1,5 +1,10 @@
 import { relative, resolve, sep } from "node:path";
-import { indexRepository, type RepositoryIndex, type SourceRange, type SymbolKind } from "./indexer.js";
+import {
+  indexRepository,
+  type RepositoryIndex,
+  type SourceRange,
+  type SymbolKind,
+} from "./indexer.js";
 
 export interface OutlineSymbol {
   id: string;
@@ -30,7 +35,11 @@ function repositoryPath(repositoryRoot: string, path: string): string {
   return relativePath.split(sep).join("/");
 }
 
-export function outlineFile(repositoryRoot: string, path: string, index: RepositoryIndex = indexRepository(repositoryRoot)): FileOutline {
+export function outlineFile(
+  repositoryRoot: string,
+  path: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): FileOutline {
   const file = repositoryPath(repositoryRoot, path);
   const symbols = index.symbols.filter((symbol) => symbol.file === file);
   const symbolIds = new Set(symbols.map((symbol) => symbol.id));

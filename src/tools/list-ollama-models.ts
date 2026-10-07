@@ -23,6 +23,6 @@ export function registerListOllamaModels(server: McpServer) {
           ],
         };
       }
-    }
+    },
   );
 }

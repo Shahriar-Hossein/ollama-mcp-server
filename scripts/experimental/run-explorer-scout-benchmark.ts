@@ -22,13 +22,19 @@ const prompts = [
 const results = [];
 for (const task of prompts) {
   const started_at = new Date().toISOString();
-  process.stderr.write(`Starting prompt ${results.length + 1}/${prompts.length} at ${started_at}\n`);
+  process.stderr.write(
+    `Starting prompt ${results.length + 1}/${prompts.length} at ${started_at}\n`,
+  );
   const heartbeat = setInterval(() => {
-    process.stderr.write(`Prompt ${results.length + 1}/${prompts.length} still running at ${new Date().toISOString()}\n`);
+    process.stderr.write(
+      `Prompt ${results.length + 1}/${prompts.length} still running at ${new Date().toISOString()}\n`,
+    );
   }, 15_000);
   const result = await runLocalExplorerTask({ ...protocol, task });
   clearInterval(heartbeat);
-  process.stderr.write(`Finished prompt ${results.length + 1}/${prompts.length} at ${new Date().toISOString()}\n`);
+  process.stderr.write(
+    `Finished prompt ${results.length + 1}/${prompts.length} at ${new Date().toISOString()}\n`,
+  );
   results.push({ task, started_at, result });
 }
 

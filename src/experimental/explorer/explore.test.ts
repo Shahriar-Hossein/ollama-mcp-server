@@ -54,9 +54,9 @@ describe("exploreRepository raw-answer fallback", () => {
       model_calls: 1,
       discovery: {
         hypotheses: [
-          { 
-            hypothesis: "The project implements an MCP server", 
-            required_evidence: [{ kind: "symbol", target: "Server", reason: "check" }] 
+          {
+            hypothesis: "The project implements an MCP server",
+            required_evidence: [{ kind: "symbol", target: "Server", reason: "check" }],
           },
         ],
         retrieval_gaps: [],
@@ -66,7 +66,15 @@ describe("exploreRepository raw-answer fallback", () => {
     // Mock evidenceForDiscovery implicitly by making indexRepository return symbols
     (indexer.indexRepository as any).mockReturnValue({
       commit_hash: "abc123def",
-      symbols: [{ id: "symbol:Server", name: "Server", qualified_name: "Server", file: "index.ts", range: { start: { byte: 0 }, end: { byte: 10 } } }],
+      symbols: [
+        {
+          id: "symbol:Server",
+          name: "Server",
+          qualified_name: "Server",
+          file: "index.ts",
+          range: { start: { byte: 0 }, end: { byte: 10 } },
+        },
+      ],
       calls: [],
       references: [],
     });
@@ -90,7 +98,9 @@ describe("exploreRepository raw-answer fallback", () => {
 
     expect(result.mode).toBe("raw");
     expect(result.answer_to_user).toBe("1. The project implements an MCP server");
-    expect(result.warnings).toContain("No claims were fully verified; falling back to raw discovery hypotheses.");
+    expect(result.warnings).toContain(
+      "No claims were fully verified; falling back to raw discovery hypotheses.",
+    );
   });
 
   it("should return verified answer when synthesis succeeds", async () => {
@@ -99,9 +109,9 @@ describe("exploreRepository raw-answer fallback", () => {
       model_calls: 1,
       discovery: {
         hypotheses: [
-          { 
-            hypothesis: "The project implements an MCP server", 
-            required_evidence: [{ kind: "symbol", target: "Server", reason: "check" }] 
+          {
+            hypothesis: "The project implements an MCP server",
+            required_evidence: [{ kind: "symbol", target: "Server", reason: "check" }],
           },
         ],
         retrieval_gaps: [],
@@ -110,7 +120,15 @@ describe("exploreRepository raw-answer fallback", () => {
 
     (indexer.indexRepository as any).mockReturnValue({
       commit_hash: "abc123def",
-      symbols: [{ id: "symbol:Server", name: "Server", qualified_name: "Server", file: "index.ts", range: { start: { byte: 0 }, end: { byte: 10 } } }],
+      symbols: [
+        {
+          id: "symbol:Server",
+          name: "Server",
+          qualified_name: "Server",
+          file: "index.ts",
+          range: { start: { byte: 0 }, end: { byte: 10 } },
+        },
+      ],
       calls: [],
       references: [],
     });
@@ -125,7 +143,16 @@ describe("exploreRepository raw-answer fallback", () => {
           verification_status: "SUPPORTED",
           rationale: "Proven",
           resolution_quality: "exact",
-          evidence: [{ evidence_kind: "symbol", symbol_id: "symbol:Server", excerpt: "class Server {}", commit_hash: "abc123def", resolution_quality: "exact", file: "index.ts" }],
+          evidence: [
+            {
+              evidence_kind: "symbol",
+              symbol_id: "symbol:Server",
+              excerpt: "class Server {}",
+              commit_hash: "abc123def",
+              resolution_quality: "exact",
+              file: "index.ts",
+            },
+          ],
         },
       ],
     });

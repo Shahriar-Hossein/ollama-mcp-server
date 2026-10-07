@@ -12,10 +12,15 @@ export function registerReadSymbol(server: McpServer) {
     },
     async ({ repository_root, symbol_id }) => {
       try {
-        return { content: [{ type: "text", text: JSON.stringify(readSymbol(repository_root, symbol_id)) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify(readSymbol(repository_root, symbol_id)) }],
+        };
       } catch (error: any) {
-        return { isError: true, content: [{ type: "text", text: `Failed to read symbol ${symbol_id}: ${error.message}` }] };
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to read symbol ${symbol_id}: ${error.message}` }],
+        };
       }
-    }
+    },
   );
 }

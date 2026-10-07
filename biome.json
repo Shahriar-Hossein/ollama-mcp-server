@@ -3,8 +3,15 @@
   "files": {
     "includes": ["src/**", "scripts/**", "!**/*.cjs"]
   },
-  "formatter": { "enabled": false },
-  "assist": { "enabled": false },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "enabled": false
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -13,14 +20,25 @@
         "noExplicitAny": "warn",
         "noImplicitAnyLet": "off",
         "noAssignInExpressions": "off",
-        "noConsole": { "level": "error", "options": { "allow": ["error", "warn"] } }
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["error", "warn"]
+          }
+        }
       }
     }
   },
   "overrides": [
     {
       "includes": ["**/*cli.ts", "scripts/**", "**/*.test.ts"],
-      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

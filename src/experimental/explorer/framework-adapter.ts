@@ -37,7 +37,10 @@ export interface FrameworkAdapter {
 }
 
 /** Runs an adapter and rejects output that does not describe the indexed checkout. */
-export function extractAdapterFacts(adapter: FrameworkAdapter, context: FrameworkAdapterContext): AdapterIndex | null {
+export function extractAdapterFacts(
+  adapter: FrameworkAdapter,
+  context: FrameworkAdapterContext,
+): AdapterIndex | null {
   if (!adapter.supports(context)) return null;
 
   const result = adapter.extract(context);

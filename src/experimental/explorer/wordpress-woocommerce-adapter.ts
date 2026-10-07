@@ -10,10 +10,20 @@ import {
   type FrameworkAdapter,
   type FrameworkAdapterContext,
 } from "./framework-adapter.js";
-import type { ResolutionQuality, SourcePosition, SourceRange, SymbolRecord } from "../../explorer/indexer.js";
+import type {
+  ResolutionQuality,
+  SourcePosition,
+  SourceRange,
+  SymbolRecord,
+} from "../../explorer/indexer.js";
 
 const REGISTRATION_FUNCTIONS = new Set(["add_action", "add_filter"]);
-const EMITTER_FUNCTIONS = new Set(["do_action", "do_action_ref_array", "apply_filters", "apply_filters_ref_array"]);
+const EMITTER_FUNCTIONS = new Set([
+  "do_action",
+  "do_action_ref_array",
+  "apply_filters",
+  "apply_filters_ref_array",
+]);
 const META_READ_FUNCTIONS = new Map([
   ["get_post_meta", "post"],
   ["get_user_meta", "user"],
@@ -40,9 +50,15 @@ const META_WRITE_FUNCTIONS = new Map([
 ]);
 const OPTION_READ_FUNCTIONS = new Set(["get_option", "get_site_option", "get_network_option"]);
 const OPTION_WRITE_FUNCTIONS = new Set([
-  "add_option", "update_option", "delete_option",
-  "add_site_option", "update_site_option", "delete_site_option",
-  "add_network_option", "update_network_option", "delete_network_option",
+  "add_option",
+  "update_option",
+  "delete_option",
+  "add_site_option",
+  "update_site_option",
+  "delete_site_option",
+  "add_network_option",
+  "update_network_option",
+  "delete_network_option",
 ]);
 const REST_ROUTE_FUNCTION = "register_rest_route";
 const SHORTCODE_FUNCTION = "add_shortcode";
@@ -59,18 +75,31 @@ function isAjaxHook(hook: string | null): boolean {
 }
 
 function isCartHook(hook: string | null): boolean {
-  return hook !== null && (CART_HOOKS.has(hook) || (hook.startsWith("woocommerce_") && hook.includes("cart")));
+  return (
+    hook !== null &&
+    (CART_HOOKS.has(hook) || (hook.startsWith("woocommerce_") && hook.includes("cart")))
+  );
 }
 
 function parserFor(file: string): Parser {
   const parser = new Parser();
-  parser.setLanguage(file.endsWith(".tsx") ? TypeScript.tsx : file.endsWith(".ts") ? TypeScript.typescript : JavaScript);
+  parser.setLanguage(
+    file.endsWith(".tsx")
+      ? TypeScript.tsx
+      : file.endsWith(".ts")
+        ? TypeScript.typescript
+        : JavaScript,
+  );
   return parser;
 }
 
 function position(node: Parser.SyntaxNode, edge: "start" | "end"): SourcePosition {
   const point = edge === "start" ? node.startPosition : node.endPosition;
-  return { line: point.row + 1, column: point.column + 1, byte: edge === "start" ? node.startIndex : node.endIndex };
+  return {
+    line: point.row + 1,
+    column: point.column + 1,
+    byte: edge === "start" ? node.startIndex : node.endIndex,
+  };
 }
 
 function range(node: Parser.SyntaxNode): SourceRange {
@@ -87,8 +116,11 @@ function literalString(node: Parser.SyntaxNode | undefined): string | null {
 function containingSymbol(symbols: SymbolRecord[], node: Parser.SyntaxNode): SymbolRecord | null {
   let containing: SymbolRecord | null = null;
   for (const symbol of symbols) {
-    if (symbol.range.start.byte <= node.startIndex && node.endIndex <= symbol.range.end.byte
-      && (!containing || symbol.range.start.byte >= containing.range.start.byte)) {
+    if (
+      symbol.range.start.byte <= node.startIndex &&
+      node.endIndex <= symbol.range.end.byte &&
+      (!containing || symbol.range.start.byte >= containing.range.start.byte)
+    ) {
       containing = symbol;
     }
   }
@@ -133,11 +165,18 @@ function hookFact(
   };
 }
 
-function metadataFact(file: string, symbols: SymbolRecord[], call: Parser.SyntaxNode, name: string): AdapterFact {
+function metadataFact(
+  file: string,
+  symbols: SymbolRecord[],
+  call: Parser.SyntaxNode,
+  name: string,
+): AdapterFact {
   const argumentsNode = call.childForFieldName("arguments");
   const generic = name.endsWith("metadata");
   const key = literalString(argumentsNode?.namedChildren[generic ? 2 : 1]);
-  const metaType = generic ? literalString(argumentsNode?.namedChildren[0]) : META_READ_FUNCTIONS.get(name) ?? META_WRITE_FUNCTIONS.get(name);
+  const metaType = generic
+    ? literalString(argumentsNode?.namedChildren[0])
+    : (META_READ_FUNCTIONS.get(name) ?? META_WRITE_FUNCTIONS.get(name));
   const containing = containingSymbol(symbols, call);
   return {
     schema_version: ADAPTER_SCHEMA_VERSION,
@@ -150,7 +189,12 @@ function metadataFact(file: string, symbols: SymbolRecord[], call: Parser.Syntax
   };
 }
 
-function optionFact(file: string, symbols: SymbolRecord[], call: Parser.SyntaxNode, name: string): AdapterFact {
+function optionFact(
+  file: string,
+  symbols: SymbolRecord[],
+  call: Parser.SyntaxNode,
+  name: string,
+): AdapterFact {
   const option = literalString(call.childForFieldName("arguments")?.namedChildren[0]);
   const containing = containingSymbol(symbols, call);
   return {
@@ -164,7 +208,11 @@ function optionFact(file: string, symbols: SymbolRecord[], call: Parser.SyntaxNo
   };
 }
 
-function restRouteFact(file: string, symbols: SymbolRecord[], call: Parser.SyntaxNode): AdapterFact {
+function restRouteFact(
+  file: string,
+  symbols: SymbolRecord[],
+  call: Parser.SyntaxNode,
+): AdapterFact {
   const argumentsNode = call.childForFieldName("arguments");
   const namespace = literalString(argumentsNode?.namedChildren[0]);
   const route = literalString(argumentsNode?.namedChildren[1]);
@@ -180,7 +228,11 @@ function restRouteFact(file: string, symbols: SymbolRecord[], call: Parser.Synta
   };
 }
 
-function shortcodeFact(file: string, symbols: SymbolRecord[], call: Parser.SyntaxNode): AdapterFact {
+function shortcodeFact(
+  file: string,
+  symbols: SymbolRecord[],
+  call: Parser.SyntaxNode,
+): AdapterFact {
   const argumentsNode = call.childForFieldName("arguments");
   const shortcode = literalString(argumentsNode?.namedChildren[0]);
   const callback = argumentsNode?.namedChildren[1];
@@ -192,11 +244,20 @@ function shortcodeFact(file: string, symbols: SymbolRecord[], call: Parser.Synta
     range: range(call),
     containing_symbol_id: containing?.id ?? null,
     resolution: shortcode === null ? "unresolved" : "exact",
-    attributes: { api: SHORTCODE_FUNCTION, shortcode, ...(callback ? { callback: callback.text } : {}) },
+    attributes: {
+      api: SHORTCODE_FUNCTION,
+      shortcode,
+      ...(callback ? { callback: callback.text } : {}),
+    },
   };
 }
 
-function priceMutationFact(file: string, symbols: SymbolRecord[], call: Parser.SyntaxNode, method: string): AdapterFact {
+function priceMutationFact(
+  file: string,
+  symbols: SymbolRecord[],
+  call: Parser.SyntaxNode,
+  method: string,
+): AdapterFact {
   const functionNode = call.childForFieldName("function");
   const receiver = functionNode?.childForFieldName("object");
   const containing = containingSymbol(symbols, call);
@@ -230,7 +291,8 @@ function extractFileFacts(file: string, source: string, symbols: SymbolRecord[])
       if (name === SHORTCODE_FUNCTION) facts.push(shortcodeFact(file, symbols, node));
 
       const method = methodName(node.childForFieldName("function"));
-      if (method && PRICE_MUTATION_METHODS.has(method)) facts.push(priceMutationFact(file, symbols, node, method));
+      if (method && PRICE_MUTATION_METHODS.has(method))
+        facts.push(priceMutationFact(file, symbols, node, method));
 
       if (name && (REGISTRATION_FUNCTIONS.has(name) || EMITTER_FUNCTIONS.has(name))) {
         const hook = literalString(node.childForFieldName("arguments")?.namedChildren[0]);
@@ -243,18 +305,30 @@ function extractFileFacts(file: string, source: string, symbols: SymbolRecord[])
             range: range(node),
             containing_symbol_id: containingSymbol(symbols, node)?.id ?? null,
             resolution: "exact",
-            attributes: { hook_name: hook, invocation: name, ...(registration && node.childForFieldName("arguments")?.namedChildren[1] ? { callback: node.childForFieldName("arguments")!.namedChildren[1].text } : {}) },
+            attributes: {
+              hook_name: hook,
+              invocation: name,
+              ...(registration && node.childForFieldName("arguments")?.namedChildren[1]
+                ? { callback: node.childForFieldName("arguments")!.namedChildren[1].text }
+                : {}),
+            },
           });
         }
         if (isCartHook(hook)) {
           facts.push({
             schema_version: ADAPTER_SCHEMA_VERSION,
-            kind: REGISTRATION_FUNCTIONS.has(name) ? "wc_cart_hook_registration" : "wc_cart_hook_emitter",
+            kind: REGISTRATION_FUNCTIONS.has(name)
+              ? "wc_cart_hook_registration"
+              : "wc_cart_hook_emitter",
             file,
             range: range(node),
             containing_symbol_id: containingSymbol(symbols, node)?.id ?? null,
             resolution: "exact",
-            attributes: { hook_name: hook, hook_kind: name.includes("filter") ? "filter" : "action", invocation: name },
+            attributes: {
+              hook_name: hook,
+              hook_kind: name.includes("filter") ? "filter" : "action",
+              invocation: name,
+            },
           });
         }
       }
@@ -269,33 +343,52 @@ function extractFileFacts(file: string, source: string, symbols: SymbolRecord[])
 export const wordpressWooCommerceAdapter: FrameworkAdapter = {
   name: "wordpress-woocommerce",
   supports(context: FrameworkAdapterContext): boolean {
-    return context.index.calls.some((call) => REGISTRATION_FUNCTIONS.has(call.callee_name)
-      || EMITTER_FUNCTIONS.has(call.callee_name)
-      || META_READ_FUNCTIONS.has(call.callee_name)
-      || META_WRITE_FUNCTIONS.has(call.callee_name)
-      || OPTION_READ_FUNCTIONS.has(call.callee_name)
-      || OPTION_WRITE_FUNCTIONS.has(call.callee_name)
-      || call.callee_name === REST_ROUTE_FUNCTION
-      || call.callee_name === SHORTCODE_FUNCTION
-      || PRICE_MUTATION_METHODS.has(call.callee_name.split(".").at(-1) ?? ""));
+    return context.index.calls.some(
+      (call) =>
+        REGISTRATION_FUNCTIONS.has(call.callee_name) ||
+        EMITTER_FUNCTIONS.has(call.callee_name) ||
+        META_READ_FUNCTIONS.has(call.callee_name) ||
+        META_WRITE_FUNCTIONS.has(call.callee_name) ||
+        OPTION_READ_FUNCTIONS.has(call.callee_name) ||
+        OPTION_WRITE_FUNCTIONS.has(call.callee_name) ||
+        call.callee_name === REST_ROUTE_FUNCTION ||
+        call.callee_name === SHORTCODE_FUNCTION ||
+        PRICE_MUTATION_METHODS.has(call.callee_name.split(".").at(-1) ?? ""),
+    );
   },
   extract(context: FrameworkAdapterContext): AdapterIndex {
     const facts: AdapterFact[] = [];
-    const files = new Set(context.index.calls
-      .filter((call) => REGISTRATION_FUNCTIONS.has(call.callee_name)
-        || EMITTER_FUNCTIONS.has(call.callee_name)
-        || META_READ_FUNCTIONS.has(call.callee_name)
-        || META_WRITE_FUNCTIONS.has(call.callee_name)
-        || OPTION_READ_FUNCTIONS.has(call.callee_name)
-        || OPTION_WRITE_FUNCTIONS.has(call.callee_name)
-        || call.callee_name === REST_ROUTE_FUNCTION
-        || call.callee_name === SHORTCODE_FUNCTION
-        || PRICE_MUTATION_METHODS.has(call.callee_name.split(".").at(-1) ?? ""))
-      .map((call) => call.file));
+    const files = new Set(
+      context.index.calls
+        .filter(
+          (call) =>
+            REGISTRATION_FUNCTIONS.has(call.callee_name) ||
+            EMITTER_FUNCTIONS.has(call.callee_name) ||
+            META_READ_FUNCTIONS.has(call.callee_name) ||
+            META_WRITE_FUNCTIONS.has(call.callee_name) ||
+            OPTION_READ_FUNCTIONS.has(call.callee_name) ||
+            OPTION_WRITE_FUNCTIONS.has(call.callee_name) ||
+            call.callee_name === REST_ROUTE_FUNCTION ||
+            call.callee_name === SHORTCODE_FUNCTION ||
+            PRICE_MUTATION_METHODS.has(call.callee_name.split(".").at(-1) ?? ""),
+        )
+        .map((call) => call.file),
+    );
     for (const file of files) {
       const source = readFileSync(resolve(context.repository_root, file), "utf8");
-      facts.push(...extractFileFacts(file, source, context.index.symbols.filter((symbol) => symbol.file === file)));
+      facts.push(
+        ...extractFileFacts(
+          file,
+          source,
+          context.index.symbols.filter((symbol) => symbol.file === file),
+        ),
+      );
     }
-    return { schema_version: ADAPTER_SCHEMA_VERSION, adapter: "wordpress-woocommerce", commit_hash: context.index.commit_hash, facts };
+    return {
+      schema_version: ADAPTER_SCHEMA_VERSION,
+      adapter: "wordpress-woocommerce",
+      commit_hash: context.index.commit_hash,
+      facts,
+    };
   },
 };

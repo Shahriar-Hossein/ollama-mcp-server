@@ -46,7 +46,8 @@ export interface SynthesisResult {
 }
 
 function citation(evidence: VerificationEvidence): string | null {
-  if (evidence.evidence_kind === "git_commit") return evidence.git_commit_hash ? `git:${evidence.git_commit_hash}` : null;
+  if (evidence.evidence_kind === "git_commit")
+    return evidence.git_commit_hash ? `git:${evidence.git_commit_hash}` : null;
   if (!evidence.file) return null;
   if (evidence.start_byte === undefined || evidence.end_byte === undefined) return evidence.file;
   return `${evidence.file}:${evidence.start_byte}-${evidence.end_byte}`;
@@ -59,9 +60,13 @@ function citation(evidence: VerificationEvidence): string | null {
  */
 export function synthesizeVerifiedClaims(input: SynthesisInput): SynthesisResult {
   const parsed = inputSchema.parse(input);
-  const supported = parsed.verification.results.filter((result) => result.verification_status === "SUPPORTED");
+  const supported = parsed.verification.results.filter(
+    (result) => result.verification_status === "SUPPORTED",
+  );
   const citedClaims = supported.map((result) => {
-    const citations = [...new Set(result.evidence.map(citation).filter((value): value is string => Boolean(value)))];
+    const citations = [
+      ...new Set(result.evidence.map(citation).filter((value): value is string => Boolean(value))),
+    ];
     if (!citations.length) throw new Error(`SUPPORTED claim ${result.id} has no citable evidence.`);
     return { id: result.id, claim: result.claim, citations };
   });
@@ -73,11 +78,16 @@ export function synthesizeVerifiedClaims(input: SynthesisInput): SynthesisResult
     question: parsed.question,
     answer_to_user: answerToUser,
     cited_claims: citedClaims,
-    omitted_claim_ids: parsed.verification.results.filter((result) => result.verification_status !== "SUPPORTED").map((result) => result.id),
+    omitted_claim_ids: parsed.verification.results
+      .filter((result) => result.verification_status !== "SUPPORTED")
+      .map((result) => result.id),
   };
 }
 
-export function synthesizeFromVerification(repositoryRoot: string, input: SynthesisInput): SynthesisResult {
+export function synthesizeFromVerification(
+  repositoryRoot: string,
+  input: SynthesisInput,
+): SynthesisResult {
   // Resolve early so the CLI and MCP entry points apply the same repository-root contract.
   resolve(repositoryRoot);
   return synthesizeVerifiedClaims(input);

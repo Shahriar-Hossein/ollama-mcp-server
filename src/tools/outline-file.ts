@@ -12,10 +12,15 @@ export function registerOutlineFile(server: McpServer) {
     },
     async ({ repository_root, path }) => {
       try {
-        return { content: [{ type: "text", text: JSON.stringify(outlineFile(repository_root, path)) }] };
+        return {
+          content: [{ type: "text", text: JSON.stringify(outlineFile(repository_root, path)) }],
+        };
       } catch (error: any) {
-        return { isError: true, content: [{ type: "text", text: `Failed to outline ${path}: ${error.message}` }] };
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Failed to outline ${path}: ${error.message}` }],
+        };
       }
-    }
+    },
   );
 }

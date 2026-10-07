@@ -3,7 +3,13 @@ import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { DEFAULT_LOCAL_MODEL, TOOL_OUTPUT_RESERVES, OLLAMA_HOST, checkInputBudget, resolveModelBudget } from "../../ollama-client.js";
+import {
+  DEFAULT_LOCAL_MODEL,
+  TOOL_OUTPUT_RESERVES,
+  OLLAMA_HOST,
+  checkInputBudget,
+  resolveModelBudget,
+} from "../../ollama-client.js";
 
 // Read-only repo-discovery worker: promoted from the throwaway harness used
 // in docs/experimental/benchmarks/runs/2026-09-16-local-explorer.md. That pilot found
@@ -26,13 +32,21 @@ const TOOLS = [
     type: "function",
     function: {
       name: "ast_grep",
-      description: "Search TypeScript or JavaScript by syntax shape, ignoring comments and strings. Use $NAME for one syntax node and $$$ARGS for zero or more nodes. Returns matching file:line:text.",
+      description:
+        "Search TypeScript or JavaScript by syntax shape, ignoring comments and strings. Use $NAME for one syntax node and $$$ARGS for zero or more nodes. Returns matching file:line:text.",
       parameters: {
         type: "object",
         properties: {
-          pattern: { type: "string", description: "A valid TypeScript or JavaScript ast-grep pattern, e.g. 'process.env.$NAME'." },
+          pattern: {
+            type: "string",
+            description:
+              "A valid TypeScript or JavaScript ast-grep pattern, e.g. 'process.env.$NAME'.",
+          },
           language: { type: "string", enum: ["TypeScript", "JavaScript"] },
-          path: { type: "string", description: "Directory or file to search. Defaults to repo root." },
+          path: {
+            type: "string",
+            description: "Directory or file to search. Defaults to repo root.",
+          },
         },
         required: ["pattern", "language"],
       },
@@ -42,8 +56,13 @@ const TOOLS = [
     type: "function",
     function: {
       name: "glob",
-      description: "Find files by name pattern (e.g. 'src/**/*.ts'). Returns matching relative paths.",
-      parameters: { type: "object", properties: { pattern: { type: "string" } }, required: ["pattern"] },
+      description:
+        "Find files by name pattern (e.g. 'src/**/*.ts'). Returns matching relative paths.",
+      parameters: {
+        type: "object",
+        properties: { pattern: { type: "string" } },
+        required: ["pattern"],
+      },
     },
   },
   {
@@ -55,7 +74,10 @@ const TOOLS = [
         type: "object",
         properties: {
           pattern: { type: "string" },
-          path: { type: "string", description: "Directory or file to search. Defaults to repo root." },
+          path: {
+            type: "string",
+            description: "Directory or file to search. Defaults to repo root.",
+          },
         },
         required: ["pattern"],
       },
@@ -153,43 +175,72 @@ function runGlob(root: string, pattern: string): string {
   return matches.length ? matches.join("\n") : "(no matches)";
 }
 
-function runGrep(root: string, pattern: string, path: string | undefined, maxOutputChars: number): string {
+function runGrep(
+  root: string,
+  pattern: string,
+  path: string | undefined,
+  maxOutputChars: number,
+): string {
   const searchPath = resolveWithinRoot(root, path || ".");
   if (searchPath === null) return "(refused: path escapes repo root)";
   try {
-    const out = execFileSync(
-      "grep",
-      ["-rn", "-E", "--include=*.*", pattern, searchPath],
-      { encoding: "utf8", timeout: 5000 }
-    );
-    const lines = out.trim().split("\n").filter((l) => !l.includes("/node_modules/") && !l.includes("/.git/"));
+    const out = execFileSync("grep", ["-rn", "-E", "--include=*.*", pattern, searchPath], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    const lines = out
+      .trim()
+      .split("\n")
+      .filter((l) => !l.includes("/node_modules/") && !l.includes("/.git/"));
     const text = lines.slice(0, 50).join("\n");
-    return text ? (text.length > maxOutputChars ? text.slice(0, maxOutputChars) + "\n...(truncated)" : text) : "(no matches)";
+    return text
+      ? text.length > maxOutputChars
+        ? text.slice(0, maxOutputChars) + "\n...(truncated)"
+        : text
+      : "(no matches)";
   } catch {
     return "(no matches)";
   }
 }
 
-function runAstGrep(root: string, pattern: string, language: string, path: string | undefined, maxOutputChars: number): string {
+function runAstGrep(
+  root: string,
+  pattern: string,
+  language: string,
+  path: string | undefined,
+  maxOutputChars: number,
+): string {
   const searchPath = resolveWithinRoot(root, path || ".");
   if (searchPath === null) return "(refused: path escapes repo root)";
-  if (!AST_GREP_LANGUAGES.has(language)) return "(refused: language must be TypeScript or JavaScript)";
-  if (!pattern.trim() || pattern.length > 2_000) return "(refused: pattern must contain 1 to 2000 characters)";
+  if (!AST_GREP_LANGUAGES.has(language))
+    return "(refused: language must be TypeScript or JavaScript)";
+  if (!pattern.trim() || pattern.length > 2_000)
+    return "(refused: pattern must contain 1 to 2000 characters)";
   try {
     const out = execFileSync(
       "ast-grep",
       ["run", "--lang", language, "--pattern", pattern, "--json=stream", searchPath],
-      { encoding: "utf8", timeout: 5000, maxBuffer: 128 * 1024 }
+      { encoding: "utf8", timeout: 5000, maxBuffer: 128 * 1024 },
     );
     const lines: string[] = [];
     for (const raw of out.trim().split("\n")) {
       if (!raw) continue;
-      const match = JSON.parse(raw) as { file: string; lines: string; range: { start: { line: number; column: number } } };
-      lines.push(`${match.file}:${match.range.start.line}:${match.range.start.column}: ${match.lines}`);
+      const match = JSON.parse(raw) as {
+        file: string;
+        lines: string;
+        range: { start: { line: number; column: number } };
+      };
+      lines.push(
+        `${match.file}:${match.range.start.line}:${match.range.start.column}: ${match.lines}`,
+      );
       if (lines.length === 50) break;
     }
     const text = lines.join("\n");
-    return text ? (text.length > maxOutputChars ? text.slice(0, maxOutputChars) + "\n...(truncated)" : text) : "(no matches)";
+    return text
+      ? text.length > maxOutputChars
+        ? text.slice(0, maxOutputChars) + "\n...(truncated)"
+        : text
+      : "(no matches)";
   } catch (error: any) {
     if (error.status === 1) return "(no matches)";
     const detail = String(error.stderr || error.message).trim();
@@ -204,7 +255,7 @@ function runRead(
   endLine: number | undefined,
   filesRead: Set<string>,
   maxFilesRead: number,
-  maxOutputChars: number
+  maxOutputChars: number,
 ): string {
   const full = resolveWithinRoot(root, path);
   if (full === null) return "(refused: path escapes repo root)";
@@ -253,7 +304,12 @@ export async function runLocalExplorerTask({
   request_timeout_ms = 180_000,
   think = false,
 }: LocalExplorerTaskParams): Promise<{ isError?: boolean; text: string }> {
-  const budget = await resolveModelBudget(model, { num_ctx, num_predict }, undefined, TOOL_OUTPUT_RESERVES.scout);
+  const budget = await resolveModelBudget(
+    model,
+    { num_ctx, num_predict },
+    undefined,
+    TOOL_OUTPUT_RESERVES.scout,
+  );
   const root = resolve(cwd || process.cwd());
   const filesRead = new Set<string>();
   const messages: any[] = [
@@ -266,31 +322,57 @@ export async function runLocalExplorerTask({
 
   for (let turn = 0; turn < max_tool_calls + 2; turn++) {
     const input = checkInputBudget(budget, JSON.stringify({ messages, tools: TOOLS }));
-    if (!input.fits) return { isError: true, text: JSON.stringify({ status: "input_overflow", budget: input, tool_calls: toolCallCount }) };
+    if (!input.fits)
+      return {
+        isError: true,
+        text: JSON.stringify({
+          status: "input_overflow",
+          budget: input,
+          tool_calls: toolCallCount,
+        }),
+      };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), request_timeout_ms);
     let res: Response;
     try {
       res = await fetch(`${OLLAMA_HOST}/api/chat`, {
         method: "POST",
-        body: JSON.stringify({ model, stream: false, think, messages, tools: TOOLS, options: { num_predict: budget.num_predict, num_ctx: budget.num_ctx } }),
+        body: JSON.stringify({
+          model,
+          stream: false,
+          think,
+          messages,
+          tools: TOOLS,
+          options: { num_predict: budget.num_predict, num_ctx: budget.num_ctx },
+        }),
         signal: controller.signal,
       });
     } catch (e: any) {
-      return { isError: true, text: e.name === "AbortError" ? `Ollama call timed out after ${request_timeout_ms}ms.` : `Ollama call failed: ${e.message}` };
+      return {
+        isError: true,
+        text:
+          e.name === "AbortError"
+            ? `Ollama call timed out after ${request_timeout_ms}ms.`
+            : `Ollama call failed: ${e.message}`,
+      };
     } finally {
       clearTimeout(timer);
     }
     const data: any = await res.json();
     const message = data.message;
     if (!message) {
-      return { isError: true, text: `Ollama returned no message (${res.status}): ${data.error || JSON.stringify(data)}` };
+      return {
+        isError: true,
+        text: `Ollama returned no message (${res.status}): ${data.error || JSON.stringify(data)}`,
+      };
     }
     messages.push(message);
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
       const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-      return { text: `${message.content}\n\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s; num_ctx=${budget.num_ctx}, num_predict=${budget.num_predict}]` };
+      return {
+        text: `${message.content}\n\n[${toolCallCount} tool call(s), ${filesRead.size} file(s) read, ${elapsed}s; num_ctx=${budget.num_ctx}, num_predict=${budget.num_predict}]`,
+      };
     }
 
     for (const call of message.tool_calls) {
@@ -306,7 +388,15 @@ export async function runLocalExplorerTask({
       } else if (call.function.name === "ast_grep") {
         result = runAstGrep(root, args.pattern, args.language, args.path, max_output_chars);
       } else if (call.function.name === "read") {
-        result = runRead(root, args.path, args.start_line, args.end_line, filesRead, max_files_read, max_output_chars);
+        result = runRead(
+          root,
+          args.path,
+          args.start_line,
+          args.end_line,
+          filesRead,
+          max_files_read,
+          max_output_chars,
+        );
       } else {
         result = `(unknown tool ${call.function.name})`;
       }
@@ -314,7 +404,10 @@ export async function runLocalExplorerTask({
     }
   }
 
-  return { isError: true, text: `Gave up after ${max_tool_calls} tool calls without a final answer.` };
+  return {
+    isError: true,
+    text: `Gave up after ${max_tool_calls} tool calls without a final answer.`,
+  };
 }
 
 export function registerLocalExplorerTask(server: McpServer) {
@@ -327,20 +420,50 @@ export function registerLocalExplorerTask(server: McpServer) {
       "yourself or with a stronger model rather than trusting it - qwen3.5:4b's own hallucination in that pilot " +
       "was correctly self-flagged low confidence. Never trusted blindly for anything you'll act on directly.",
     {
-      task: z.string().describe("The exploration question, e.g. 'find where X is validated and cite the function'."),
-      cwd: z.string().optional().describe("Repo root to search in. Defaults to the MCP server's own cwd."),
-      model: z.string().default(DEFAULT_MODEL).describe("Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:7b does not - see benchmark doc)."),
+      task: z
+        .string()
+        .describe(
+          "The exploration question, e.g. 'find where X is validated and cite the function'.",
+        ),
+      cwd: z
+        .string()
+        .optional()
+        .describe("Repo root to search in. Defaults to the MCP server's own cwd."),
+      model: z
+        .string()
+        .default(DEFAULT_MODEL)
+        .describe(
+          "Must be a model that emits real tool_calls (qwen3.5:4b confirmed; qwen2.5-coder:7b does not - see benchmark doc).",
+        ),
       max_tool_calls: z.number().default(50),
       max_files_read: z.number().default(10),
       max_output_chars: z.number().default(8_000).describe("Per-tool-result truncation limit."),
-      num_predict: z.number().int().positive().optional().describe("Output ceiling override; defaults to the smaller of the saved model ceiling and 2048 tokens."),
-      num_ctx: z.number().int().positive().optional().describe("Context override; inherits the selected model setting when omitted."),
-      request_timeout_ms: z.number().default(180_000).describe("Per-chat-call timeout, guards against an infinite/hung generation."),
-      think: z.boolean().default(false).describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),
+      num_predict: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Output ceiling override; defaults to the smaller of the saved model ceiling and 2048 tokens.",
+        ),
+      num_ctx: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Context override; inherits the selected model setting when omitted."),
+      request_timeout_ms: z
+        .number()
+        .default(180_000)
+        .describe("Per-chat-call timeout, guards against an infinite/hung generation."),
+      think: z
+        .boolean()
+        .default(false)
+        .describe("Enable the model's thinking mode. Off by default - costs extra tokens/time."),
     },
     async (params) => {
       const result = await runLocalExplorerTask(params);
       return { isError: result.isError, content: [{ type: "text", text: result.text }] };
-    }
+    },
   );
 }

@@ -12,16 +12,27 @@ const run = JSON.parse(readFileSync(runPath, "utf8"));
 if (!run.complete) throw new Error("Refusing to grade an incomplete run.");
 if (run.results.length !== 1) throw new Error("Grade one model per artifact.");
 for (const [file, hash] of Object.entries(fixture.files ?? {})) {
-  if (createHash("sha256").update(readFileSync(resolve(sourceRoot, file))).digest("hex") !== hash) {
+  if (
+    createHash("sha256")
+      .update(readFileSync(resolve(sourceRoot, file)))
+      .digest("hex") !== hash
+  ) {
     throw new Error(`Frozen source changed: ${file}`);
   }
 }
-if (run.protocol.fixture_sha256 && run.protocol.fixture_sha256 !== createHash("sha256").update(readFileSync(fixturePath)).digest("hex")) {
+if (
+  run.protocol.fixture_sha256 &&
+  run.protocol.fixture_sha256 !==
+    createHash("sha256").update(readFileSync(fixturePath)).digest("hex")
+) {
   throw new Error("Frozen fixture differs from the evaluated fixture.");
 }
 const actualIds = run.results[0].questions.map((cell: any) => cell.id);
 const expectedIds = fixture.questions.map((question: any) => question.id);
-if (new Set(actualIds).size !== actualIds.length || JSON.stringify([...actualIds].sort()) !== JSON.stringify([...expectedIds].sort())) {
+if (
+  new Set(actualIds).size !== actualIds.length ||
+  JSON.stringify([...actualIds].sort()) !== JSON.stringify([...expectedIds].sort())
+) {
   throw new Error("Run must contain every frozen question exactly once.");
 }
 const scores = run.results[0].questions.map((cell: any) => {
@@ -38,35 +49,25 @@ const scores = run.results[0].questions.map((cell: any) => {
     line: number;
     quote: string;
   }>;
-  const source = (file: string) =>
-    readFileSync(resolve(sourceRoot, file), "utf8").split("\n");
+  const source = (file: string) => readFileSync(resolve(sourceRoot, file), "utf8").split("\n");
   const missing = required.filter(
     (item) =>
-      !selected.some(
-        (e) =>
-          e.file === item.file && e.line === item.line && e.quote === item.text,
-      ),
+      !selected.some((e) => e.file === item.file && e.line === item.line && e.quote === item.text),
   );
   const notSupplied = required.filter(
     (item) =>
       !result.candidates.some(
         (c: any) =>
           c.file === item.file &&
-          c.lines.some(
-            (line: any) =>
-              line.line === item.line && line.text.trim() === item.text,
-          ),
+          c.lines.some((line: any) => line.line === item.line && line.text.trim() === item.text),
       ),
   );
-  const exactQuotes = selected.every((e) =>
-    source(e.file)[e.line - 1]?.includes(e.quote),
-  );
+  const exactQuotes = selected.every((e) => source(e.file)[e.line - 1]?.includes(e.quote));
   const abstained =
-    ["no_evidence", "needs_review"].includes(result.status) &&
-    result.unresolved.length > 0;
-  const distractors = selected.filter((e) => (expected.forbidden ?? []).some(
-    (item: any) => item.file === e.file && item.line === e.line,
-  ));
+    ["no_evidence", "needs_review"].includes(result.status) && result.unresolved.length > 0;
+  const distractors = selected.filter((e) =>
+    (expected.forbidden ?? []).some((item: any) => item.file === e.file && item.line === e.line),
+  );
   return {
     id: cell.id,
     kind: expected.kind,
@@ -76,16 +77,22 @@ const scores = run.results[0].questions.map((cell: any) => {
     required_count: required.length,
     missing_required: missing,
     required_not_supplied: notSupplied,
-    complete_evidence:
-      expected.kind === "positive" && missing.length === 0 && exactQuotes,
+    complete_evidence: expected.kind === "positive" && missing.length === 0 && exactQuotes,
     appropriate_abstention: expected.kind === "negative" && abstained,
-    positive_supported: expected.kind === "positive" && missing.length === 0 && exactQuotes && result.status === "evidence_selected",
+    positive_supported:
+      expected.kind === "positive" &&
+      missing.length === 0 &&
+      exactQuotes &&
+      result.status === "evidence_selected",
     frozen_distractor_citations: distractors,
     avoids_frozen_distractors: distractors.length === 0,
-    generation_completed: cell.calls.length > 0 && cell.calls.every((call: any) => call.metrics?.done === true && call.metrics?.done_reason === "stop"),
+    generation_completed:
+      cell.calls.length > 0 &&
+      cell.calls.every(
+        (call: any) => call.metrics?.done === true && call.metrics?.done_reason === "stop",
+      ),
     non_required_citations: selected.filter(
-      (e) =>
-        !required.some((item) => item.file === e.file && item.line === e.line),
+      (e) => !required.some((item) => item.file === e.file && item.line === e.line),
     ),
     unresolved: result.unresolved,
   };
@@ -104,19 +111,12 @@ writeFileSync(
 );
 process.stdout.write(
   `${JSON.stringify(
-    scores.map(
-      ({
-        id,
-        complete_evidence,
-        appropriate_abstention,
-        required_not_supplied,
-      }: any) => ({
-        id,
-        complete_evidence,
-        appropriate_abstention,
-        required_not_supplied,
-      }),
-    ),
+    scores.map(({ id, complete_evidence, appropriate_abstention, required_not_supplied }: any) => ({
+      id,
+      complete_evidence,
+      appropriate_abstention,
+      required_not_supplied,
+    })),
     null,
     2,
   )}\n`,

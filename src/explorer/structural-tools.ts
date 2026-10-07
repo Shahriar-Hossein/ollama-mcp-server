@@ -47,7 +47,11 @@ function requiredSymbol(symbolId: string, index: RepositoryIndex): SymbolRecord 
 }
 
 /** Finds declarations by stable ID, exact name/path, or a case-insensitive partial name/path. */
-export function findSymbol(repositoryRoot: string, query: string, index: RepositoryIndex = indexRepository(repositoryRoot)): SymbolSearchResult {
+export function findSymbol(
+  repositoryRoot: string,
+  query: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): SymbolSearchResult {
   const needle = query.trim();
   if (!needle) throw new Error("Symbol query must not be empty.");
   const foldedNeedle = needle.toLocaleLowerCase();
@@ -67,14 +71,21 @@ export function findSymbol(repositoryRoot: string, query: string, index: Reposit
   }
 
   const order: Record<SymbolMatchKind, number> = { id: 0, exact: 1, partial: 2 };
-  symbols.sort((left, right) => order[left.match] - order[right.match]
-    || left.symbol.file.localeCompare(right.symbol.file)
-    || left.symbol.range.start.byte - right.symbol.range.start.byte);
+  symbols.sort(
+    (left, right) =>
+      order[left.match] - order[right.match] ||
+      left.symbol.file.localeCompare(right.symbol.file) ||
+      left.symbol.range.start.byte - right.symbol.range.start.byte,
+  );
   return { commit_hash: index.commit_hash, query: needle, symbols };
 }
 
 /** Finds indexed identifier/type-name occurrences that resolved to one declaration. */
-export function findReferences(repositoryRoot: string, symbolId: string, index: RepositoryIndex = indexRepository(repositoryRoot)): ReferenceSearchResult {
+export function findReferences(
+  repositoryRoot: string,
+  symbolId: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): ReferenceSearchResult {
   const symbol = requiredSymbol(symbolId, index);
   return {
     commit_hash: index.commit_hash,
@@ -84,7 +95,11 @@ export function findReferences(repositoryRoot: string, symbolId: string, index: 
 }
 
 /** Finds call sites whose callee resolved to one declaration. */
-export function findCallers(repositoryRoot: string, symbolId: string, index: RepositoryIndex = indexRepository(repositoryRoot)): CallSearchResult {
+export function findCallers(
+  repositoryRoot: string,
+  symbolId: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): CallSearchResult {
   const symbol = requiredSymbol(symbolId, index);
   return {
     commit_hash: index.commit_hash,
@@ -94,7 +109,11 @@ export function findCallers(repositoryRoot: string, symbolId: string, index: Rep
 }
 
 /** Finds call sites made from within one declaration. */
-export function findCallees(repositoryRoot: string, symbolId: string, index: RepositoryIndex = indexRepository(repositoryRoot)): CallSearchResult {
+export function findCallees(
+  repositoryRoot: string,
+  symbolId: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): CallSearchResult {
   const symbol = requiredSymbol(symbolId, index);
   return {
     commit_hash: index.commit_hash,
@@ -104,13 +123,20 @@ export function findCallees(repositoryRoot: string, symbolId: string, index: Rep
 }
 
 /** Finds conventional JS/TS test cases that source-backed references resolve to this symbol. */
-export function findTestsForSymbol(repositoryRoot: string, symbolId: string, index: RepositoryIndex = indexRepository(repositoryRoot)): TestSearchResult {
+export function findTestsForSymbol(
+  repositoryRoot: string,
+  symbolId: string,
+  index: RepositoryIndex = indexRepository(repositoryRoot),
+): TestSearchResult {
   const symbol = requiredSymbol(symbolId, index);
   const edges = index.test_symbols.filter((edge) => edge.target_symbol_id === symbol.id);
   const tests = index.tests
     .filter((test) => test.kind === "test")
     .flatMap((test) => {
-      const symbols = edges.filter((edge) => edge.test_file === test.file && edge.test_range.start.byte === test.range.start.byte);
+      const symbols = edges.filter(
+        (edge) =>
+          edge.test_file === test.file && edge.test_range.start.byte === test.range.start.byte,
+      );
       return symbols.length ? [{ ...test, symbols }] : [];
     });
   return { commit_hash: index.commit_hash, symbol, tests };

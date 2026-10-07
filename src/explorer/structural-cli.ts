@@ -1,9 +1,17 @@
 import { resolve } from "node:path";
-import { findCallees, findCallers, findReferences, findSymbol, findTestsForSymbol } from "./structural-tools.js";
+import {
+  findCallees,
+  findCallers,
+  findReferences,
+  findSymbol,
+  findTestsForSymbol,
+} from "./structural-tools.js";
 
 const [operation, repositoryRoot, query] = process.argv.slice(2);
 if (!operation || !repositoryRoot || !query) {
-  throw new Error("Usage: structural:super-explorer <find-symbol|find-references|find-callers|find-callees|find-tests-for-symbol> <repository-root> <query-or-symbol-id>");
+  throw new Error(
+    "Usage: structural:super-explorer <find-symbol|find-references|find-callers|find-callees|find-tests-for-symbol> <repository-root> <query-or-symbol-id>",
+  );
 }
 
 const root = resolve(repositoryRoot);

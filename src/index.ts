@@ -39,11 +39,17 @@ async function registerOptionalTools() {
     registerSemanticSearch(server);
   }
   if (features.knowledgeStore) {
-    const { registerSaveKnowledgeUpdates } = await import("./experimental/tools/save-knowledge-updates.js");
+    const { registerSaveKnowledgeUpdates } = await import(
+      "./experimental/tools/save-knowledge-updates.js"
+    );
     registerSaveKnowledgeUpdates(server);
   }
   if (features.verificationPipeline) {
-    const [{ registerDiscoverEvidence }, { registerVerifyClaims }, { registerSynthesizeVerifiedAnswer }] = await Promise.all([
+    const [
+      { registerDiscoverEvidence },
+      { registerVerifyClaims },
+      { registerSynthesizeVerifiedAnswer },
+    ] = await Promise.all([
       import("./experimental/tools/discover-evidence.js"),
       import("./experimental/tools/verify-claims.js"),
       import("./experimental/tools/synthesize-verified-answer.js"),
@@ -53,17 +59,23 @@ async function registerOptionalTools() {
     registerSynthesizeVerifiedAnswer(server);
   }
   if (features.fullExplorer) {
-    const { registerExploreRepository } = await import("./experimental/tools/explore-repository.js");
+    const { registerExploreRepository } = await import(
+      "./experimental/tools/explore-repository.js"
+    );
     registerExploreRepository(server, advancedRetrieval);
   }
 
   // Autonomous and Git-writing: independently opt-in; never enabled by ENABLE_EXPERIMENTAL.
   if (features.cloudClaudeWorker) {
-    const { registerRunCloudClaudeTask } = await import("./experimental/workers/run-cloud-claude-task.js");
+    const { registerRunCloudClaudeTask } = await import(
+      "./experimental/workers/run-cloud-claude-task.js"
+    );
     registerRunCloudClaudeTask(server);
   }
   if (features.localWorker) {
-    const { registerRunLocalWorkerTask } = await import("./experimental/workers/run-local-worker-task.js");
+    const { registerRunLocalWorkerTask } = await import(
+      "./experimental/workers/run-local-worker-task.js"
+    );
     registerRunLocalWorkerTask(server);
   }
 }

@@ -24,7 +24,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASH_VALIDATOR_HOOK = join(__dirname, "..", "..", "..", "scripts", "validate-cloud-bash.cjs");
 const HOOK_SETTINGS = JSON.stringify({
   hooks: {
-    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: `node "${BASH_VALIDATOR_HOOK}"` }] }],
+    PreToolUse: [
+      { matcher: "Bash", hooks: [{ type: "command", command: `node "${BASH_VALIDATOR_HOOK}"` }] },
+    ],
   },
 });
 
@@ -36,9 +38,21 @@ export function registerRunCloudClaudeTask(server: McpServer) {
       "afterward - don't trust its own report. Requires CLOUD_CLAUDE_ENABLED=1, an 'ollama signin', and the " +
       "'ollama launch claude' feature installed.",
     {
-      task: z.string().describe("The task to perform, phrased explicitly (e.g. 'run this exact command yourself, do not delegate')."),
-      cwd: z.string().optional().describe("Working directory to run in. Defaults to the MCP server's own cwd."),
-      model: z.string().default("nemotron-3-super:cloud").describe("An Ollama cloud model tag (*:cloud). Use list_ollama_models to see what's signed in."),
+      task: z
+        .string()
+        .describe(
+          "The task to perform, phrased explicitly (e.g. 'run this exact command yourself, do not delegate').",
+        ),
+      cwd: z
+        .string()
+        .optional()
+        .describe("Working directory to run in. Defaults to the MCP server's own cwd."),
+      model: z
+        .string()
+        .default("nemotron-3-super:cloud")
+        .describe(
+          "An Ollama cloud model tag (*:cloud). Use list_ollama_models to see what's signed in.",
+        ),
     },
     async ({ task, cwd, model }) => {
       const result = spawnSync(
@@ -61,16 +75,26 @@ export function registerRunCloudClaudeTask(server: McpServer) {
           "--settings",
           HOOK_SETTINGS,
         ],
-        { cwd: cwd || process.cwd(), encoding: "utf8", timeout: SPAWN_TIMEOUT_MS }
+        { cwd: cwd || process.cwd(), encoding: "utf8", timeout: SPAWN_TIMEOUT_MS },
       );
 
       if (result.error) {
-        return { isError: true, content: [{ type: "text", text: `Failed to run 'ollama launch claude': ${result.error.message}` }] };
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `Failed to run 'ollama launch claude': ${result.error.message}` },
+          ],
+        };
       }
       if (result.status !== 0) {
-        return { isError: true, content: [{ type: "text", text: `Exited ${result.status}: ${result.stderr || result.stdout}` }] };
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `Exited ${result.status}: ${result.stderr || result.stdout}` },
+          ],
+        };
       }
       return { content: [{ type: "text", text: result.stdout || "(no output)" }] };
-    }
+    },
   );
 }
