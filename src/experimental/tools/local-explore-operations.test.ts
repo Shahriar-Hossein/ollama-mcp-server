@@ -180,12 +180,12 @@ test("generic storage verbs outside image or query workflows add no operation ch
 test("questions about tracked but unindexed languages are flagged", () => {
   const root = mkdtempSync(join(tmpdir(), "local-explore-unindexed-"));
   try {
-    writeFileSync(join(root, "tool.py"), "print(1)\n");
+    writeFileSync(join(root, "tool.rb"), "puts 1\n");
     writeFileSync(join(root, "admin.js"), "export const a = 1;\n");
     execFileSync("git", ["init", "-q"], { cwd: root });
     execFileSync("git", ["add", "."], { cwd: root });
-    assert.deepEqual(unindexedLanguages(root, "How does the Python tool sanitize sort?"), ["Python"]);
-    assert.deepEqual(unindexedLanguages(root, "Which Ruby module loads config?"), []);
+    assert.deepEqual(unindexedLanguages(root, "How does the Ruby tool sanitize sort?"), ["Ruby"]);
+    assert.deepEqual(unindexedLanguages(root, "Which Python module loads config?"), []);
     assert.deepEqual(unindexedLanguages(root, "How is admin.js exported?"), []);
   } finally {
     rmSync(root, { recursive: true, force: true });

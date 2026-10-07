@@ -139,9 +139,10 @@ Both also accept `format`: `"json"`, or a JSON Schema object to force an exact
 output shape. The schema constrains shape, not factual accuracy.
 
 `local_explore_repo` returns `no_evidence` before any model call when the
-question names a tracked language the index cannot search (e.g. Python); the
-index covers TypeScript, JavaScript and PHP (symbols, calls, includes,
-inheritance; no PHP namespace/`use` resolution).
+question names a tracked language the index cannot search (e.g. Ruby); the
+index covers TypeScript, JavaScript, PHP and Python (symbols, calls, includes,
+inheritance; no PHP namespace/`use` resolution; Python imports resolve to files,
+but `self.method()` calls and `import a.b` bindings stay unresolved).
 
 The model has no tools or shell access in the scout route. The older
 `local_explorer_task` loop remains for historical comparisons.

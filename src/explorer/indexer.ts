@@ -5,6 +5,7 @@ import { relative, resolve, sep } from "node:path";
 import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
 import PHP from "tree-sitter-php";
+import Python from "tree-sitter-python";
 import TypeScript from "tree-sitter-typescript";
 import { parseSource } from "./parse.js";
 
@@ -46,7 +47,7 @@ export interface SymbolRecord {
   repository_root: ".";
   commit_hash: string;
   file: string;
-  language: "typescript" | "javascript" | "php";
+  language: "typescript" | "javascript" | "php" | "python";
   kind: SymbolKind;
   name: string;
   qualified_name: string;
@@ -138,6 +139,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, SupportedLanguage> = {
   ".mjs": "javascript",
   ".cjs": "javascript",
   ".php": "php",
+  ".py": "python",
 };
 
 function command(root: string, args: string[]): string {
@@ -161,13 +163,15 @@ function languageForPath(path: string): SupportedLanguage | null {
 function parserFor(language: SupportedLanguage, file: string): Parser {
   const parser = new Parser();
   parser.setLanguage(
-    language === "php"
-      ? PHP.php
-      : language === "typescript"
-        ? file.endsWith(".tsx")
-          ? TypeScript.tsx
-          : TypeScript.typescript
-        : JavaScript,
+    language === "python"
+      ? Python
+      : language === "php"
+        ? PHP.php
+        : language === "typescript"
+          ? file.endsWith(".tsx")
+            ? TypeScript.tsx
+            : TypeScript.typescript
+          : JavaScript,
   );
   return parser;
 }
@@ -229,8 +233,22 @@ function phpDeclarationFor(node: Parser.SyntaxNode): Declaration | null {
   return null;
 }
 
+function pythonDeclarationFor(node: Parser.SyntaxNode): Declaration | null {
+  if (node.type !== "class_definition" && node.type !== "function_definition") return null;
+  const nameNode = node.childForFieldName("name");
+  const name = nameFrom(nameNode);
+  if (!name || !nameNode) return null;
+  if (node.type === "class_definition") return { kind: "class", name, nameNode };
+  let scope = node.parent;
+  if (scope?.type === "decorated_definition") scope = scope.parent;
+  const inClass = scope?.type === "block" && scope.parent?.type === "class_definition";
+  if (!inClass) return { kind: "function", name, nameNode };
+  return { kind: name === "__init__" ? "constructor" : "method", name, nameNode };
+}
+
 function declarationFor(node: Parser.SyntaxNode, language: SupportedLanguage): Declaration | null {
   if (language === "php") return phpDeclarationFor(node);
+  if (language === "python") return pythonDeclarationFor(node);
   const name = nameFrom(node.childForFieldName("name"));
   switch (node.type) {
     case "function_declaration":
@@ -339,6 +357,19 @@ function resolvePhpInclude(file: string, specifier: string, files: Set<string>):
   return files.has(candidate) ? candidate : null;
 }
 
+// `.a.b` is relative to the file's package; `a.b` is tried from the repo root.
+function resolvePythonModule(file: string, module: string, files: Set<string>): string | null {
+  const dots = module.match(/^\.*/)![0].length;
+  const parts = module.slice(dots).split(".").filter(Boolean);
+  const directory = file.split("/").slice(0, -1);
+  const base = dots ? directory.slice(0, directory.length - (dots - 1)) : [];
+  const stem = [...base, ...parts].join("/");
+  const candidates = stem
+    ? [`${stem}.py`, `${stem}/__init__.py`]
+    : [`${base.join("/")}/__init__.py`];
+  return candidates.map((c) => c.replace(/^\//, "")).find((c) => files.has(c)) ?? null;
+}
+
 function stringValue(node: Parser.SyntaxNode | null): string | null {
   if (!node || (node.type !== "string" && node.type !== "template_string")) return null;
   const text = node.text;
@@ -356,6 +387,9 @@ function isReferenceNode(
 ): boolean {
   if (language === "php") {
     return node.type === "name" && !isDeclarationName(node, declarationRanges);
+  }
+  if (language === "python") {
+    return node.type === "identifier" && !isDeclarationName(node, declarationRanges);
   }
   if (node.type !== "identifier" && node.type !== "type_identifier") return false;
   if (isDeclarationName(node, declarationRanges)) return false;
@@ -395,7 +429,7 @@ function isEnvGuard(condition: Parser.SyntaxNode): boolean {
  * Negates the condition when the call is reached only via the `else` branch.
  */
 function guardConditionFor(node: Parser.SyntaxNode, language: SupportedLanguage): string | null {
-  if (language === "php") return null;
+  if (language === "php" || language === "python") return null;
   let current = node;
   let parent = current.parent;
   while (parent) {
@@ -658,8 +692,87 @@ function collectStructuralRecords(
     }
   };
 
+  const visitPython = (node: Parser.SyntaxNode): void => {
+    if (node.type === "import_statement" || node.type === "import_from_statement") {
+      const from = node.type === "import_from_statement";
+      const moduleNode = from ? node.childForFieldName("module_name") : null;
+      const names = node.childrenForFieldName("name");
+      for (const entry of from ? [moduleNode] : names) {
+        if (!entry) continue;
+        const dotted = entry.type === "aliased_import" ? entry.childForFieldName("name")! : entry;
+        const specifier = dotted.text;
+        const targetFile = resolvePythonModule(file, specifier, files);
+        dependencies.push({
+          file,
+          range: range(dotted),
+          module_specifier: specifier,
+          target_file: targetFile,
+          resolution: targetFile ? "exact" : "unresolved",
+        });
+        if (!from) {
+          const alias = entry.type === "aliased_import" ? entry.childForFieldName("alias") : null;
+          if (alias && targetFile) imports.set(alias.text, { importedName: "*", targetFile });
+        }
+      }
+      if (from) {
+        const targetFile = moduleNode ? resolvePythonModule(file, moduleNode.text, files) : null;
+        for (const entry of names) {
+          const nameNode =
+            entry.type === "aliased_import" ? entry.childForFieldName("name")! : entry;
+          const alias = entry.type === "aliased_import" ? entry.childForFieldName("alias") : null;
+          imports.set((alias ?? nameNode).text, {
+            importedName: nameNode.text.split(".").pop()!,
+            targetFile,
+          });
+        }
+      }
+    }
+
+    if (node.type === "call") {
+      const functionNode = node.childForFieldName("function");
+      if (
+        functionNode &&
+        (functionNode.type === "identifier" || functionNode.type === "attribute")
+      ) {
+        const resolved =
+          functionNode.type === "identifier"
+            ? resolveName(functionNode.text)
+            : { target: null, resolution: "unresolved" as const };
+        calls.push({
+          caller_symbol_id: sourceSymbolFor(records, node)?.id ?? null,
+          callee_name: functionNode.text,
+          callee_symbol_id: resolved.target?.id ?? null,
+          file,
+          range: range(functionNode),
+          resolution: resolved.resolution,
+          guard_condition: null,
+        });
+      }
+    }
+
+    if (node.type === "class_definition") {
+      const child = sourceSymbolFor(records, node);
+      const bases = node.childForFieldName("superclasses");
+      if (child && bases) {
+        for (const candidate of bases.namedChildren) {
+          if (candidate.type !== "identifier" && candidate.type !== "attribute") continue;
+          const resolved = resolveName(candidate.text.split(".").pop()!);
+          inheritance.push({
+            kind: "extends",
+            child_symbol_id: child.id,
+            parent_name: candidate.text,
+            parent_symbol_id: resolved.target?.id ?? null,
+            file,
+            range: range(candidate),
+            resolution: resolved.resolution,
+          });
+        }
+      }
+    }
+  };
+
   const visit = (node: Parser.SyntaxNode): void => {
-    if (node.type === "import_statement") {
+    if (node.type === "import_statement" && language !== "python") {
       const sourceNode = node.childForFieldName("source");
       const moduleSpecifier = stringValue(sourceNode);
       if (moduleSpecifier && sourceNode) {
@@ -678,6 +791,9 @@ function collectStructuralRecords(
 
     if (language === "php") {
       visitPhp(node);
+    }
+    if (language === "python") {
+      visitPython(node);
     }
 
     if (node.type === "call_expression") {
