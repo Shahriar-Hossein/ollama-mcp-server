@@ -211,6 +211,9 @@ Claude's own quota is spent only on work that actually benefits from it.
 - `parseAllowedGitCommand` must tokenize input and reject shell
   metacharacters; never replace it with a raw regex prefix check (a command
   like `git commit -m x && rm -rf /` must be rejected).
+- Both validators also enforce a per-subcommand flag allowlist (no `--output`,
+  `--amend`, `--no-verify`, `-F`, absolute or `..` paths) and the hook fails
+  closed on malformed input. `npm run test:workers` checks both stay in step.
 - Callers must exec the validated argv directly, no shell — never re-pass the
   original command string to a shell-interpreted API.
 - Treat `--allowedTools` as a convenience restriction, not a security

@@ -22,14 +22,86 @@ function tokenize(command: string): string[] {
   return tokens;
 }
 
+// Per-subcommand flag allowlist. A subcommand alone is not enough:
+// `git diff --output=f` writes a file and `git commit --amend` rewrites history.
+// Keep in sync by hand with scripts/validate-cloud-bash.cjs.
+const DIFFISH = [
+  "--stat",
+  "--shortstat",
+  "--name-only",
+  "--name-status",
+  "--no-color",
+  "--patch",
+  "-p",
+  "-w",
+  "--cached",
+  "--staged",
+  "--oneline",
+  "--graph",
+  "--decorate",
+  "--no-decorate",
+  "--",
+];
+const FLAG_POLICY: Record<string, { flags: string[]; patterns: RegExp[]; valueFlags: string[] }> = {
+  status: {
+    flags: ["-s", "--short", "-b", "--branch", "--porcelain", "--long", "--"],
+    patterns: [/^--porcelain=v[12]$/],
+    valueFlags: [],
+  },
+  diff: { flags: DIFFISH, patterns: [/^-U\d+$/, /^--unified=\d+$/], valueFlags: [] },
+  log: {
+    flags: DIFFISH,
+    patterns: [/^-n?\d+$/, /^--max-count=\d+$/, /^--pretty=(oneline|short|medium|full)$/],
+    valueFlags: ["-n", "--max-count"],
+  },
+  show: {
+    flags: DIFFISH,
+    patterns: [/^-U\d+$/, /^--pretty=(oneline|short|medium|full)$/],
+    valueFlags: [],
+  },
+  add: { flags: ["-A", "--all", "-u", "--update", "--"], patterns: [], valueFlags: [] },
+  commit: {
+    flags: ["-a", "--all", "--allow-empty", "-q", "--quiet", "--"],
+    patterns: [/^-am$/, /^--message=/],
+    valueFlags: ["-m", "--message"],
+  },
+};
+
+// Paths/revisions must stay inside the repo: no absolute, home or parent-dir paths.
+const escapesRepo = (arg: string) => /^[/~]|(^|\/)\.\.(\/|$)|:\//.test(arg);
+
+function allowedArguments(subcommand: string, args: string[]): boolean {
+  const policy = FLAG_POLICY[subcommand];
+  let afterDashes = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!afterDashes && arg === "--") afterDashes = true;
+    if (escapesRepo(arg) && !arg.startsWith("--message=")) return false;
+    if (afterDashes || !arg.startsWith("-")) continue;
+    if (policy.valueFlags.includes(arg)) {
+      if (i + 1 >= args.length) return false;
+      i++;
+      continue;
+    }
+    if (!policy.flags.includes(arg) && !policy.patterns.some((re) => re.test(arg))) return false;
+    if (arg === "-am") {
+      if (i + 1 >= args.length) return false;
+      i++;
+    }
+  }
+  return true;
+}
+
 // Returns the parsed argv (["git", "commit", "-m", "msg"]) if `command` is
 // exactly one allowed git invocation, or null if it isn't - including any
-// attempt to chain, substitute, or wrap it (bash -c, git -c, absolute paths).
+// attempt to chain, substitute, or wrap it (bash -c, git -c, absolute paths)
+// or pass a flag outside the per-subcommand allowlist.
 export function parseAllowedGitCommand(command: string): string[] | null {
   if (SHELL_METACHARACTERS.test(command)) return null;
   const tokens = tokenize(command.trim());
   if (tokens[0] !== "git") return null;
   if (!ALLOWED_SUBCOMMANDS.includes(tokens[1])) return null;
+  if (!allowedArguments(tokens[1], tokens.slice(2))) return null;
   return tokens;
 }
 

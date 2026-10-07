@@ -41,6 +41,8 @@ The existing shell-metacharacter rejection and direct argv execution in the loca
 - The cloud hook checks a command string which the Claude Bash tool still executes through its own shell. It does not convert the invocation to direct argv execution. Shell expansion and option/path semantics need their own review; the local worker's guarantee does not automatically transfer.
 - Git hooks/configured external helpers and Read/Glob/Grep scope need explicit treatment. A cwd and a prompt saying “stay here” are not filesystem isolation.
 
+Update 2026-10-08: the option allowlist, `..`/absolute path rejection and fail-closed hook are done (`npm run test:workers`). Still open: git hooks and external helpers, staged-index ownership, Read/Glob/Grep scope, and the hook's shell expansion.
+
 These are static review findings, not executed exploits. Use fixed operations with bounded flags/paths, robust token parsing, and an isolated execution environment where appropriate. Keep both validators synchronized and both autonomous tools opt-in. Add targeted tests for their security invariants before extending autonomy; this has higher value than a broad cosmetic test suite.
 
 ## 4. Separate model capability from harness choice
