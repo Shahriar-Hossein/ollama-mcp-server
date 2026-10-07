@@ -102,5 +102,5 @@ not exact repeats.
 | M1 | 2.6 | Object shape correct; hidden entries and pattern correct; count wrong (14, not 16) |
 | M2 | 68 | 6/7 correct; rsync claim and ZIP-path citation fixed; still calls the 5 table headers the grid columns (CSS line 320 has 2) |
 
-Open: drop citations when every part is missing without losing retained
-partial chains; schema fixes shape, not counts.
+Decided 2026-10-08: keep nearby citations when a part is missing. Only full
+abstention drops evidence; two tests assert this. Schema fixes shape, not counts.
