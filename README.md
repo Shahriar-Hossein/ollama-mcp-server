@@ -135,6 +135,12 @@ Their `_meta.completion` reports stop reason, token counts and raw Ollama
 timings in nanoseconds. A length stop or unfinished generation returns
 `isError: true` with the partial text retained. Completion does not establish
 answer correctness. These tools do not retry timed-out generation automatically.
+Both also accept `format`: `"json"`, or a JSON Schema object to force an exact
+output shape. The schema constrains shape, not factual accuracy.
+
+`local_explore_repo` returns `no_evidence` before any model call when the
+question names a tracked language the index cannot search (e.g. PHP); the index
+covers TypeScript/JavaScript only.
 
 The model has no tools or shell access in the scout route. The older
 `local_explorer_task` loop remains for historical comparisons.

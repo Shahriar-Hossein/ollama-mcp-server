@@ -24,6 +24,7 @@ insufficient local-model results after checking them against source.
 | 2026-10-06 | Small JSON extraction | run_ollama_task / qwen-context:h-q4_0-50k | All extracted values correct, but requested object is wrapped in a one-element array | Direct line count confirms sixteen entries, five hidden entries and the exact Markdown pattern; JSON shape needs correction | Request and validate an explicit object schema |
 | 2026-10-06 | Five-file source summary | summarize_output / qwen-context:h-q4_0-50k | With 28,300 input characters, confuses table headings with CSS grid columns, invents rsync Markdown filtering and cites the wrong ZIP-path lines | Source review confirms grid declaration at CSS line 320, zip filter at script line 35 and output path at line 15 | Validate behavior and citation locations separately; distinguish CSS layout from table columns |
 | 2026-10-06 | Scout parameter discoverability | local_explore_repo, MCP validation | limit=6 rejected; exposed description does not state the valid 8–12 range | limit=8 accepted; source schema confirms the range | Include range and default in the exposed parameter description |
+| 2026-10-07 | Re-run of plugin/server smoke checks | local_explore_repo, run_ollama_task, summarize_output / qwen-context:h-q4_0-24k | PHP and shape fixes hold; scout still keeps unrelated citations on full abstention; JSON count off by two; summary still confuses table headers with grid columns | Direct source reads confirm each gap | Drop citations when every part is missing; validate counts outside the model |
 
 ## 2026-10-06 mixed MCP smoke checks
 
@@ -83,3 +84,23 @@ pattern through `zip -x`. The script does not read `.distignore`.
 Useful follow-up: test documentation routing, unsupported-language reporting and
 executable-line validation on new questions. Keep these failures as observations;
 do not count safe abstention or correct-file retrieval as a complete answer.
+
+Follow-up 2026-10-07: M1 → `run_ollama_task`/`summarize_output` now take `format`
+(JSON Schema); a live H check returned the required object shape. L2 → named
+unindexed languages return `no_evidence` before generation. L3 → operation
+checklists require an image-upload or query/list anchor term. Not re-run on
+the original plugin questions.
+
+Re-run 2026-10-07, same plugin revision, default `qwen-context:h-q4_0-24k`
+called directly (not via MCP). Query wording was reconstructed, so these are
+not exact repeats.
+
+| Case | Time (s) | Checked result |
+|---|---:|---|
+| L2 | 0.1 | Fixed: `no_evidence`, zero model calls, names PHP; unrelated JS is still returned in `bundles` |
+| L3 | 66 | Checklist noise gone; H still keeps 12 unrelated `read-symbol.ts` lines while marking every part missing (`needs_review`) |
+| M1 | 2.6 | Object shape correct; hidden entries and pattern correct; count wrong (14, not 16) |
+| M2 | 68 | 6/7 correct; rsync claim and ZIP-path citation fixed; still calls the 5 table headers the grid columns (CSS line 320 has 2) |
+
+Open: drop citations when every part is missing without losing retained
+partial chains; schema fixes shape, not counts.
