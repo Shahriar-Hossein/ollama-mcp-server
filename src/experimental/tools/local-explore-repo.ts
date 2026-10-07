@@ -638,15 +638,18 @@ export async function runLocalExploreRepo(
         });
         continue;
       }
-      if (attempt === 2)
+      if (attempt === 2) {
+        const abstained = answer.coverage.every((part) => !part.evidence_locations.length);
         return {
           ...base(),
           ...answer,
+          ...(abstained ? { evidence: [], selected_ids: [] } : {}),
           status: "needs_review" as const,
           model_confidence: "low" as const,
           model_calls: attempt,
           warning: lastError,
         };
+      }
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
       if (attempt === 2) return emptyResult("needs_review", [], lastError);

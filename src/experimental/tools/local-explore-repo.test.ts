@@ -349,6 +349,7 @@ test("packs both autonomous guarded registrations and the default helper", async
     assert.ok(calls > 0, "packing assertions must execute");
     assert.equal(result.model_calls, calls);
     assert.equal(result.status, "needs_review");
+    assert.deepEqual(result.evidence, []);
   }
 });
 
