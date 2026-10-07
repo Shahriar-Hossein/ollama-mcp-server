@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
+import { Readable } from "node:stream";
 import axios from "axios";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -18,6 +19,9 @@ const settings = (model: string) => ({
   template: "{{ .System }}{{ .Prompt }}",
 });
 beforeEach(() => clearModelSettingsCache());
+
+const ndjson = (...parts: object[]) =>
+  Readable.from(parts.map((part) => `${JSON.stringify(part)}\n`));
 
 test("shares concurrent settings requests per tag without caching budget overrides", async (t) => {
   const requests: string[] = [];
@@ -116,7 +120,7 @@ test("basic MCP tools apply bounded tool reserves and preserve explicit override
   t.mock.method(axios, "post", async (url: string, body: Record<string, any>) => {
     if (url.endsWith("/api/show")) return { data: settings(body.model) };
     requests.push(body);
-    return { data: { response: "OK" } };
+    return { data: ndjson({ response: "OK", done: true }) };
   });
   for (const register of [registerRunOllamaTask, registerSummarizeOutput]) {
     let invoke!: (params: Record<string, unknown>) => Promise<any>;
@@ -195,7 +199,7 @@ test("advanced generation honors model settings and counts schema overhead", asy
     if (url.endsWith("/api/show")) return { data: settings(body.model) };
     calls++;
     options = body.options;
-    return { data: { response: "{}" } };
+    return { data: ndjson({ response: "{}", done: true }) };
   });
   assert.equal(
     await generateWithModelBudget("qwen-context:h-q4_0-50k", "Short", "System", "json"),
@@ -334,18 +338,18 @@ test("unsupported requests, tokenizer failure and invalid counts retain the byte
 });
 
 test("basic tools expose truncation, raw metrics and an explicit bounded deadline", async (t) => {
-  const deadlines: number[] = [];
-  t.mock.method(axios, "post", async (url: string, _body: unknown, config: { timeout: number }) => {
+  let generations = 0;
+  t.mock.method(axios, "post", async (url: string) => {
     if (url.endsWith("/api/show")) return { data: settings("H") };
-    deadlines.push(config.timeout);
+    generations++;
     return {
-      data: {
+      data: ndjson({
         response: "partial",
         done: true,
         done_reason: "length",
         eval_count: 8192,
         prompt_eval_count: 10,
-      },
+      }),
     };
   });
   for (const register of [registerRunOllamaTask, registerSummarizeOutput]) {
@@ -364,5 +368,5 @@ test("basic tools expose truncation, raw metrics and an explicit bounded deadlin
     const invalid = await invoke({ model: "H", prompt: "Task", text: "Log", timeout_ms: 900001 });
     assert.equal(invalid.isError, true);
   }
-  assert.deepEqual(deadlines, [240000, 240000]);
+  assert.equal(generations, 2);
 });

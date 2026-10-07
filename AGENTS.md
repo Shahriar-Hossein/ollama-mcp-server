@@ -43,7 +43,9 @@ This is the canonical instructions file for this repo — other agent configs
   unavailable vocabulary and bounded tokenizer failures keep byte accounting.
   Schema bytes and the 1024 margin remain reserved. Legacy chat uses bytes.
   Basic delegation/summary tools expose completion metrics and an optional
-  1000–900000 ms deadline; length stops return partial text with `isError`.
+  1000–900000 ms deadline that covers model/budget setup too; generation
+  streams, so length stops and timeouts return partial text with `isError`
+  (`done_reason: "timeout"`; no text yet gives the timeout error).
   Both accept an optional `format` (`"json"` or a JSON Schema) for exact shape.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
   `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the

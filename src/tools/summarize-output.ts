@@ -6,7 +6,7 @@ import {
   checkGenerationInputBudget,
   describeOllamaError,
   generateResult,
-  requestTimeout,
+  startDeadline,
   resolveModelBudget,
 } from "../ollama-client.js";
 import { outputFormat } from "./run-ollama-task.js";
@@ -62,6 +62,7 @@ export function registerSummarizeOutput(server: McpServer) {
         ? `Focus: ${focus}\n\nText to summarize:\n${text}`
         : `Text to summarize:\n${text}`;
       try {
+        const clock = startDeadline(timeout_ms);
         const budget = await resolveModelBudget(
           model,
           { num_ctx, num_predict },
@@ -80,7 +81,6 @@ export function registerSummarizeOutput(server: McpServer) {
               { type: "text", text: JSON.stringify({ status: "input_overflow", budget: input }) },
             ],
           };
-        const deadline = requestTimeout(timeout_ms);
         const { text: summary, completion } = await generateResult(
           model,
           prompt,
@@ -88,12 +88,12 @@ export function registerSummarizeOutput(server: McpServer) {
           format,
           false,
           { num_ctx: budget.num_ctx, num_predict: budget.num_predict },
-          deadline,
+          clock.remaining(),
         );
         return {
           ...(completion.status === "incomplete" ? { isError: true } : {}),
           content: [{ type: "text", text: summary }],
-          _meta: { model_budget: input, completion, timeout_ms: deadline },
+          _meta: { model_budget: input, completion, timeout_ms: clock.total },
         };
       } catch (error: any) {
         const message = describeOllamaError(error, model, timeout_ms);

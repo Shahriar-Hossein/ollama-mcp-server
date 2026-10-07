@@ -6,7 +6,7 @@ import {
   checkGenerationInputBudget,
   describeOllamaError,
   generateResult,
-  requestTimeout,
+  startDeadline,
   resolveModelBudget,
 } from "../ollama-client.js";
 
@@ -58,6 +58,7 @@ export function registerRunOllamaTask(server: McpServer) {
     },
     async ({ prompt, system_prompt, model, num_ctx, num_predict, timeout_ms, format }) => {
       try {
+        const clock = startDeadline(timeout_ms);
         const system = system_prompt || "You are a specialized sub-agent assistant.";
         const budget = await resolveModelBudget(
           model,
@@ -73,7 +74,6 @@ export function registerRunOllamaTask(server: McpServer) {
               { type: "text", text: JSON.stringify({ status: "input_overflow", budget: input }) },
             ],
           };
-        const deadline = requestTimeout(timeout_ms);
         const { text, completion } = await generateResult(
           model,
           prompt,
@@ -81,12 +81,12 @@ export function registerRunOllamaTask(server: McpServer) {
           format,
           false,
           { num_ctx: budget.num_ctx, num_predict: budget.num_predict },
-          deadline,
+          clock.remaining(),
         );
         return {
           ...(completion.status === "incomplete" ? { isError: true } : {}),
           content: [{ type: "text", text }],
-          _meta: { model_budget: input, completion, timeout_ms: deadline },
+          _meta: { model_budget: input, completion, timeout_ms: clock.total },
         };
       } catch (error: any) {
         const message = describeOllamaError(error, model, timeout_ms);

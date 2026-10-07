@@ -11,6 +11,19 @@ export function requestTimeout(timeout_ms = REQUEST_TIMEOUT_MS) {
     throw new Error("timeout_ms must be an integer between 1000 and 900000.");
   return timeout_ms;
 }
+// Starts the clock before model/tokenizer setup so timeout_ms covers the whole call.
+export function startDeadline(timeout_ms?: number) {
+  const total = requestTimeout(timeout_ms);
+  const started = Date.now();
+  return {
+    total,
+    remaining() {
+      const left = total - (Date.now() - started);
+      if (left <= 0) throw Object.assign(new Error("deadline exceeded"), { code: "ECONNABORTED" });
+      return Math.max(left, 1000);
+    },
+  };
+}
 export function describeOllamaError(error: any, model: string, timeout_ms?: number) {
   if (error.code === "ECONNABORTED")
     return `Ollama request timed out after ${timeout_ms ?? REQUEST_TIMEOUT_MS}ms (model: ${model}).`;
@@ -160,6 +173,18 @@ export async function checkGenerationInputBudget(
   }
 }
 
+async function streamErrorBody(error: any) {
+  const stream = error.response?.data;
+  if (!stream || typeof stream.on !== "function") return;
+  const chunks: Buffer[] = [];
+  try {
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    error.response.data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    error.response.data = undefined;
+  }
+}
+
 export async function generateResult(
   model: string,
   prompt: string,
@@ -169,42 +194,77 @@ export async function generateResult(
   modelOptions?: ModelOptions,
   timeout_ms?: number,
 ) {
-  const response = await axios.post(
-    `${OLLAMA_HOST}/api/generate`,
-    {
-      model,
-      prompt,
-      system,
-      stream: false,
-      think,
-      ...(format ? { format } : {}),
-      ...(modelOptions ? { options: modelOptions } : {}),
-    },
-    { timeout: requestTimeout(timeout_ms) },
-  );
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, requestTimeout(timeout_ms));
+  let response: string[] = [];
+  let thinking: string[] = [];
+  let last: Record<string, any> = {};
+  let sawFinal = false;
+  try {
+    const res = await axios.post(
+      `${OLLAMA_HOST}/api/generate`,
+      {
+        model,
+        prompt,
+        system,
+        stream: true,
+        think,
+        ...(format ? { format } : {}),
+        ...(modelOptions ? { options: modelOptions } : {}),
+      },
+      { responseType: "stream", signal: controller.signal },
+    );
+    let pending = "";
+    const take = (line: string) => {
+      if (!line.trim()) return;
+      const part = JSON.parse(line);
+      if (part.error) throw new Error(String(part.error));
+      if (part.response) response.push(part.response);
+      if (part.thinking) thinking.push(part.thinking);
+      if (part.done) {
+        sawFinal = true;
+        last = part;
+      }
+    };
+    for await (const chunk of res.data) {
+      pending += Buffer.from(chunk).toString("utf8");
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      lines.forEach(take);
+    }
+    take(pending);
+  } catch (error: any) {
+    if (!timedOut) {
+      await streamErrorBody(error);
+      throw error;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
   // With think:true and a structured `format`, some models (e.g. qwen3.5) put the
   // actual formatted answer into `thinking` and leave `response` empty instead of
   // separating chain-of-thought from the final answer. Fall back to `thinking` so
   // callers that pass think:true don't see a silently empty response.
+  const text = response.join("") || thinking.join("");
+  if (timedOut && !text) throw Object.assign(new Error("timeout"), { code: "ECONNABORTED" });
+  const done = sawFinal ? last.done : false;
+  const done_reason = timedOut ? "timeout" : last.done_reason;
   const {
-    done,
-    done_reason,
     prompt_eval_count,
     eval_count,
     total_duration,
     load_duration,
     prompt_eval_duration,
     eval_duration,
-  } = response.data;
+  } = last;
   return {
-    text: (response.data.response || response.data.thinking || "") as string,
+    text,
     completion: {
-      status:
-        done_reason === "length" || done === false
-          ? "incomplete"
-          : done === true
-            ? "complete"
-            : "unknown",
+      status: timedOut || done_reason === "length" || done === false ? "incomplete" : "complete",
       done,
       done_reason,
       prompt_eval_count,
