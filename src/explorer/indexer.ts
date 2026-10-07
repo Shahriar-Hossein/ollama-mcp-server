@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import Parser from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
+import PHP from "tree-sitter-php";
 import TypeScript from "tree-sitter-typescript";
 
 export const SYMBOL_SCHEMA_VERSION = 1;
@@ -44,7 +45,7 @@ export interface SymbolRecord {
   repository_root: ".";
   commit_hash: string;
   file: string;
-  language: "typescript" | "javascript";
+  language: "typescript" | "javascript" | "php";
   kind: SymbolKind;
   name: string;
   qualified_name: string;
@@ -135,6 +136,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, SupportedLanguage> = {
   ".js": "javascript",
   ".mjs": "javascript",
   ".cjs": "javascript",
+  ".php": "php",
 };
 
 function command(root: string, args: string[]): string {
@@ -158,11 +160,13 @@ function languageForPath(path: string): SupportedLanguage | null {
 function parserFor(language: SupportedLanguage, file: string): Parser {
   const parser = new Parser();
   parser.setLanguage(
-    language === "typescript"
-      ? file.endsWith(".tsx")
-        ? TypeScript.tsx
-        : TypeScript.typescript
-      : JavaScript,
+    language === "php"
+      ? PHP.php
+      : language === "typescript"
+        ? file.endsWith(".tsx")
+          ? TypeScript.tsx
+          : TypeScript.typescript
+        : JavaScript,
   );
   return parser;
 }
@@ -185,7 +189,47 @@ function nameFrom(node: Parser.SyntaxNode | null): string | null {
   return node.text;
 }
 
-function declarationFor(node: Parser.SyntaxNode): Declaration | null {
+const PHP_DECLARATIONS: Record<string, SymbolKind> = {
+  function_definition: "function",
+  class_declaration: "class",
+  interface_declaration: "interface",
+  trait_declaration: "trait",
+  enum_declaration: "enum",
+  method_declaration: "method",
+  enum_case: "constant",
+};
+
+function phpDeclarationFor(node: Parser.SyntaxNode): Declaration | null {
+  const nameNode = node.childForFieldName("name");
+  const kind = PHP_DECLARATIONS[node.type];
+  if (kind) {
+    const name = nameFrom(nameNode);
+    if (!name) return null;
+    return {
+      kind: kind === "method" && name === "__construct" ? "constructor" : kind,
+      name,
+      nameNode: nameNode!,
+    };
+  }
+  if (node.type === "namespace_definition") {
+    return nameNode ? { kind: "namespace", name: nameNode.text, nameNode } : null;
+  }
+  if (node.type === "const_element") {
+    const constName = node.namedChildren.find((child) => child.type === "name");
+    return constName ? { kind: "constant", name: constName.text, nameNode: constName } : null;
+  }
+  if (node.type === "property_element") {
+    const variable = node.childForFieldName("name");
+    const propertyName = variable?.namedChildren.find((child) => child.type === "name");
+    return variable && propertyName
+      ? { kind: "property", name: propertyName.text, nameNode: propertyName }
+      : null;
+  }
+  return null;
+}
+
+function declarationFor(node: Parser.SyntaxNode, language: SupportedLanguage): Declaration | null {
+  if (language === "php") return phpDeclarationFor(node);
   const name = nameFrom(node.childForFieldName("name"));
   switch (node.type) {
     case "function_declaration":
@@ -278,6 +322,22 @@ function resolveModuleFile(file: string, specifier: string, files: Set<string>):
   return candidates.find((candidate) => files.has(candidate)) ?? null;
 }
 
+function findPhpString(node: Parser.SyntaxNode): Parser.SyntaxNode | null {
+  if (node.type === "string" || node.type === "encapsed_string") return node;
+  for (const child of node.namedChildren) {
+    const found = findPhpString(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+function resolvePhpInclude(file: string, specifier: string, files: Set<string>): string | null {
+  const relativePath = specifier.replace(/^\.?\//, "");
+  const directory = file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "";
+  const candidate = resolve("/", directory, relativePath).slice(1).split(sep).join("/");
+  return files.has(candidate) ? candidate : null;
+}
+
 function stringValue(node: Parser.SyntaxNode | null): string | null {
   if (!node || (node.type !== "string" && node.type !== "template_string")) return null;
   const text = node.text;
@@ -288,7 +348,14 @@ function isDeclarationName(node: Parser.SyntaxNode, declarationRanges: Set<numbe
   return declarationRanges.has(node.startIndex);
 }
 
-function isReferenceNode(node: Parser.SyntaxNode, declarationRanges: Set<number>): boolean {
+function isReferenceNode(
+  node: Parser.SyntaxNode,
+  declarationRanges: Set<number>,
+  language: SupportedLanguage,
+): boolean {
+  if (language === "php") {
+    return node.type === "name" && !isDeclarationName(node, declarationRanges);
+  }
   if (node.type !== "identifier" && node.type !== "type_identifier") return false;
   if (isDeclarationName(node, declarationRanges)) return false;
   const parent = node.parent;
@@ -326,7 +393,8 @@ function isEnvGuard(condition: Parser.SyntaxNode): boolean {
  * intervening non-env `if` is skipped over rather than stopping the search.
  * Negates the condition when the call is reached only via the `else` branch.
  */
-function guardConditionFor(node: Parser.SyntaxNode): string | null {
+function guardConditionFor(node: Parser.SyntaxNode, language: SupportedLanguage): string | null {
+  if (language === "php") return null;
   let current = node;
   let parent = current.parent;
   while (parent) {
@@ -520,6 +588,75 @@ function collectStructuralRecords(
       : { target: null, resolution: "unresolved" };
   };
 
+  const visitPhp = (node: Parser.SyntaxNode): void => {
+    if (
+      node.type === "include_expression" ||
+      node.type === "include_once_expression" ||
+      node.type === "require_expression" ||
+      node.type === "require_once_expression"
+    ) {
+      const literal = findPhpString(node);
+      if (literal) {
+        const specifier = literal.text.slice(1, -1);
+        const targetFile = resolvePhpInclude(file, specifier, files);
+        dependencies.push({
+          file,
+          range: range(literal),
+          module_specifier: specifier,
+          target_file: targetFile,
+          resolution: targetFile ? "exact" : "unresolved",
+        });
+      }
+    }
+
+    if (
+      node.type === "function_call_expression" ||
+      node.type === "member_call_expression" ||
+      node.type === "scoped_call_expression"
+    ) {
+      const nameNode =
+        node.type === "function_call_expression"
+          ? node.childForFieldName("function")
+          : node.childForFieldName("name");
+      if (nameNode && (nameNode.type === "name" || nameNode.type === "qualified_name")) {
+        const name = nameNode.text.split("\\").pop()!;
+        const resolved =
+          node.type === "function_call_expression"
+            ? resolveName(name)
+            : { target: null, resolution: "unresolved" as const };
+        calls.push({
+          caller_symbol_id: sourceSymbolFor(records, node)?.id ?? null,
+          callee_name: nameNode.text,
+          callee_symbol_id: resolved.target?.id ?? null,
+          file,
+          range: range(nameNode),
+          resolution: resolved.resolution,
+          guard_condition: null,
+        });
+      }
+    }
+
+    if (node.type === "base_clause" || node.type === "class_interface_clause") {
+      const child = sourceSymbolFor(records, node);
+      const kind = node.type === "class_interface_clause" ? "implements" : "extends";
+      if (child) {
+        for (const candidate of node.namedChildren) {
+          if (candidate.type !== "name" && candidate.type !== "qualified_name") continue;
+          const resolved = resolveName(candidate.text.split("\\").pop()!);
+          inheritance.push({
+            kind,
+            child_symbol_id: child.id,
+            parent_name: candidate.text,
+            parent_symbol_id: resolved.target?.id ?? null,
+            file,
+            range: range(candidate),
+            resolution: resolved.resolution,
+          });
+        }
+      }
+    }
+  };
+
   const visit = (node: Parser.SyntaxNode): void => {
     if (node.type === "import_statement") {
       const sourceNode = node.childForFieldName("source");
@@ -536,6 +673,10 @@ function collectStructuralRecords(
         for (const [localName, binding] of importBindings(node, targetFile))
           imports.set(localName, binding);
       }
+    }
+
+    if (language === "php") {
+      visitPhp(node);
     }
 
     if (node.type === "call_expression") {
@@ -567,7 +708,7 @@ function collectStructuralRecords(
           file,
           range: range(functionNode),
           resolution: resolved.resolution,
-          guard_condition: guardConditionFor(node),
+          guard_condition: guardConditionFor(node, language),
         });
       }
     }
@@ -596,7 +737,7 @@ function collectStructuralRecords(
       }
     }
 
-    if (isReferenceNode(node, declarationRanges)) {
+    if (isReferenceNode(node, declarationRanges, language)) {
       const resolved = resolveName(node.text);
       references.push({
         file,
@@ -624,7 +765,7 @@ function collectSymbols(
   records: SymbolRecord[],
   qualifiedNameCounts: Map<string, number>,
 ): void {
-  const declaration = declarationFor(node);
+  const declaration = declarationFor(node, language);
   let currentParent = parent;
 
   if (declaration) {

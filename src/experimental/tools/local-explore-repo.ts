@@ -39,7 +39,6 @@ export { directEvidenceForPart } from "./local-explore-validation.js";
 export type { QuestionPart } from "./local-explore-validation.js";
 
 const UNINDEXED_LANGUAGES: [string, RegExp, string][] = [
-  ["PHP", /\bphp\b|\bwordpress\b/i, ".php"],
   ["Python", /\bpython\b|\.py\b/i, ".py"],
   ["Ruby", /\bruby\b|\brails\b|\.rb\b/i, ".rb"],
   ["Go", /\bgolang\b|\.go\b/i, ".go"],
@@ -48,7 +47,7 @@ const UNINDEXED_LANGUAGES: [string, RegExp, string][] = [
   ["C#", /\bc#|\.cs\b/i, ".cs"],
 ];
 
-// The index covers TS/JS only; flag questions about tracked sources it cannot search.
+// The index covers TS/JS/PHP only; flag questions about tracked sources it cannot search.
 export function unindexedLanguages(root: string, query: string): string[] {
   const named = UNINDEXED_LANGUAGES.filter(([, pattern]) => pattern.test(query));
   if (!named.length) return [];
@@ -465,7 +464,7 @@ export async function runLocalExploreRepo(
   const unindexed = unindexedLanguages(root, query);
   if (unindexed.length)
     return emptyResult("no_evidence", [
-      `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript only; read those files directly.`,
+      `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript/PHP only; read those files directly.`,
     ]);
   if (!candidates.length)
     return emptyResult("no_evidence", ["Deterministic retrieval supplied no readable candidates."]);
