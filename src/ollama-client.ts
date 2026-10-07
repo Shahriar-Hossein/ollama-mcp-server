@@ -11,6 +11,16 @@ export function requestTimeout(timeout_ms = REQUEST_TIMEOUT_MS) {
     throw new Error("timeout_ms must be an integer between 1000 and 900000.");
   return timeout_ms;
 }
+export function describeOllamaError(error: any, model: string, timeout_ms?: number) {
+  if (error.code === "ECONNABORTED")
+    return `Ollama request timed out after ${timeout_ms ?? REQUEST_TIMEOUT_MS}ms (model: ${model}).`;
+  const res = error.response;
+  if (res) {
+    const detail = typeof res.data?.error === "string" ? res.data.error : error.message;
+    return `Ollama returned HTTP ${res.status} (model: ${model}): ${detail}`;
+  }
+  return `Failed to reach Ollama at ${OLLAMA_HOST}: ${error.message}. Make sure 'ollama serve' is running.`;
+}
 type ModelSettings = { parameters?: string; template?: string; modelfile?: string };
 const MODEL_SETTINGS_TTL_MS = 60_000;
 const modelSettingsCache = new Map<string, { expires: number; settings: Promise<ModelSettings> }>();

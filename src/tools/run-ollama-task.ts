@@ -3,9 +3,8 @@ import { z } from "zod";
 import {
   DEFAULT_LOCAL_MODEL,
   TOOL_OUTPUT_RESERVES,
-  OLLAMA_HOST,
-  REQUEST_TIMEOUT_MS,
   checkGenerationInputBudget,
+  describeOllamaError,
   generateResult,
   requestTimeout,
   resolveModelBudget,
@@ -90,10 +89,7 @@ export function registerRunOllamaTask(server: McpServer) {
           _meta: { model_budget: input, completion, timeout_ms: deadline },
         };
       } catch (error: any) {
-        const message =
-          error.code === "ECONNABORTED"
-            ? `Ollama request timed out after ${timeout_ms ?? REQUEST_TIMEOUT_MS}ms (model: ${model}).`
-            : `Failed to reach Ollama at ${OLLAMA_HOST}: ${error.message}. Make sure 'ollama serve' is running.`;
+        const message = describeOllamaError(error, model, timeout_ms);
         return { isError: true, content: [{ type: "text", text: message }] };
       }
     },
