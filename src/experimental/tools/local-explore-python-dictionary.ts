@@ -83,6 +83,7 @@ export function pythonParameterShadowForTree(
     node.type === "identifier" ? node.text
       : node.type === "default_parameter" || node.type === "typed_default_parameter" ? node.childForFieldName("name")?.text
       : node.type === "typed_parameter" && node.namedChildren[0]?.type === "identifier" ? node.namedChildren[0].text
+      : (node.type === "list_splat_pattern" || node.type === "dictionary_splat_pattern") && node.namedChildren[0]?.type === "identifier" ? node.namedChildren[0].text
       : undefined;
   if (!parameters.namedChildren.some((node) => parameterName(node) === request.dictionary)) return null;
   const parts = body.namedChildren.filter((child) => child.type !== "comment");

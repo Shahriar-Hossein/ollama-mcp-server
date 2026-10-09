@@ -324,14 +324,14 @@ test("relationship checks pass the shadow plan only with header and return rows"
 });
 
 test("parameter shadow plan accepts default and annotated parameters", () => {
-  for (const [header, name] of [["def r(CFG='x'):", "default"], ["def r(CFG: dict = {}):", "typed default"], ["def r(CFG: dict):", "typed"], ["def r(a, CFG):", "second"]]) {
+  for (const [header, name] of [["def r(CFG='x'):", "default"], ["def r(CFG: dict = {}):", "typed default"], ["def r(CFG: dict):", "typed"], ["def r(a, CFG):", "second"], ["def r(*CFG):", "var positional"], ["def r(**CFG):", "var keyword"]]) {
     repoWith({ "a.py": `CFG = {\n    "mode": "m",\n}\n\n${header}\n    return CFG["mode"]\n` }, (root, index) => {
       const shadow = pythonParameterShadowLocations(root, index.symbols, ask("CFG", "r"));
       assert.deepEqual(shadow?.locations.map((item) => item.line), [5, 6], name);
       assert.deepEqual(shadow?.excluded.map((item) => item.line), [1, 2, 3], name);
     });
   }
-  repoWith({ "a.py": 'CFG = {\n    "mode": "m",\n}\n\ndef r(other, *CFG):\n    return CFG["mode"]\n' }, (root, index) =>
+  repoWith({ "a.py": 'CFG = {\n    "mode": "m",\n}\n\ndef r(other, *CFGS):\n    return CFG["mode"]\n' }, (root, index) =>
     assert.equal(pythonParameterShadowLocations(root, index.symbols, ask("CFG", "r")), null));
 });
 
