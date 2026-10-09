@@ -23,6 +23,7 @@ function sourceFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile())
     .map((entry) => relative(root, resolve(entry.parentPath, entry.name)).split(sep).join("/"))
+    .filter((file) => !file.startsWith(".git/"))
     .sort();
 }
 
@@ -37,7 +38,10 @@ function checkedSource(root: string, file: string): string {
   return absoluteFile;
 }
 
-export function validateLanguageFixture(fixture: LanguageFixture, sourceRoot: string): void {
+export function validateLanguageFixture(
+  fixture: LanguageFixture,
+  sourceRoot: string,
+): void {
   if (fixture.version !== 1) throw new Error("Fixture version must be 1");
   if (!fixture.questions || fixture.questions.length !== 12)
     throw new Error("Fixture must contain exactly 12 questions");

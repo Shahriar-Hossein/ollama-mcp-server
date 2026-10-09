@@ -62,6 +62,23 @@ export function unindexedLanguages(root: string, query: string): string[] {
 
 type EvidenceLine = Candidate["lines"][number];
 type ModelEvidence = Omit<ValidEvidence, "file">;
+type CandidateSnapshot = Readonly<
+  Omit<Candidate, "lines"> & { lines: ReadonlyArray<Readonly<EvidenceLine>> }
+>;
+type BundleSnapshot = Readonly<
+  Omit<EvidenceBundle, "candidates"> & { candidates: ReadonlyArray<CandidateSnapshot> }
+>;
+
+function frozenClone<T>(value: T): T {
+  const copy = structuredClone(value);
+  const freeze = (item: unknown): void => {
+    if (!item || typeof item !== "object" || Object.isFrozen(item)) return;
+    for (const child of Object.values(item)) freeze(child);
+    Object.freeze(item);
+  };
+  freeze(copy);
+  return copy;
+}
 
 export interface LocalExploreRepoParams {
   query: string;
@@ -71,6 +88,39 @@ export interface LocalExploreRepoParams {
   num_ctx?: number;
   num_predict?: number;
 }
+
+export type LocalExploreObserverEvent =
+  | { type: "budget_setup"; elapsed_ms: number }
+  | { type: "index"; elapsed_ms: number }
+  | { type: "input_check"; attempt: number; elapsed_ms: number; fits: boolean }
+  | {
+      type: "retrieval";
+      part_id: string;
+      query: string;
+      elapsed_ms: number;
+      results: Awaited<ReturnType<typeof hybridRetrieve>>["results"];
+    }
+  | {
+      type: "packing";
+      elapsed_ms: number;
+      candidates: ReadonlyArray<CandidateSnapshot>;
+      bundles: ReadonlyArray<BundleSnapshot>;
+    }
+  | {
+      type: "generation_context";
+      attempt: number;
+      refs: ReadonlyArray<
+        Readonly<{ ref: string; candidate_id: string; file: string; line: number; text: string }>
+      >;
+    }
+  | {
+      type: "expansion";
+      elapsed_ms: number;
+      outcome: "added" | "overflow";
+      candidate_id: string;
+      line: number;
+      added_lines: number;
+    };
 
 export function decomposeQuestion(query: string): QuestionPart[] {
   const clauses = operationParts(query)
@@ -432,20 +482,25 @@ export async function runLocalExploreRepo(
   }: LocalExploreRepoParams,
   generateAnswer: typeof generate = generate,
   resolveBudget: typeof resolveModelBudget = resolveModelBudget,
+  observe?: (event: LocalExploreObserverEvent) => void,
 ) {
   if (!query.trim()) throw new Error("Exploration query must not be empty.");
   if (!Number.isInteger(limit) || limit < 8 || limit > 12)
     throw new Error("Candidate limit must be an integer from 8 through 12.");
+  const budgetStarted = performance.now();
   const budget = await resolveBudget(
     model,
     { num_ctx, num_predict },
     undefined,
     TOOL_OUTPUT_RESERVES.scout,
   );
+  observe?.({ type: "budget_setup", elapsed_ms: Math.round(performance.now() - budgetStarted) });
   const input_checks: Awaited<ReturnType<typeof checkGenerationInputBudget>>[] = [];
   let model_calls = 0;
   const root = resolve(repository_root);
+  const indexStarted = performance.now();
   const index = indexRepository(root);
+  observe?.({ type: "index", elapsed_ms: Math.round(performance.now() - indexStarted) });
   const parts = decomposeQuestion(query);
   const relationships = createRelationshipChecks(root, index);
   const missingRequirementsFor = (part: QuestionPart, evidence: ValidEvidence[]) => [
@@ -456,14 +511,55 @@ export async function runLocalExploreRepo(
   ];
   const byPart = new Map<string, Candidate[]>();
   let retrieved_count = 0;
+  let packingElapsed = 0;
   for (const part of parts) {
     const retrievalQuery = searchQuery(`${part.question} ${query}`);
+    const retrievalStarted = performance.now();
     const retrieved = await hybridRetrieve(root, retrievalQuery, limit, "basic", undefined, index);
+    const retrievalElapsed = Math.round(performance.now() - retrievalStarted);
     retrieved_count += retrieved.results.length;
+    if (observe)
+      observe({
+        type: "retrieval",
+        part_id: part.id,
+        query: retrievalQuery,
+        elapsed_ms: retrievalElapsed,
+        results: frozenClone(retrieved.results),
+      });
+    const partPackingStarted = performance.now();
     byPart.set(part.id, buildCandidates(root, retrieved.results, index, retrievalQuery, part));
+    packingElapsed += performance.now() - partPackingStarted;
   }
+  const bundlePackingStarted = performance.now();
   const compiled = compileEvidenceBundles(parts, byPart);
+  packingElapsed += performance.now() - bundlePackingStarted;
   const { bundles, candidates } = compiled;
+  if (observe) {
+    const candidateSnapshots = new Map(
+      candidates.map((candidate) => [
+        candidate.id,
+        Object.freeze({
+          ...candidate,
+          lines: Object.freeze(candidate.lines.map((line) => Object.freeze({ ...line }))),
+        }),
+      ]),
+    );
+    observe({
+      type: "packing",
+      elapsed_ms: Math.round(packingElapsed),
+      candidates: Object.freeze([...candidateSnapshots.values()]),
+      bundles: Object.freeze(
+        bundles.map((bundle) =>
+          Object.freeze({
+            ...bundle,
+            candidates: Object.freeze(
+              bundle.candidates.map((candidate) => candidateSnapshots.get(candidate.id)!),
+            ),
+          }),
+        ),
+      ),
+    });
+  }
   const base = () => ({
     query,
     model,
@@ -562,18 +658,40 @@ export async function runLocalExploreRepo(
       `Relevant repo map: ${JSON.stringify(repoMap)}\nEvidence bundles: ${JSON.stringify(promptBundles)}\n` +
       `Return JSON with part_evidence [{part_id,evidence_refs:["E1"]}], confidence, unresolved, next_action {ref}. ` +
       (lastError ? `Previous output failed: ${lastError}.` : "");
+    const inputCheckStarted = performance.now();
     const inputCheck = await checkGenerationInputBudget(budget, {
       prompt,
       system: SCOUT_SYSTEM,
       format,
     });
     input_checks.push(inputCheck);
+    observe?.({
+      type: "input_check",
+      attempt,
+      elapsed_ms: Math.round(performance.now() - inputCheckStarted),
+      fits: inputCheck.fits,
+    });
     if (!inputCheck.fits)
       return emptyResult("input_overflow", [
         "Input exceeds the conservative budget. Reduce the source/query or explicitly lower num_predict.",
       ]);
     try {
       model_calls++;
+      observe?.({
+        type: "generation_context",
+        attempt,
+        refs: Object.freeze(
+          [...refs].map(([ref, { candidate, line }]) =>
+            Object.freeze({
+              ref,
+              candidate_id: candidate.id,
+              file: candidate.file,
+              line: line.line,
+              text: line.text,
+            }),
+          ),
+        ),
+      });
       const raw = await generateAnswer(model, prompt, SCOUT_SYSTEM, format, false, {
         num_ctx: budget.num_ctx,
         num_predict: budget.num_predict,
@@ -650,6 +768,7 @@ export async function runLocalExploreRepo(
           : []),
       ].join(" ");
       if (attempt === 1 && missing && answer.next_action) {
+        const expansionStarted = performance.now();
         const candidate = candidates.find((item) => item.id === answer.next_action!.candidate_id)!;
         const expanded = expandCandidate(
           root,
@@ -666,6 +785,14 @@ export async function runLocalExploreRepo(
           MAX_CONTEXT_CHARS
         ) {
           compiled.overflow = true;
+          observe?.({
+            type: "expansion",
+            elapsed_ms: Math.round(performance.now() - expansionStarted),
+            outcome: "overflow",
+            candidate_id: candidate.id,
+            line: answer.next_action.line,
+            added_lines: expanded.lines.length,
+          });
           return emptyResult("input_overflow", [
             "Bounded follow-up exceeded the evidence character cap. Narrow the query.",
           ]);
@@ -677,6 +804,14 @@ export async function runLocalExploreRepo(
           why_retrieved: "bounded follow-up read",
           relationship: `expanded source around ${candidate.id}:${answer.next_action.line}`,
           candidates: [...bundle.candidates, expanded],
+        });
+        observe?.({
+          type: "expansion",
+          elapsed_ms: Math.round(performance.now() - expansionStarted),
+          outcome: "added",
+          candidate_id: candidate.id,
+          line: answer.next_action.line,
+          added_lines: expanded.lines.length,
         });
         continue;
       }

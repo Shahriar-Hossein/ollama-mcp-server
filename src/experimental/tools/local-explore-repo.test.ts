@@ -17,7 +17,7 @@ import {
 import { indexRepository } from "../../explorer/indexer.js";
 import { evidenceChecklist, missingEvidenceRequirements } from "./local-explore-validation.js";
 
-const runLocalExploreRepo: typeof runScout = (params, generateAnswer) =>
+const runLocalExploreRepo: typeof runScout = (params, generateAnswer, _resolveBudget, observe) =>
   runScout(params, generateAnswer, (model, overrides, _load, reserve) =>
     resolveModelBudget(
       model,
@@ -31,6 +31,7 @@ const runLocalExploreRepo: typeof runScout = (params, generateAnswer) =>
       }),
       reserve,
     ),
+    observe,
   );
 
 type PromptSource = { file: string; lines: Array<{ ref: string; line: number; text: string }> };
@@ -349,6 +350,7 @@ test("expands one requested source window for a missing question part", async ()
       "fixture",
     ]);
     let calls = 0;
+    const events: import("./local-explore-repo.js").LocalExploreObserverEvent[] = [];
     const stub: typeof generate = async (_model, prompt) => {
       calls++;
       const bundles = promptBundles(prompt);
@@ -375,9 +377,12 @@ test("expands one requested source window for a missing question part", async ()
     const result = await runLocalExploreRepo(
       { repository_root: root, query: "Where is work defined?" },
       stub,
+      undefined,
+      (event) => events.push(event),
     );
     assert.equal(result.status, "evidence_selected");
     assert.equal(result.model_calls, 2);
+    assert.ok(events.some((event) => event.type === "expansion"), JSON.stringify(events));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -501,6 +506,76 @@ test("deduplicated source is charged once and packing overflow is explicit", () 
     lines: candidate.lines.map((line) => ({ ...line, text: "x".repeat(2500) })),
   };
   assert.equal(compileEvidenceBundles(parts, new Map([[parts[0].id, [oversized]]])).overflow, true);
+});
+
+test("observer snapshots are immutable and list the refs supplied on each retry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-observer-"));
+  try {
+    mkdirSync(join(root, "src"));
+    writeFileSync(
+      join(root, "src/pricing.ts"),
+      "export function calculateTotal(quantity: number) {\n  return quantity * 5;\n}\n",
+    );
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "src/pricing.ts"]);
+    execFileSync("git", [
+      "-C",
+      root,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "commit",
+      "-qm",
+      "fixture",
+    ]);
+    const events: import("./local-explore-repo.js").LocalExploreObserverEvent[] = [];
+    const seenPrompts: string[] = [];
+    const result = await runScout(
+      { repository_root: root, query: "Where is calculateTotal defined?" },
+      async (_model, prompt) => {
+        seenPrompts.push(prompt);
+        return JSON.stringify({ part_evidence: [], unresolved: [], next_action: { ref: "" } });
+      },
+      (model, overrides, _load, reserve) =>
+        resolveModelBudget(
+          model,
+          overrides,
+          async () => ({ parameters: "num_ctx 24000\nnum_predict 2048" }),
+          reserve,
+        ),
+      (event) => events.push(event),
+    );
+    const packing = events.find((event) => event.type === "packing");
+    const retrieval = events.find((event) => event.type === "retrieval");
+    const contexts = events.filter((event) => event.type === "generation_context");
+    assert.ok(retrieval && retrieval.type === "retrieval");
+    assert.equal(Object.isFrozen(retrieval.results), true);
+    assert.throws(
+      () => (retrieval.results as unknown as Array<unknown>).push({}),
+      TypeError,
+    );
+    assert.ok(packing && packing.type === "packing");
+    assert.equal(Object.isFrozen(packing.candidates), true);
+    assert.equal(Object.isFrozen(packing.candidates[0].lines), true);
+    assert.throws(
+      () => (packing.candidates[0].lines as unknown as Array<unknown>).push({ line: 99, text: "x" }),
+      TypeError,
+    );
+    assert.equal(contexts.length, 2);
+    assert.deepEqual(contexts.map((event) => event.type === "generation_context" && event.attempt), [1, 2]);
+    assert.ok(contexts.every((event) => event.type === "generation_context" && Object.isFrozen(event.refs)));
+    for (let i = 0; i < contexts.length; i++) {
+      assert.deepEqual(
+        contexts[i].type === "generation_context" ? contexts[i].refs.map(({ ref, text }) => ({ ref, text })) : [],
+        promptBundles(seenPrompts[i]).flatMap((bundle) => bundle.sources.flatMap((source) => source.lines.map(({ ref, text }) => ({ ref, text })))),
+      );
+    }
+    assert.equal(result.status, "needs_review");
+    assert.equal("observer" in result, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("keeps a supported environment mapping when a retry resolves registrations", async () => {
