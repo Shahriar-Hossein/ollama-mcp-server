@@ -502,7 +502,7 @@ export async function runLocalExploreRepo(
   const index = indexRepository(root);
   observe?.({ type: "index", elapsed_ms: Math.round(performance.now() - indexStarted) });
   const parts = decomposeQuestion(query);
-  const relationships = createRelationshipChecks(root, index);
+  const relationships = createRelationshipChecks(root, index, query);
   const missingRequirementsFor = (part: QuestionPart, evidence: ValidEvidence[]) => [
     ...missingEvidenceRequirements(part, evidence, query).filter(
       (name) => !relationships.replacedRequirements(part).includes(name),

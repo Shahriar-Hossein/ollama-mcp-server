@@ -1,4 +1,7 @@
-import type Parser from "tree-sitter";
+import { readFileSync } from "node:fs";
+import Parser from "tree-sitter";
+import Python from "tree-sitter-python";
+import { checkedFile } from "./local-explore-packing.js";
 
 export function pythonDictionaryRequest(query: string): { dictionary: string; reader: string } | null {
   const unquoted = query.replace(/(["'`])[\s\S]*?\1/g, "\0");
@@ -80,4 +83,28 @@ export function pythonDictionaryEntryRows(dictionary: Parser.SyntaxNode): number
     rows.add(pair.startPosition.row + 1);
   }
   return [...rows];
+}
+
+const MAX_PYTHON_SOURCE_CHARS = 24_000;
+
+export function pythonDictionaryLocations(
+  root: string,
+  symbols: readonly { file: string; language: string; kind: string; name: string; parent_id: string | null }[],
+  query: string,
+): { file: string; line: number }[] | null {
+  const request = pythonDictionaryRequest(query);
+  if (!request) return null;
+  const readers = symbols.filter(
+    (symbol) => symbol.language === "python" && symbol.kind === "function" && !symbol.parent_id && symbol.name === request.reader,
+  );
+  if (readers.length !== 1) return null;
+  const file = readers[0].file;
+  const source = readFileSync(checkedFile(root, file), "utf8");
+  if (source.length > MAX_PYTHON_SOURCE_CHARS) return null;
+  const parser = new Parser();
+  parser.setLanguage(Python);
+  const plan = pythonDictionaryPlanForTree(parser.parse(source).rootNode, request);
+  if (!plan) return null;
+  const rows = new Set([plan.readerHeader, plan.initializer, ...plan.entryRows, plan.readRow]);
+  return [...rows].sort((a, b) => a - b).map((line) => ({ file, line }));
 }

@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { indexRepository } from "../../explorer/indexer.js";
+import { createRelationshipChecks } from "./local-explore-relationships.js";
+import { decomposeQuestion } from "./local-explore-repo.js";
 import Parser from "tree-sitter";
 import Python from "tree-sitter-python";
-import { pythonDictionaryEntryRows, pythonDictionaryPlanForTree, pythonDictionaryRequest } from "./local-explore-python-dictionary.js";
+import { pythonDictionaryEntryRows, pythonDictionaryLocations, pythonDictionaryPlanForTree, pythonDictionaryRequest } from "./local-explore-python-dictionary.js";
 
 test("Python dictionary request preserves identifiers and accepts surrounding prose", () => {
   for (const query of [
@@ -219,4 +226,69 @@ test("Python dictionary request requires exactly one unquoted phrase", () => {
       reader: "one",
     });
   }
+});
+
+const fixtureDir = join(import.meta.dirname, "../../../scripts/experimental/fixtures/python-dictionary-eval/source/python");
+const ask = (dictionary: string, reader: string) =>
+  `Which ${dictionary} dictionary does ${reader} read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.`;
+
+function repoWith(files: Record<string, string>, run: (root: string, index: ReturnType<typeof indexRepository>) => void) {
+  const root = mkdtempSync(join(tmpdir(), "scout-pydict-"));
+  try {
+    for (const [name, source] of Object.entries(files)) writeFileSync(join(root, name), source);
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"]);
+    run(root, indexRepository(root));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("Python dictionary locations match the frozen source rows", () => {
+  const cases: [string, string, string, number[] | null][] = [
+    ["module.py", "POLICY", "module_policy", [1, 2, 3, 13, 14]],
+    ["local.py", "SETTINGS", "local_setting", [6, 7, 8, 9, 11]],
+    ["async.py", "OPTIONS", "async_choice", [1, 2, 3, 13, 14]],
+    ["parameter.py", "CONFIG", "parameter_choice", null],
+  ];
+  for (const [file, dictionary, reader, rows] of cases) {
+    repoWith({ [file]: readFileSync(join(fixtureDir, file), "utf8") }, (root, index) => {
+      const found = pythonDictionaryLocations(root, index.symbols, ask(dictionary, reader));
+      assert.deepEqual(found?.map((item) => item.line) ?? null, rows, file);
+      if (found) assert.ok(found.every((item) => item.file === file));
+    });
+  }
+});
+
+test("Python dictionary locations reject ambiguous readers and oversized sources", () => {
+  const source = readFileSync(join(fixtureDir, "module.py"), "utf8");
+  const query = ask("POLICY", "module_policy");
+  repoWith({ "a.py": source, "b.py": source }, (root, index) =>
+    assert.equal(pythonDictionaryLocations(root, index.symbols, query), null));
+  repoWith({ "a.py": `${source}\n# ${"x".repeat(24_000)}\n` }, (root, index) =>
+    assert.equal(pythonDictionaryLocations(root, index.symbols, query), null));
+  repoWith({ "a.py": source }, (root, index) => {
+    assert.equal(pythonDictionaryLocations(root, index.symbols, "What does module_policy read?"), null);
+  });
+});
+
+test("relationship checks require every dictionary source row and never pass without a plan", () => {
+  const part = decomposeQuestion(ask("POLICY", "module_policy"))[0];
+  const cite = (root: string, file: string, line: number) => ({
+    id: "C1", file, line, quote: readFileSync(join(root, file), "utf8").split("\n")[line - 1], reason: "", ref: `E${line}`,
+  });
+  repoWith({ "module.py": readFileSync(join(fixtureDir, "module.py"), "utf8") }, (root, index) => {
+    const checks = createRelationshipChecks(root, index, ask("POLICY", "module_policy"));
+    const all = [1, 2, 3, 13, 14].map((line) => cite(root, "module.py", line));
+    assert.deepEqual(checks.missing(part, all), []);
+    assert.deepEqual(checks.missing(part, all.slice(1)), ["Python dictionary source rows"]);
+    assert.deepEqual(checks.checklist(part, all)[0].alternative_ref_sets, [["E1", "E2", "E3", "E13", "E14"]]);
+    assert.deepEqual(checks.checklist(part, all.slice(1))[0].alternative_ref_sets, []);
+  });
+  repoWith({ "parameter.py": readFileSync(join(fixtureDir, "parameter.py"), "utf8") }, (root, index) => {
+    const checks = createRelationshipChecks(root, index, ask("CONFIG", "parameter_choice"));
+    assert.deepEqual(checks.checklist(part, [])[0].alternative_ref_sets, []);
+    assert.equal(checks.missing(part, []).length, 1);
+  });
 });

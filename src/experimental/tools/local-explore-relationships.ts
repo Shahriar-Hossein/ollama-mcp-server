@@ -13,6 +13,7 @@ import {
   type QuestionPart,
   type ValidEvidence,
 } from "./local-explore-validation.js";
+import { pythonDictionaryLocations, pythonDictionaryRequest } from "./local-explore-python-dictionary.js";
 import { operationChecks, operationTarget } from "./local-explore-operations.js";
 import {
   configurationContextRequests,
@@ -37,7 +38,7 @@ const scopedOperations = new Set([
   "failure",
 ]);
 
-export function createRelationshipChecks(root: string, index: RepositoryIndex) {
+export function createRelationshipChecks(root: string, index: RepositoryIndex, query = "") {
   const symbols = new Map(index.symbols.map((symbol) => [symbol.id, symbol]));
   const trees = new Map<string, Parser.Tree>();
   const plans = new Map<string, Relationship[]>();
@@ -443,6 +444,12 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
     return checks;
   }
 
+  function pythonDictionaryPlan(): Relationship[] {
+    if (!pythonDictionaryRequest(query)) return [];
+    const locations = pythonDictionaryLocations(root, index.symbols, query);
+    return [{ requirement: "Python dictionary source rows", alternatives: locations ? [locations] : [] }];
+  }
+
   function plan(part: QuestionPart): Relationship[] {
     const key = `${part.operation ?? ""}:${part.question}`;
     const cached = plans.get(key);
@@ -453,6 +460,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
       return checks;
     }
     const checks: Relationship[] = [
+      ...pythonDictionaryPlan(),
       ...flagResolverPlan(part),
       ...configurationReadPlan(part),
       ...configurationProvenanceContexts(index, part.question, treeFor).map((context) => ({
