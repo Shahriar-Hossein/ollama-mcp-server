@@ -37,7 +37,28 @@ routing performance.
 Validation after the second piece: all six named tests, TypeScript, scoped
 Biome lint and `git diff --check` passed.
 
-Next bounded step: shortlist named dictionary declarations and reader bodies
-using these helpers. Preserve shadowing and unsupported binding cases as
-unresolved; literal entry rows alone cannot prove a reader uses that dictionary.
+Third bounded piece: `pythonDictionaryPlanForTree` validates a strict whole-module
+shape and returns source rows only. It accepts one optional named module literal
+and unique zero-parameter undecorated functions with direct string-key returns,
+optionally preceded by one local literal. Every function must fit this shape.
+The named target's local literal wins over the module literal; a missing local
+key cannot fall back. Async functions and comments are supported. Imports,
+decorators, annotations, aliases, mutations, extra statements, parameters,
+nested scopes and malformed/missing nodes reject the whole plan. Headers and
+returns must fit one physical row; initializers must open on the assignment row.
+These bounds provide a source shortlist, not binding or runtime verification.
+
+H returned the supplied-interface body draft in 22,311 ms tool wall time.
+It required exactly one module child, then searched that sole assignment for a
+function, so its supported path could not return a plan. It also used wrong
+child indexes and `any`, compared subscript values with the reader name,
+treated numeric entry rows as key records and omitted name/comment/local-shadow
+checks. The draft was not executed. Its ignored artifact is `local-plan-draft.json`
+beside the earlier drafts. Sol repaired the helper. Nine named tests, TypeScript,
+scoped Biome lint and `git diff --check` passed. Parser fixtures are development
+unit inputs; no frozen model evaluation was rerun for this piece.
+
+Next bounded step: freeze fresh questions and run the baseline with these helpers
+unused before integrating source shortlists into the selection harness. Preserve
+generic semantic review; a source plan must never auto-add selected evidence.
 Frozen evaluation manifests and raw results remain unchanged.
