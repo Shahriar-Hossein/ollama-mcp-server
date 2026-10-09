@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type Parser from "tree-sitter";
+import Parser from "tree-sitter";
+import PHP from "tree-sitter-php";
+import { parseSource } from "../../explorer/parse.js";
 import { parseConfigurationTree } from "./local-explore-config-context.js";
 import { moduleMetadata } from "./local-explore-provenance.js";
 
@@ -17,6 +19,17 @@ const DECLARATIONS = new Set([
   "generator_function_declaration",
   "method_definition",
   "class_declaration",
+]);
+const PHP_SCOPES = new Set([
+  "function_definition",
+  "method_declaration",
+  "class_declaration",
+  "interface_declaration",
+  "trait_declaration",
+  "enum_declaration",
+  "anonymous_function",
+  "arrow_function",
+  "anonymous_class",
 ]);
 
 // Deterministic extras (Nest @Module, enclosing declaration, scalar sibling keys); not H's selection and not semantic proof.
@@ -37,6 +50,31 @@ function enclosingDeclaration(
     add(file, header, `enclosing ${node.type.replace(/_/g, " ")} of selected line`, lines);
     return;
   }
+}
+
+function phpHeader(node: Parser.SyntaxNode) {
+  return ["anonymous_function", "arrow_function", "anonymous_class"].includes(node.type)
+    ? node.children.find((child) => ["function", "fn", "class"].includes(child.type))
+    : node.childForFieldName("name");
+}
+
+function enclosingPhpScope(start: Parser.SyntaxNode | null, file: string, lines: string[], add: Add) {
+  for (let node = start; node; node = node.parent) {
+    if (node.type === "ERROR" || node.isMissing) return;
+    if (!PHP_SCOPES.has(node.type)) continue;
+    if (node.hasError) return;
+    const header = phpHeader(node);
+    if (header) add(file, header.startPosition.row, `enclosing PHP ${node.type.replace(/_/g, " ")} of selected line`, lines);
+    // Stop at anonymous scopes and already selected headers rather than attributing them to an outer declaration.
+    return;
+  }
+}
+
+function parseSupportTree(source: string, file: string) {
+  if (!file.endsWith(".php")) return parseConfigurationTree(source, file);
+  const parser = new Parser();
+  parser.setLanguage(PHP.php);
+  return parseSource(parser, source);
 }
 
 function scalarSiblings(start: Parser.SyntaxNode | null, file: string, lines: string[], add: Add) {
@@ -80,7 +118,7 @@ export function structuralSupport(
 ): SupportingLine[] {
   const have = new Set(evidence.map((item) => `${item.file}:${item.line}`));
   const out: SupportingLine[] = [];
-  const trees = new Map<string, { tree: Parser.Tree; lines: string[] } | null>();
+  const trees = new Map<string, { tree: Parser.Tree; lines: string[]; phpHeaders: Set<number> } | null>();
   const add: Add = (file, row, reason, lines) => {
     const key = `${file}:${row + 1}`;
     const quote = lines[row]?.trim();
@@ -90,11 +128,19 @@ export function structuralSupport(
     return true;
   };
   for (const item of evidence) {
-    if (!/\.[cm]?[jt]sx?$/.test(item.file)) continue;
+    if (!/\.(?:[cm]?[jt]sx?|php)$/.test(item.file)) continue;
     if (!trees.has(item.file)) {
       try {
         const source = readFileSync(join(root, item.file), "utf8");
-        trees.set(item.file, { tree: parseConfigurationTree(source, item.file), lines: source.split("\n") });
+        const tree = parseSupportTree(source, item.file);
+        const phpHeaders = new Set<number>();
+        if (item.file.endsWith(".php")) {
+          for (const node of tree.rootNode.descendantsOfType([...PHP_SCOPES])) {
+            const header = phpHeader(node);
+            if (header) phpHeaders.add(header.startPosition.row);
+          }
+        }
+        trees.set(item.file, { tree, lines: source.split("\n"), phpHeaders });
       } catch {
         trees.set(item.file, null);
       }
@@ -102,8 +148,15 @@ export function structuralSupport(
     const parsed = trees.get(item.file);
     if (!parsed) continue;
     const row = item.line - 1;
+    if (!Number.isInteger(row) || row < 0 || row >= parsed.lines.length || !parsed.lines[row].trim()) continue;
     const column = Math.max(0, (parsed.lines[row] ?? "").search(/\S/));
     const start: Parser.SyntaxNode | null = parsed.tree.rootNode.descendantForPosition({ row, column });
+    if (item.file.endsWith(".php")) {
+      // A line can start before its closure header (for example, "$fn = function ...").
+      if (parsed.phpHeaders.has(row)) continue;
+      enclosingPhpScope(start, item.file, parsed.lines, add);
+      continue;
+    }
     enclosingDeclaration(start, row, item.file, parsed.lines, add);
     scalarSiblings(start, item.file, parsed.lines, add);
     importUses(start, parsed.tree.rootNode, item.file, parsed.lines, add);

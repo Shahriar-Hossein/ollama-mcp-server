@@ -67,10 +67,23 @@ and nav-sections 1. It still misses CourseDetail 119 and the PHP declaration
 (PHP is not handled). The rules were written after seeing these misses, so the
 replay is a diagnostic, not evidence of improvement.
 
+## PHP declaration context (same day, synthetic checks only)
+
+PHP selections now add the nearest declaration name line, including methods,
+classes, interfaces, traits and enums. Anonymous functions, arrow functions
+and anonymous classes add their own keyword line. Attributes are excluded;
+selected headers never acquire an outer scope's header. Malformed scopes and
+invalid selected lines add nothing. The existing 12-entry cap and source-line
+deduplication apply. These extras do not change evidence, coverage or status.
+
+Tests use synthetic PHP sources covering nested scopes, attributes, multiline
+names, malformed code and invalid selections. No fresh model evaluation has
+been run for this addition; the earlier replay remains diagnostic only.
+
 ## Next
 
 - Run a new fresh set (new sources) to measure the fix.
-- Add PHP declaration support if fresh PHP cases keep missing headers.
+- Measure PHP declaration support on fresh sources.
 - `supporting_context` now surfaces line 62, but packing still drops it
   because the query never names `courseInfoItems`. CourseDetail got windows 2–38 and 112–131;
   nothing follows the line-6 imports to their first uses. Consider a use window per named import from a

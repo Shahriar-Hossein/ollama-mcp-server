@@ -159,6 +159,11 @@ This is the canonical instructions file for this repo — other agent configs
   the enclosing declaration header, up to three scalar sibling properties and the first use of each
   name from a selected import (max 12 total; text match, not binding resolution). It never
   changes evidence, coverage or status; selected evidence is deduped by file:line.
+  PHP adds the nearest function, method, class, interface, trait or enum name line;
+  anonymous functions, arrow functions and anonymous classes add their own keyword line.
+  Attributes are excluded from headers. Selected PHP header lines never fall back to
+  outer scopes, and malformed nearest scopes add nothing. Context is lexical, not
+  runtime or data-flow verification.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
