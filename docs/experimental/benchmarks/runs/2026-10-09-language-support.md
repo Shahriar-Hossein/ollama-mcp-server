@@ -54,3 +54,10 @@ Do not generalize these cues into binding/import resolution or routing claims.
 PHP aliases/includes and Python package imports remain future bounded work. Keep
 six-file/24,000-character packing bounds; working-tree cache invalidation and
 aggregate checks remain pending.
+
+Update: Python named-dictionary source rows are now a relationship check
+(`8f91542`). On four fresh frozen questions the enhanced run selected 17/17
+required rows (baseline 14/17) and 3/4 answers were correct and complete
+(baseline 1/4). The parameter-shadow case still fails with a truncated answer.
+Small, lead-reviewed, one run; see the selection report. Incomplete-answer
+detection and the other Next items above remain open.

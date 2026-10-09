@@ -96,3 +96,27 @@ Only after that baseline, integrate source shortlists and run the same frozen
 queries with `--output benchmark-data/language-eval/python-dictionary-development/enhanced.json`.
 Preserve generic semantic review; a source plan must never auto-add evidence.
 Frozen evaluation manifests and raw results remain unchanged.
+
+## Integration and enhanced run
+
+Integration (`8f91542`): `createRelationshipChecks` takes the full query. For a
+named `Which X dictionary does F read` request it adds a "Python dictionary source
+rows" check. Alternatives are the planner rows in one unique top-level Python
+reader file (source under 24,000 chars). A missing plan or undisplayed row gives no
+passing alternative. H's mapper draft was not applied: the existing checklist
+already maps locations to displayed refs. Status stays `needs_review` because
+generic completeness is unchanged. Three tests added to `test:local-explore` (156 pass).
+
+Same frozen four queries, raw `enhanced.json` (SHA `8da81f87…f5cd`), review in
+[the sidecar](2026-10-09-python-dictionary-review.json):
+
+| | Baseline | Enhanced |
+|---|---|---|
+| Required rows selected | 14/17 | 17/17 |
+| Correct and complete | 1/4 | 3/4 |
+| Question time | 103,322 ms | 102,130 ms |
+
+MODULE and ASYNC became correct (queued/13, deferred/8). PARAM still fails: the
+answer is cut off, it selected module line 3, and it never names the parameter
+shadowing. Review was lead-only and not blind. Four cases, one run each: this shows
+the checklist helps these shapes, nothing broader.

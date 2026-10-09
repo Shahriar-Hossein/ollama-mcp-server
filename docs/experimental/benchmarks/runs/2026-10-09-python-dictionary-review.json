@@ -1,0 +1,33 @@
+{
+  "reviewer": "lead (Claude Sonnet 5.5), non-blind: both raws read together, answers checked against source keys",
+  "baseline": {"file": "benchmark-data/language-eval/python-dictionary-development/baseline.json", "sha256": "eae3b11b6997a345abff98a41c283234e3ffaf7c9ec372cfe532230b28069e4f", "commit": "4fec7ab"},
+  "enhanced": {"file": "benchmark-data/language-eval/python-dictionary-development/enhanced.json", "sha256": "8da81f875c38776089fa1d5f4daa36e3faa7fbebae552e4f7ef6498a9f05f5cd", "commit": "8f91542"},
+  "manifest_sha256": "23d07f4887ce460e4cf0ae8a3e634b61680c4248a626ab47ebad70e8b0a203fd",
+  "cases": {
+    "PD-MODULE": {
+      "baseline": {"truth": "wrong", "note": "queued/13 replaced by neighboring local direct/2; cites lines 8,9"},
+      "enhanced": {"truth": "correct", "citations": "supported (13,14,2,3); declaration line 1 not cited", "complete": true}
+    },
+    "PD-LOCAL": {
+      "baseline": {"truth": "correct", "citations": "supported", "complete": true},
+      "enhanced": {"truth": "correct", "citations": "supported", "complete": true, "note": "identical answer"}
+    },
+    "PD-ASYNC": {
+      "baseline": {"truth": "no values", "note": "answer cut off at OPTIONS[; only lines 13,14 selected", "complete": false},
+      "enhanced": {"truth": "correct", "citations": "supported (13,14,2,3); declaration line 1 not cited", "complete": true}
+    },
+    "PD-PARAM": {
+      "baseline": {"truth": "no false claim", "complete": false, "note": "parameter shadowing not identified; 99 not claimed"},
+      "enhanced": {"truth": "no false claim", "complete": false, "note": "answer truncated mid-claim; selected module line 3 though plan gate was null; shadowing not identified"}
+    }
+  },
+  "totals": {
+    "required_selected": {"baseline": "14/17", "enhanced": "17/17"},
+    "correct_and_complete": {"baseline": "1/4", "enhanced": "3/4"},
+    "model_calls_per_question": {"baseline": [2,2,2,2], "enhanced": [2,2,2,2]},
+    "question_ms": {"baseline": 103322, "enhanced": 102130},
+    "status": "all 8 needs_review (generic completeness stays unchecked by design)"
+  },
+  "effort": {"lead_review_ms": null, "human_correction": "not measured", "retries": "none beyond the normal second attempt"},
+  "limits": "4 questions, one run each, one model, H sampling not fixed, non-blind review, dictionary shapes chosen after development. Not evidence of general improvement."
+}
