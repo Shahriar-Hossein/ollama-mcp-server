@@ -162,8 +162,10 @@ This is the canonical instructions file for this repo — other agent configs
   PHP adds the nearest function, method, class, interface, trait or enum name line;
   anonymous functions, arrow functions and anonymous classes add their own keyword line.
   Attributes are excluded from headers. Selected PHP header lines never fall back to
-  outer scopes, and malformed nearest scopes add nothing. Context is lexical, not
-  runtime or data-flow verification.
+  outer scopes, and malformed nearest scopes add nothing. Selected PHP array entries
+  add up to three same-array single-line string/numeric scalar siblings for both array
+  syntaxes; dynamic, unpacked, nested and multiline values are excluded. Context is
+  lexical, not runtime or data-flow verification.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still

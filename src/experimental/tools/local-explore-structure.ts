@@ -93,6 +93,28 @@ function scalarSiblings(start: Parser.SyntaxNode | null, file: string, lines: st
   }
 }
 
+function phpScalarSiblings(start: Parser.SyntaxNode | null, file: string, lines: string[], add: Add) {
+  let entry = start;
+  while (entry && !(entry.type === "array_element_initializer" && entry.parent?.type === "array_creation_expression"))
+    entry = entry.parent;
+  if (!entry?.parent) return;
+  let added = 0;
+  for (const sibling of entry.parent.namedChildren) {
+    if (added >= MAX_SIBLINGS) break;
+    if (sibling.id === entry.id || sibling.type !== "array_element_initializer") continue;
+    const [key, arrow, value] = sibling.children;
+    if (arrow?.type !== "=>") continue;
+    const literal = (node: Parser.SyntaxNode | undefined) =>
+      !!node &&
+      (["string", "integer", "float"].includes(node.type) ||
+        (node.type === "encapsed_string" &&
+          node.namedChildren.every((child) => ["string_content", "escape_sequence"].includes(child.type))));
+    if (!literal(key) || !literal(value)) continue;
+    if (sibling.startPosition.row !== sibling.endPosition.row) continue;
+    if (add(file, sibling.startPosition.row, "scalar sibling PHP array entry of selected line", lines)) added++;
+  }
+}
+
 function importUses(start: Parser.SyntaxNode | null, root: Parser.SyntaxNode, file: string, lines: string[], add: Add) {
   let statement = start;
   while (statement && statement.type !== "import_statement") statement = statement.parent;
@@ -153,8 +175,8 @@ export function structuralSupport(
     const start: Parser.SyntaxNode | null = parsed.tree.rootNode.descendantForPosition({ row, column });
     if (item.file.endsWith(".php")) {
       // A line can start before its closure header (for example, "$fn = function ...").
-      if (parsed.phpHeaders.has(row)) continue;
-      enclosingPhpScope(start, item.file, parsed.lines, add);
+      if (!parsed.phpHeaders.has(row)) enclosingPhpScope(start, item.file, parsed.lines, add);
+      phpScalarSiblings(start, item.file, parsed.lines, add);
       continue;
     }
     enclosingDeclaration(start, row, item.file, parsed.lines, add);

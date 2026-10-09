@@ -268,3 +268,63 @@ test("PHP declaration support shares the entry cap and deduplicates headers", ()
     assert.equal(structuralSupport(root, [picks[0], picks[0]]).length, 1);
   }, "m.php");
 });
+
+test("PHP selected array entries add bounded string and numeric scalar siblings", () => {
+  const source = [
+    "<?php", "$config = [", "  'selected' => 'value',", "  2 => 17,", '  "label" => "ready",',
+    "  'fourth' => 4.5,", "  'fifth' => 'capped',", "];", "$other = array(",
+    "  'first' => 1,", "  2 => 'second',", ");",
+  ].join("\n");
+  withFile(source, (root) => {
+    const shortArray = structuralSupport(root, [{ file: "m.php", line: 3 }]);
+    assert.deepEqual(shortArray.map((line) => [line.line, line.quote]), [
+      [4, "2 => 17,"], [5, '"label" => "ready",'], [6, "'fourth' => 4.5,"],
+    ]);
+    assert.ok(shortArray.every((line) => line.reason === "scalar sibling PHP array entry of selected line"));
+    const longArray = structuralSupport(root, [{ file: "m.php", line: 10 }]);
+    assert.deepEqual(longArray.map((line) => line.line), [11]);
+  }, "m.php");
+});
+
+test("PHP array sibling context stays within the nearest array and excludes dynamic entries", () => {
+  const source = [
+    "<?php", "$config = [", "  'outer' => [", "    'selected' => 1,", "    'inner' => 'yes',",
+    "    'nested' => [", "      'child' => 2,", "      'sibling' => 3,", "    ],", "    9 => 10,",
+    "    ...$extra,", "    dynamic() => 'no',", "    'computed' => $value,", '    "interpolated" => "$runtime",',
+    "    'multiline' =>", "      'no',", "  ],", "  'outside' => 'outer',", "];",
+  ].join("\n");
+  withFile(source, (root) => {
+    const lines = structuralSupport(root, [{ file: "m.php", line: 4 }]);
+    assert.deepEqual(lines.map((line) => [line.line, line.quote]), [
+      [5, "'inner' => 'yes',"], [10, "9 => 10,"],
+    ]);
+    assert.ok(lines.every((line) => line.line !== 8 && line.line !== 18));
+    assert.deepEqual(structuralSupport(root, [{ file: "m.php", line: 7 }]).map((line) => line.line), [8]);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.php", line: 16 }]).map((line) => line.line), [4, 5, 10]);
+  }, "m.php");
+});
+
+test("PHP selected closure header still adds its array sibling context", () => {
+  const source = [
+    "<?php", "$handlers = [", "  'run' => function () {", "    return true;", "  },",
+    "  'label' => 'ready',", "];",
+  ].join("\n");
+  withFile(source, (root) => {
+    const lines = structuralSupport(root, [{ file: "m.php", line: 3 }]);
+    assert.deepEqual(lines.map((line) => [line.line, line.quote]), [[6, "'label' => 'ready',"]]);
+  }, "m.php");
+});
+
+test("PHP array sibling additions deduplicate selected lines and share the global cap", () => {
+  const entries = Array.from({ length: 18 }, (_, i) => `  'key${i}' => ${i},`);
+  const source = `<?php\n$config = [\n${entries.join("\n")}\n];\n`;
+  withFile(source, (root) => {
+    const lines = structuralSupport(root, [
+      { file: "m.php", line: 3 }, { file: "m.php", line: 3 }, { file: "m.php", line: 4 },
+      { file: "m.php", line: 5 }, { file: "m.php", line: 6 },
+    ]);
+    assert.equal(lines.length, 12);
+    assert.equal(new Set(lines.map((line) => `${line.file}:${line.line}`)).size, 12);
+    assert.ok(!lines.some((line) => line.line === 3 || line.line === 4));
+  }, "m.php");
+});
