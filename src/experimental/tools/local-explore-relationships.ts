@@ -13,7 +13,7 @@ import {
   type QuestionPart,
   type ValidEvidence,
 } from "./local-explore-validation.js";
-import { pythonDictionaryLocations, pythonDictionaryRequest } from "./local-explore-python-dictionary.js";
+import { pythonDictionaryLocations, pythonDictionaryRequest, pythonParameterShadowLocations } from "./local-explore-python-dictionary.js";
 import { operationChecks, operationTarget } from "./local-explore-operations.js";
 import {
   configurationContextRequests,
@@ -447,6 +447,8 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex, q
   function pythonDictionaryPlan(): Relationship[] {
     if (!pythonDictionaryRequest(query)) return [];
     const locations = pythonDictionaryLocations(root, index.symbols, query);
+    const shadow = locations ? null : pythonParameterShadowLocations(root, index.symbols, query);
+    if (shadow) return [{ requirement: "Python dictionary shadowed by reader parameter", alternatives: [shadow] }];
     return [{ requirement: "Python dictionary source rows", alternatives: locations ? [locations] : [] }];
   }
 

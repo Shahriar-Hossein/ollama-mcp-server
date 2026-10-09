@@ -159,6 +159,19 @@ export function evidenceAnswerRequest(
   };
 }
 
+// A normal stop and valid JSON do not prove the prose is finished.
+export function unfinishedText(text: string): boolean {
+  const body = text.trim();
+  if (!body || /[,:;([{\-]$/.test(body)) return true;
+  if ((body.match(/`/g) ?? []).length % 2) return true;
+  let depth = 0;
+  for (const char of body.replace(/`[^`]*`/g, "")) {
+    if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) depth--;
+  }
+  return depth !== 0;
+}
+
 export function validateEvidenceAnswer(raw: string, selected: SelectedEvidence) {
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
@@ -205,6 +218,7 @@ export function validateEvidenceAnswer(raw: string, selected: SelectedEvidence) 
     });
     return [{ text: claim.text, citations }];
   });
+  const incompleteText = [answer.answer, ...claims.map((claim) => claim.text)].filter(unfinishedText);
   return {
     answer: answer.answer,
     claims,
@@ -212,6 +226,11 @@ export function validateEvidenceAnswer(raw: string, selected: SelectedEvidence) 
       ? (answer.uncertainty as string[])
       : [],
     invalid_citations: invalidCitations,
-    audit_status: invalidCitations.length ? "invalid_citations" : "pending_manual_review",
+    incomplete_text: incompleteText,
+    audit_status: invalidCitations.length
+      ? "invalid_citations"
+      : incompleteText.length
+        ? "incomplete_text"
+        : "pending_manual_review",
   } as const;
 }

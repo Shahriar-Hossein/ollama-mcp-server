@@ -61,6 +61,32 @@ export function pythonDictionaryPlanForTree(
   if (!target || !chosen?.literal.namedChildren.some((pair) => pair.type === "pair" && pair.childForFieldName("key")?.text.slice(1, -1) === target.key)) return null;
   return { readerHeader: target.header, initializer: chosen.row, entryRows: [...chosen.entryRows], readRow: target.read };
 }
+// The reader's own parameter shadows the module dictionary, so the module values are not read.
+export function pythonParameterShadowForTree(
+  root: Parser.SyntaxNode,
+  request: { dictionary: string; reader: string },
+): { readerHeader: number; readRow: number } | null {
+  const valid = (node: Parser.SyntaxNode): boolean => !node.hasError && !node.isMissing && node.namedChildren.every(valid);
+  if (root.type !== "module" || !valid(root)) return null;
+  const readers = root.namedChildren.filter(
+    (child) => child.type === "function_definition" && child.childForFieldName("name")?.text === request.reader,
+  );
+  if (readers.length !== 1) return null;
+  const reader = readers[0];
+  const parameters = reader.childForFieldName("parameters");
+  const body = reader.childForFieldName("body");
+  if (parameters?.type !== "parameters" || body?.type !== "block") return null;
+  if (parameters.startPosition.row !== reader.startPosition.row || parameters.endPosition.row !== reader.startPosition.row) return null;
+  if (!parameters.namedChildren.some((node) => node.type === "identifier" && node.text === request.dictionary)) return null;
+  const parts = body.namedChildren.filter((child) => child.type !== "comment");
+  const returned = parts[0];
+  if (parts.length !== 1 || returned.type !== "return_statement" || returned.startPosition.row !== returned.endPosition.row) return null;
+  const subscript = returned.namedChildren[0];
+  const value = subscript?.childForFieldName("value");
+  if (subscript?.type !== "subscript" || value?.type !== "identifier" || value.text !== request.dictionary) return null;
+  return { readerHeader: reader.startPosition.row + 1, readRow: returned.startPosition.row + 1 };
+}
+
 export function pythonDictionaryEntryRows(dictionary: Parser.SyntaxNode): number[] | null {
   if (dictionary.type !== "dictionary" || dictionary.hasError || dictionary.isMissing) return null;
   const pairs = dictionary.namedChildren.filter((child) => child.type !== "comment");
@@ -87,11 +113,9 @@ export function pythonDictionaryEntryRows(dictionary: Parser.SyntaxNode): number
 
 const MAX_PYTHON_SOURCE_CHARS = 24_000;
 
-export function pythonDictionaryLocations(
-  root: string,
-  symbols: readonly { file: string; language: string; kind: string; name: string; parent_id: string | null }[],
-  query: string,
-): { file: string; line: number }[] | null {
+type PythonSymbols = readonly { file: string; language: string; kind: string; name: string; parent_id: string | null }[];
+
+function pythonTreeFor(root: string, symbols: PythonSymbols, query: string) {
   const request = pythonDictionaryRequest(query);
   if (!request) return null;
   const readers = symbols.filter(
@@ -103,8 +127,20 @@ export function pythonDictionaryLocations(
   if (source.length > MAX_PYTHON_SOURCE_CHARS) return null;
   const parser = new Parser();
   parser.setLanguage(Python);
-  const plan = pythonDictionaryPlanForTree(parser.parse(source).rootNode, request);
-  if (!plan) return null;
+  return { request, file, tree: parser.parse(source).rootNode };
+}
+
+export function pythonDictionaryLocations(root: string, symbols: PythonSymbols, query: string): { file: string; line: number }[] | null {
+  const parsed = pythonTreeFor(root, symbols, query);
+  const plan = parsed && pythonDictionaryPlanForTree(parsed.tree, parsed.request);
+  if (!parsed || !plan) return null;
   const rows = new Set([plan.readerHeader, plan.initializer, ...plan.entryRows, plan.readRow]);
-  return [...rows].sort((a, b) => a - b).map((line) => ({ file, line }));
+  return [...rows].sort((a, b) => a - b).map((line) => ({ file: parsed.file, line }));
+}
+
+export function pythonParameterShadowLocations(root: string, symbols: PythonSymbols, query: string): { file: string; line: number }[] | null {
+  const parsed = pythonTreeFor(root, symbols, query);
+  const shadow = parsed && pythonParameterShadowForTree(parsed.tree, parsed.request);
+  if (!parsed || !shadow) return null;
+  return [shadow.readerHeader, shadow.readRow].map((line) => ({ file: parsed.file, line }));
 }

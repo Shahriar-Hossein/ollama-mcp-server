@@ -9,7 +9,7 @@ import { createRelationshipChecks } from "./local-explore-relationships.js";
 import { decomposeQuestion } from "./local-explore-repo.js";
 import Parser from "tree-sitter";
 import Python from "tree-sitter-python";
-import { pythonDictionaryEntryRows, pythonDictionaryLocations, pythonDictionaryPlanForTree, pythonDictionaryRequest } from "./local-explore-python-dictionary.js";
+import { pythonDictionaryEntryRows, pythonDictionaryLocations, pythonDictionaryPlanForTree, pythonDictionaryRequest, pythonParameterShadowLocations } from "./local-explore-python-dictionary.js";
 
 test("Python dictionary request preserves identifiers and accepts surrounding prose", () => {
   for (const query of [
@@ -290,5 +290,34 @@ test("relationship checks require every dictionary source row and never pass wit
     const checks = createRelationshipChecks(root, index, ask("CONFIG", "parameter_choice"));
     assert.deepEqual(checks.checklist(part, [])[0].alternative_ref_sets, []);
     assert.equal(checks.missing(part, []).length, 1);
+  });
+});
+
+test("parameter shadow plan shortlists only the header and return rows", () => {
+  const source = readFileSync(join(fixtureDir, "parameter.py"), "utf8");
+  const query = ask("CONFIG", "parameter_choice");
+  repoWith({ "parameter.py": source }, (root, index) => {
+    assert.deepEqual(pythonParameterShadowLocations(root, index.symbols, query)?.map((item) => item.line), [6, 7]);
+    assert.equal(pythonParameterShadowLocations(root, index.symbols, ask("OTHER", "parameter_choice")), null);
+  });
+  for (const module of ["module.py", "local.py", "async.py"]) {
+    repoWith({ [module]: readFileSync(join(fixtureDir, module), "utf8") }, (root, index) => {
+      const [dictionary, reader] = { "module.py": ["POLICY", "module_policy"], "local.py": ["SETTINGS", "local_setting"], "async.py": ["OPTIONS", "async_choice"] }[module]!;
+      assert.equal(pythonParameterShadowLocations(root, index.symbols, ask(dictionary, reader)), null);
+    });
+  }
+});
+
+test("relationship checks pass the shadow plan only with header and return rows", () => {
+  const query = ask("CONFIG", "parameter_choice");
+  const part = decomposeQuestion(query)[0];
+  repoWith({ "parameter.py": readFileSync(join(fixtureDir, "parameter.py"), "utf8") }, (root, index) => {
+    const cite = (line: number) => ({
+      id: "C1", file: "parameter.py", line, quote: readFileSync(join(root, "parameter.py"), "utf8").split("\n")[line - 1], reason: "", ref: `E${line}`,
+    });
+    const checks = createRelationshipChecks(root, index, query);
+    assert.deepEqual(checks.missing(part, [cite(6), cite(7)]), []);
+    assert.deepEqual(checks.missing(part, [cite(7)]), ["Python dictionary shadowed by reader parameter"]);
+    assert.deepEqual(checks.missing(part, [cite(6), cite(7), cite(3)]), []);
   });
 });

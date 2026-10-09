@@ -130,3 +130,15 @@ test("evidence answer flags citations outside selected source lines", () => {
   assert.equal(checked.audit_status, "invalid_citations");
   assert.equal(checked.invalid_citations.length, 1);
 });
+
+test("evidence answer flags unfinished prose under a valid JSON stop", () => {
+  const check = (answer: string, text: string) =>
+    validateEvidenceAnswer(
+      JSON.stringify({ answer, claims: [{ text, citations: [] }], uncertainty: [] }),
+      [],
+    );
+  assert.equal(check("Reads the `CONFIG` dictionary.", "Returns `CONFIG[").audit_status, "incomplete_text");
+  assert.equal(check("It returns the value of key `", "Done.").incomplete_text.length, 1);
+  assert.equal(check("Reads CONFIG.", "Returns the mode (see line 7").audit_status, "incomplete_text");
+  assert.equal(check("Reads `CONFIG`.", "Returns `CONFIG[\"mode\"]`.").audit_status, "pending_manual_review");
+});
