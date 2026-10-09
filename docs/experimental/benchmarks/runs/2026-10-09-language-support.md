@@ -33,8 +33,15 @@ correctness or a revision of the frozen evaluation. See the
 [PHP packing checkpoint](2026-10-09-php-filename-packing.md) for hashes and limits.
 The final scout suite passed 144/144; typecheck passed with existing lint warnings.
 
-Next: exercise Python/PHP enclosing declaration context and cross-scope citations
-on a bounded relationship fixture, preserving paired configuration values and
-parent review of semantics. Measure generation time before considering index
-caching; any cache must handle working-tree invalidation. Keep semantic-review
-costs visible in timing reports rather than skipping them.
+The fresh four-case [scope comparison](2026-10-09-scope-eval.md) completed with
+identical selected tuples and one false structured claim in each run. Optional
+lexical answer context establishes no improvement; source audits separate claim
+truth, citation support and wording. The original frozen evaluation was unchanged
+and was not rerun.
+
+Next: test a fresh bounded Python cross-scope citation check on known-bad and
+clean examples before routing. Flag inconsistent lexical owners while leaving
+binding targets unresolved. Start review/correction clocks before inspection and
+drafting. PHP aliases/includes and Python package imports remain future bounded
+work. Keep six-file/24,000-character packing bounds; working-tree cache
+invalidation and aggregate checks remain pending.

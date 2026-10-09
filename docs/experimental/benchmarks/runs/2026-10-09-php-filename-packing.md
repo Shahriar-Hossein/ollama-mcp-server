@@ -47,7 +47,15 @@ limitation matched the checked data: both cases require review, and evidence
 selection does not verify answer correctness. This successful narrative task
 does not establish model reliability for calculation or other tasks.
 
-Next: exercise Python/PHP enclosing declaration context and cross-scope citations
-on another bounded relationship fixture. Keep include/alias semantics unresolved
-and the six-file/24,000-character caps visible. Filename syntax remains bounded
-to safe ASCII root-relative components; large-source windows can omit guards.
+The fresh four-case [scope comparison](2026-10-09-scope-eval.md) completed with
+identical selected tuples and one false structured claim in each run. Optional
+lexical answer context establishes no improvement; source audits separate claim
+truth, citation support and wording. The original frozen evaluation was unchanged
+and was not rerun.
+
+Next: test a fresh bounded Python cross-scope citation check on known-bad and
+clean examples before routing. Flag inconsistent lexical owners while leaving
+binding targets unresolved. Start review/correction clocks before inspection and
+drafting. PHP aliases/includes and Python package imports remain future bounded
+work. Keep six-file/24,000-character packing bounds; working-tree cache
+invalidation and aggregate checks remain pending.
