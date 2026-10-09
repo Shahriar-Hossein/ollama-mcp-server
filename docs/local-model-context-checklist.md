@@ -73,12 +73,21 @@ remains incomplete; see the [operation-scoping checkpoint](experimental/benchmar
   and selects 9/16; the negative selects 7/7 and safely requires review.
   This repository was used for earlier image questions; it is not unseen-repo
   accuracy. No tuning or rerun followed this validation.
-- [ ] Improve generic configuration packing and selection on separate
-  development cases, then freeze a new validation set before measuring again.
+- [x] Extend generic configuration packing and selection on separate delivery
+  development fixtures. Named `get`/`getOrThrow` reads preserve defaults,
+  if/else conditions and direct outcomes; short literal defaults are selectable.
+  A fresh synthetic HTTP screen was frozen before generation. Its audit exposed
+  a symbol-line truncation bug and aborted before preserving negative output.
+  Complete-line packing now has a regression; the interrupted screen was not
+  rerun and does not establish final-revision accuracy.
+- [ ] Extend development coverage to configuration initialization and provider
+  provenance. Freeze fresh real-source questions before the next evaluation;
+  getter spelling and import adjacency do not establish runtime bindings.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current evidence work: [flag resolver selection](experimental/benchmarks/runs/2026-10-09-h-resolver-selection.md).
+Current evidence work: [generic configuration selection](experimental/benchmarks/runs/2026-10-09-h-generic-config.md).
+Earlier work: [flag resolver selection](experimental/benchmarks/runs/2026-10-09-h-resolver-selection.md).
 Earlier work: [flag helper and consumer packing](experimental/benchmarks/runs/2026-10-09-h-flag-packing.md).
 Earlier work: [operation scoping](experimental/benchmarks/runs/2026-10-06-h-operation-scoping.md).
 Earlier work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).

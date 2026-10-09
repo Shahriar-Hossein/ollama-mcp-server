@@ -8,6 +8,8 @@ import {
   missingEvidenceRequirements,
   directEvidenceForPart,
   flagResolutionRequested,
+  configurationKeys,
+  selectableEvidenceText,
   type QuestionPart,
   type ValidEvidence,
 } from "./local-explore-validation.js";
@@ -106,6 +108,11 @@ export function decomposeQuestion(query: string): QuestionPart[] {
         part.completeness = "unchecked";
         part.evidence_needed +=
           " Include the mapped resolver's input, branch conditions, returns and validation errors; parent review is required for flag semantics.";
+      }
+      if (configurationKeys(question).length) {
+        part.completeness = "unchecked";
+        part.evidence_needed +=
+          " Include named configuration reads, defaults, enclosing conditions and direct outcomes; parent review is required for configuration semantics.";
       }
       const uncheckedTail = question.replace(
         /\band\s+(?:return|issue)\s+[a-z][\w$]*[A-Z][\w$]*|\band\s+call(?:s)?\s+[A-Za-z_$][\w$.]*|\band\s+its\s+implementation\b/g,
@@ -266,7 +273,7 @@ export function validateModelAnswer(
   if (evidenceRefs) {
     for (const ref of evidenceRefs.slice(0, 96)) {
       const located = typeof ref === "string" ? refs.get(ref) : undefined;
-      if (!located || located.line.text.trim().length < 6) {
+      if (!located || !selectableEvidenceText(located.line.text)) {
         rejected_evidence++;
         continue;
       }
@@ -296,14 +303,16 @@ export function validateModelAnswer(
       !sourceLine ||
       (reference.quote !== undefined &&
         (typeof reference.quote !== "string" ||
-          reference.quote.trim().length < 6 ||
+          !selectableEvidenceText(reference.quote) ||
+          (reference.quote.trim().length < 6 &&
+            reference.quote.trim() !== sourceLine.text.trim()) ||
           !sourceLine.text.includes(reference.quote)))
     ) {
       rejected_evidence++;
       continue;
     }
     const quote = reference.quote ?? sourceLine.text.trim();
-    if (quote.length < 6) {
+    if (!selectableEvidenceText(quote)) {
       rejected_evidence++;
       continue;
     }

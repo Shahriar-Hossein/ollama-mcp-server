@@ -1,9 +1,12 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { readSymbol } from "../../explorer/read-symbol.js";
-import type { RepositoryIndex } from "../../explorer/indexer.js";
+import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
 import type { HybridRetrievalResult } from "../../explorer/retrieval.js";
-import { packingPatterns, type QuestionPart } from "./local-explore-validation.js";
+import {
+  configurationKeys,
+  packingPatterns,
+  type QuestionPart,
+} from "./local-explore-validation.js";
 
 const MAX_FILES = 6;
 const MAX_LINES = 20;
@@ -92,6 +95,15 @@ function selectedLines(
   return [...lines.values()].sort((a, b) => a.line - b.line);
 }
 
+function symbolLines(root: string, symbol: SymbolRecord, query: string, patterns: RegExp[]) {
+  // Symbol byte ranges can start after a declaration keyword or end inside a line.
+  const source = readFileSync(checkedFile(root, symbol.file), "utf8")
+    .split("\n")
+    .slice(symbol.range.start.line - 1, symbol.range.end.line)
+    .join("\n");
+  return selectedLines(source, symbol.range.start.line, query, patterns);
+}
+
 function candidateFor(
   root: string,
   result: RetrievalResult,
@@ -105,13 +117,15 @@ function candidateFor(
   const file = evidence.file;
   checkedFile(root, file);
   if (evidence.kind === "symbol" && evidence.symbol) {
-    const read = readSymbol(root, evidence.symbol.id, index);
+    const symbolId = evidence.symbol.id;
+    const symbol = index.symbols.find((item) => item.id === symbolId);
+    if (!symbol) throw new Error(`No indexed symbol found with ID: ${evidence.symbol.id}`);
     return {
       id,
       kind: "symbol",
       file,
       symbol: evidence.symbol.qualified_name,
-      lines: selectedLines(read.source.text, read.source.range.start.line, query, patterns),
+      lines: symbolLines(root, symbol, query, patterns),
     };
   }
   const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
@@ -147,6 +161,7 @@ export function buildCandidates(
   part?: QuestionPart,
 ): Candidate[] {
   const patterns = part?.operation ? packingPatterns(part, query) : [];
+  const namedConfigurationKeys = configurationKeys(part?.question ?? query);
   const candidates: Candidate[] = [];
   const files = new Set<string>();
   const add = (candidate: Candidate | null) => {
@@ -296,13 +311,12 @@ export function buildCandidates(
   );
   for (const symbol of namedSymbols.slice(0, 2)) {
     if (!files.has(symbol.file) && files.size >= MAX_FILES) break;
-    const read = readSymbol(root, symbol.id, index);
     add({
       id: "",
       kind: "symbol",
       file: symbol.file,
       symbol: symbol.qualified_name,
-      lines: selectedLines(read.source.text, read.source.range.start.line, query, patterns),
+      lines: symbolLines(root, symbol, query, patterns),
     });
   }
   for (const result of results.slice(0, 2))
@@ -315,24 +329,44 @@ export function buildCandidates(
     }
   }
   const configurationPatterns: RegExp[] = [];
-  if (/environment|\benv\b|\bflags?\b|gate|enabled|default|configur|setting/i.test(query)) {
+  if (namedConfigurationKeys.length) {
+    configurationPatterns.push(
+      ...namedConfigurationKeys.map((key) => new RegExp(`["']${key}["']`)),
+      /\.\s*get(?:OrThrow)?\s*(?:<[^>]+>)?\s*\(/,
+      /\bconstructor\s*\(/,
+      /\bif\s*\(/,
+      /\breturn\b/,
+      /\bthrow\b/,
+    );
+  }
+  if (
+    namedConfigurationKeys.length ||
+    /environment|\benv\b|\bflags?\b|gate|enabled|default|configur|setting/i.test(query)
+  ) {
     const flagLines = candidates.flatMap((candidate) =>
       candidate.lines
         .filter((line) => /["'](?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)["']/.test(line.text))
         .map((line) => ({ file: candidate.file, ...line })),
     );
-    const mappingKeys = new Set(flagLines.flatMap((line) =>
-      [...line.text.matchAll(/\b([A-Za-z_$][\w$]*)\s*:\s*[A-Za-z_$][\w$]*\s*\(/g)]
-        .map((match) => match[1]),
-    ));
+    const mappingKeys = new Set(
+      flagLines.flatMap((line) =>
+        [...line.text.matchAll(/\b([A-Za-z_$][\w$]*)\s*:\s*[A-Za-z_$][\w$]*\s*\(/g)].map(
+          (match) => match[1],
+        ),
+      ),
+    );
     const normalizedQuery = query.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const namedKeys = [...mappingKeys].filter((key) =>
-      normalizedQuery.includes(key.toLowerCase()),
-    );
-    const keys = namedKeys.length ? namedKeys : [...mappingKeys].filter((key) =>
-      !/autonomous/i.test(query) || flagLines.some((line) =>
-        line.text.includes(`${key}:`) && /["'][A-Z0-9_]+_ENABLED["']/.test(line.text)),
-    );
+    const namedKeys = [...mappingKeys].filter((key) => normalizedQuery.includes(key.toLowerCase()));
+    const keys = namedKeys.length
+      ? namedKeys
+      : [...mappingKeys].filter(
+          (key) =>
+            !/autonomous/i.test(query) ||
+            flagLines.some(
+              (line) =>
+                line.text.includes(`${key}:`) && /["'][A-Z0-9_]+_ENABLED["']/.test(line.text),
+            ),
+        );
     for (const key of keys) {
       const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       configurationPatterns.push(new RegExp(`\\.\\s*${escaped}\\b|\\[['"]${escaped}['"]\\]`));
@@ -343,31 +377,37 @@ export function buildCandidates(
       if (
         !call.callee_symbol_id ||
         !["exact", "static"].includes(call.resolution) ||
-        !flagLines.some((line) => line.file === call.file &&
-          call.range.start.line <= line.line && line.line <= call.range.end.line)
-      ) continue;
+        !flagLines.some(
+          (line) =>
+            line.file === call.file &&
+            call.range.start.line <= line.line &&
+            line.line <= call.range.end.line,
+        )
+      )
+        continue;
       helpers.add(call.callee_symbol_id);
     }
     for (const id of [...helpers].slice(0, MAX_FILES)) {
       const symbol = index.symbols.find((item) => item.id === id);
       if (!symbol || !["function", "method"].includes(symbol.kind)) continue;
-      const read = readSymbol(root, id, index);
       add({
         id: "",
         kind: "configuration",
         file: symbol.file,
         symbol: symbol.qualified_name,
-        lines: selectedLines(read.source.text, read.source.range.start.line, query, [
-          /\breturn\b/, /\bthrow\b/, /\bif\s*\(/,
-        ]),
+        lines: symbolLines(root, symbol, query, [/\breturn\b/, /\bthrow\b/, /\bif\s*\(/]),
       });
     }
     for (const file of [...files]) {
       if (!configurationPatterns.length) break;
       const source = readFileSync(checkedFile(root, file), "utf8");
       if (configurationPatterns.some((pattern) => pattern.test(source)))
-        add({ id: "", kind: "configuration", file,
-          lines: selectedLines(source, 1, query, configurationPatterns) });
+        add({
+          id: "",
+          kind: "configuration",
+          file,
+          lines: selectedLines(source, 1, query, configurationPatterns),
+        });
     }
   }
   expandCrossFileCandidates(
@@ -377,7 +417,9 @@ export function buildCandidates(
     query,
     [...configurationPatterns, ...patterns],
     Boolean(part?.operation),
-    configurationPatterns,
+    namedConfigurationKeys.length
+      ? configurationPatterns.slice(0, namedConfigurationKeys.length)
+      : configurationPatterns,
   ).forEach(add);
   for (const result of results) {
     if (candidates.length >= results.length) break;
@@ -502,7 +544,8 @@ function expandCrossFileCandidates(
       .map(([file, edgeScore]) => {
         const source = sourceFor(file);
         const score =
-          edgeScore + new Set(terms.filter((term) => source.toLowerCase().includes(term))).size +
+          edgeScore +
+          new Set(terms.filter((term) => source.toLowerCase().includes(term))).size +
           priorityPatterns.filter((pattern) => source.match(pattern)).length * 4;
         return { file, source, score };
       })

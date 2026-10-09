@@ -7,6 +7,8 @@ import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
 import { checkedFile } from "./local-explore-packing.js";
 import {
   flagResolutionRequested,
+  configurationKeys,
+  selectableEvidenceText,
   type QuestionPart,
   type ValidEvidence,
 } from "./local-explore-validation.js";
@@ -306,7 +308,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         const lines: Location[] = [];
         for (let row = child.startPosition.row; row <= child.endPosition.row; row++) {
           const text = source[row]?.trim();
-          if (text && text.length >= 6 && !/^(?:\/\/|\*|\/\*)/.test(text))
+          if (text && selectableEvidenceText(text) && !/^(?:\/\/|\*|\/\*)/.test(text))
             lines.push({ file: helper.file, line: row + 1 });
         }
         return lines;
@@ -354,6 +356,92 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
     return checks;
   }
 
+  function configurationReadPlan(part: QuestionPart): Relationship[] {
+    const keys = configurationKeys(part.question);
+    if (!keys.length) return [];
+    const checks: Relationship[] = [];
+    const seenOwners = new Set<string>();
+    const callableTypes = [
+      "function_declaration",
+      "function_expression",
+      "arrow_function",
+      "method_definition",
+      "generator_function",
+      "generator_function_declaration",
+    ];
+    for (const key of keys) {
+      let found = false;
+      for (const call of index.calls) {
+        if (
+          !/\.[cm]?[jt]sx?$/.test(call.file) ||
+          !/\.(?:get|getOrThrow)$/.test(call.callee_name) ||
+          /(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(call.file)
+        )
+          continue;
+        const tree = treeFor(call.file);
+        let node: Parser.SyntaxNode | null = tree.rootNode.descendantForPosition(
+          { row: call.range.start.line - 1, column: call.range.start.column - 1 },
+          { row: call.range.end.line - 1, column: call.range.end.column - 1 },
+        );
+        while (node && node.type !== "call_expression") node = node.parent;
+        const argument = node?.childForFieldName("arguments")?.namedChildren[0];
+        if (!node || argument?.type !== "string" || argument.text.slice(1, -1) !== key) continue;
+        found = true;
+        const source = tree.rootNode.text.split("\n");
+        const substantive = (item: Parser.SyntaxNode) => {
+          const locations: Location[] = [];
+          for (let row = item.startPosition.row; row <= item.endPosition.row; row++) {
+            const text = source[row]?.trim();
+            if (text && selectableEvidenceText(text) && !/^(?:[{}();,]+$|\/\/|\*|\/\*)/.test(text))
+              locations.push({ file: call.file, line: row + 1 });
+          }
+          return locations;
+        };
+        let owner = node.parent;
+        while (owner && !callableTypes.includes(owner.type)) owner = owner.parent;
+        const guarded = (item: Parser.SyntaxNode): Location[] => {
+          const locations = substantive(item);
+          for (
+            let ancestor = item.parent;
+            ancestor && ancestor.id !== owner?.id;
+            ancestor = ancestor.parent
+          ) {
+            if (ancestor.type === "else_clause") locations.push(location(call.file, ancestor));
+            if (ancestor.type === "if_statement") {
+              const condition = ancestor.childForFieldName("condition");
+              if (condition) locations.push(...substantive(condition));
+            }
+          }
+          return locations;
+        };
+        const base = guarded(node);
+        checks.push({
+          requirement: `${key} configuration read at ${call.file}:${node.startPosition.row + 1}`,
+          alternatives: [base],
+        });
+        const ownerKey = `${call.file}:${owner?.startIndex}`;
+        if (!owner || seenOwners.has(ownerKey)) continue;
+        seenOwners.add(ownerKey);
+        const body = owner.childForFieldName("body");
+        if (!body) continue;
+        const outcomes = body.descendantsOfType(["return_statement", "throw_statement"]);
+        if (body.type !== "statement_block") outcomes.push(body);
+        for (const outcome of outcomes) {
+          let ancestor = outcome.parent;
+          while (ancestor && ancestor.id !== owner.id && !callableTypes.includes(ancestor.type))
+            ancestor = ancestor.parent;
+          if (ancestor?.id !== owner.id) continue;
+          checks.push({
+            requirement: `${key} configuration outcome at ${call.file}:${outcome.startPosition.row + 1}`,
+            alternatives: [[...base, ...guarded(outcome)]],
+          });
+        }
+      }
+      if (!found) checks.push({ requirement: `${key} configuration read`, alternatives: [] });
+    }
+    return checks;
+  }
+
   function plan(part: QuestionPart): Relationship[] {
     const key = `${part.operation ?? ""}:${part.question}`;
     const cached = plans.get(key);
@@ -363,7 +451,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
       plans.set(key, checks);
       return checks;
     }
-    const checks: Relationship[] = flagResolverPlan(part);
+    const checks: Relationship[] = [...flagResolverPlan(part), ...configurationReadPlan(part)];
     for (const { callerName, calleeName } of part.operation ? [] : callRequests(part)) {
       const callers = index.symbols.filter(
         (symbol) => callableKinds.has(symbol.kind) && matchesName(symbol, callerName),

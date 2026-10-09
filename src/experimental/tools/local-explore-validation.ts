@@ -11,6 +11,20 @@ export type ValidEvidence = { id: string; file: string; line: number; quote: str
 
 type Requirement = { name: string; pattern: RegExp; minimum: number };
 
+export function selectableEvidenceText(text: string): boolean {
+  const quote = text.trim();
+  return (
+    quote.length >= 6 ||
+    /^(?:-?\d+(?:\.\d+)?|"[^"\n]*"|'[^'\n]*'|true|false|null|else\s*\{?)[,;]?$/.test(quote)
+  );
+}
+
+export function configurationKeys(question: string): string[] {
+  return [...new Set(question.match(/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/g) ?? [])].filter(
+    (key) => !key.startsWith("ENABLE_") && !key.endsWith("_ENABLED"),
+  );
+}
+
 export function flagResolutionRequested(question: string): boolean {
   return (
     /environment variables?|\bflags?\b|\bENABLE_[A-Z0-9_]+\b|\b[A-Z0-9_]+_ENABLED\b/i.test(

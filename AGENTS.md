@@ -124,6 +124,12 @@ This is the canonical instructions file for this repo — other agent configs
   Resolver recognition covers literal `ENABLE_*`/`*_ENABLED` arguments to
   direct JS/TS helper calls; injected providers and arbitrary configuration
   APIs remain outside that check.
+  Named configuration keys also anchor JS/TS `get`/`getOrThrow` reads,
+  multiline defaults and direct reader outcomes with if/else guards. Packing
+  preserves separated getter, constructor and outcome windows in import
+  neighbors. Getter names and adjacency are context hints, not provider or
+  data-flow resolution; configuration semantics always require parent review.
+  Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
   interprets behavior. The legacy

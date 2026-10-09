@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "authorship": "Lead-authored synthetic validation, separate from delivery-channel development fixtures.",
+  "protocol": "Frozen after implementation and deterministic tests, before generation. Run once; do not tune or rerun from these answers. This screen is not unseen-repository accuracy or an independent review. Score supplied lines, selected lines and review status separately.",
+  "frozen_at": "2026-10-09T07:14:21.520006+00:00",
+  "sources": {
+    "server.ts": "import { launchServer } from './launch.js';\nexport function bootstrap(settings) {\n  const idleMs = settings.get<number>(\n    'HTTP_IDLE_MS',\n    0,\n  );\n  if (!Number.isFinite(idleMs) || idleMs < 0) {\n    throw new Error(\n      'HTTP idle time must be a nonnegative finite number',\n    );\n  }\n  launchServer({ idleMs });\n  return idleMs;\n}\n// settings.get('HTTP_BACKOFF_MS', 5) is only an example.\n",
+    "launch.ts": "export function launchServer(options) {\n  return { idleTimeout: options.idleMs };\n}\n"
+  },
+  "files": {
+    "server.ts": "48153164a52ff84f1b9594a75e5b9f6cc77036a9adba1080633916ae071e3069",
+    "launch.ts": "78f44a82d4621b8b3a6ada3c6a311b90f061a8020251d0676f6602e18259c928"
+  },
+  "questions": [
+    {
+      "id": "http_idle_default_validation",
+      "kind": "positive",
+      "query": "How is HTTP_IDLE_MS defaulted and validated before the server starts, and how is it passed to the server?",
+      "required": [
+        {
+          "file": "server.ts",
+          "line": 3,
+          "text": "const idleMs = settings.get<number>("
+        },
+        {
+          "file": "server.ts",
+          "line": 4,
+          "text": "'HTTP_IDLE_MS',"
+        },
+        {
+          "file": "server.ts",
+          "line": 5,
+          "text": "0,"
+        },
+        {
+          "file": "server.ts",
+          "line": 7,
+          "text": "if (!Number.isFinite(idleMs) || idleMs < 0) {"
+        },
+        {
+          "file": "server.ts",
+          "line": 8,
+          "text": "throw new Error("
+        },
+        {
+          "file": "server.ts",
+          "line": 9,
+          "text": "'HTTP idle time must be a nonnegative finite number',"
+        },
+        {
+          "file": "server.ts",
+          "line": 12,
+          "text": "launchServer({ idleMs });"
+        },
+        {
+          "file": "server.ts",
+          "line": 13,
+          "text": "return idleMs;"
+        },
+        {
+          "file": "launch.ts",
+          "line": 2,
+          "text": "return { idleTimeout: options.idleMs };"
+        }
+      ]
+    },
+    {
+      "id": "absent_http_backoff",
+      "kind": "negative",
+      "query": "Does HTTP_BACKOFF_MS configure retry backoff during startup, including its default?",
+      "required": [],
+      "absence": "HTTP_BACKOFF_MS appears only in a comment. Parent source review is required to establish the absence of an executable read."
+    }
+  ]
+}
