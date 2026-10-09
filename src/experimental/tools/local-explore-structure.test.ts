@@ -328,3 +328,138 @@ test("PHP array sibling additions deduplicate selected lines and share the globa
     assert.ok(!lines.some((line) => line.line === 3 || line.line === 4));
   }, "m.php");
 });
+
+test("Python functions, async methods and nested scopes add their own headers", () => {
+  const source = [
+    "class Ledger:", "    mode = 'live'", "    async def post(", "        self, items,", "    ):",
+    "        if items:", "            return items", "    def factory(self):", "        def nested():",
+    "            return 1", "        handler = lambda value: (", "            value + 1", "        )",
+    "        return handler", "outside = 1",
+  ].join("\n");
+  withFile(source, (root) => {
+    for (const [selected, header] of [[2, 1], [4, 3], [7, 3], [10, 9], [12, 11], [14, 8]]) {
+      const lines = structuralSupport(root, [{ file: "m.py", line: selected }]);
+      assert.deepEqual(lines.map((line) => line.line), [header]);
+      assert.match(lines[0].reason, /enclosing Python/);
+      assert.equal(lines[0].quote, source.split("\n")[header - 1].trim());
+    }
+    for (const line of [1, 3, 8, 9, 11, 15])
+      assert.deepEqual(structuralSupport(root, [{ file: "m.py", line }]), []);
+  }, "m.py");
+});
+
+test("Python decorated declarations add only bounded single-line decorator context", () => {
+  const source = [
+    "@first", "@second(option=1)", "@third", "@fourth", "class Service:",
+    "    @outer(", "        option=1,", "    )", "    @inner", "    async def run(",
+    "        self, value,", "    ):", "        return value",
+  ].join("\n");
+  withFile(source, (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 5 }]).map((line) => line.line), [1, 2, 3]);
+    for (const line of [6, 7, 11, 13])
+      assert.deepEqual(structuralSupport(root, [{ file: "m.py", line }]).map((item) => item.line), [10, 9]);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 10 }]).map((line) => line.line), [9]);
+    const evidence = [{ file: "m.py", line: 13 }, { file: "m.py", line: 10 }, { file: "m.py", line: 9 }];
+    assert.deepEqual(structuralSupport(root, evidence), []);
+    assert.deepEqual(evidence.map((line) => line.line), [13, 10, 9]);
+  }, "m.py");
+});
+
+test("Python malformed scopes and invalid selected lines add nothing", () => {
+  withFile("def broken():\n    return @@@\n", (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 2 }]), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "gone.py", line: 2 }]), []);
+  }, "m.py");
+  withFile("def valid():\n\n    return 1\n", (root) => {
+    for (const line of [0, -1, 1.5, 2, 4, 50, Number.NaN])
+      assert.deepEqual(structuralSupport(root, [{ file: "m.py", line }]), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 3 }]).map((line) => line.line), [1]);
+  }, "m.py");
+  withFile("def outer():\n    def broken(:\n        return 1\n", (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 3 }]), []);
+  }, "m.py");
+});
+
+test("Python dictionary context caps string and numeric keyed scalar siblings", () => {
+  const source = [
+    "config = {", "    'selected': make_value(),", "    'label': 'ready',", "    2: -3.5,",
+    "    'raw': r'path',", "    'extra': +2,", "}",
+  ].join("\n");
+  withFile(source, (root) => {
+    const lines = structuralSupport(root, [{ file: "m.py", line: 2 }]);
+    assert.deepEqual(lines.map((line) => line.line), [3, 4, 5]);
+    assert.ok(lines.every((line) => line.reason.includes("Python dictionary")));
+    assert.ok(lines.every((line) => line.quote === source.split("\n")[line.line - 1].trim()));
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 2 }, { file: "m.py", line: 3 }]).map((line) => line.line), [4, 5, 6]);
+  }, "m.py");
+});
+
+test("Python dictionary siblings exclude dynamic, unpacked, nested and multiline values", () => {
+  const source = [
+    "config = {", "    'selected': 1,", "    'format': f'plain',", "    'interpolated': f'{value}',",
+    "    f'key': 1,", "    dynamic: 1,", "    'value': dynamic,", "    'bytes': b'abc',",
+    "    'nested': {'child': 1},", "    'list': [1],", "    **other,", "    'boolean': True,",
+    "    'none': None,", "    'multi': (", "        'line'", "    ),", "    'concat': 'one' 'two',",
+    "    'expression': 1 + 2,", "    'signed': -variable,", "    'valid': 'ready',", "}",
+  ].join("\n");
+  withFile(source, (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 2 }]).map((line) => line.line), [20]);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 11 }]), []);
+  }, "m.py");
+});
+
+test("Python dictionary context stays within its nearest dictionary", () => {
+  const source = [
+    "config = {", "    'nested': {", "        'selected': 1,", "        'inner': 'yes',",
+    "        **other,", "    },", "    'outer': 'no',", "}",
+  ].join("\n");
+  withFile(source, (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 3 }]).map((line) => line.line), [4]);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 5 }]), []);
+  }, "m.py");
+});
+
+test("Python direct imports and aliases add subsequent identifier text context", () => {
+  const source = [
+    "import package.tools, sys as system", "from .helpers import (", "    read as load,", "    write,", ")",
+    "# package system load write", "text = 'package system load write'", 'example = f"{load}"',
+    "import load", "load_data()", "rows = load()", "write(rows)", "package.tools.run()", "system.exit()",
+  ].join("\n");
+  withFile(source, (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 1 }]).map((line) => line.line), [13, 14]);
+    for (const selected of [2, 3, 4]) {
+      const lines = structuralSupport(root, [{ file: "m.py", line: selected }]);
+      assert.deepEqual(lines.map((line) => line.line), [11, 12]);
+      assert.ok(lines.every((line) => /text context, not binding resolution/.test(line.reason)));
+    }
+  }, "m.py");
+});
+
+test("Python import context excludes wildcard and missing names and caps names", () => {
+  const source = [
+    "from helper import *", "from helper import unused", "import one, two, three, four",
+    "text = 'unused'", "# unused", "one()", "two()", "three()", "four()",
+  ].join("\n");
+  withFile(source, (root) => {
+    for (const line of [1, 2]) assert.deepEqual(structuralSupport(root, [{ file: "m.py", line }]), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 3 }]).map((line) => line.line), [6, 7, 8]);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.py", line: 3 }, { file: "m.py", line: 6 }]).map((line) => line.line), [7, 8]);
+  }, "m.py");
+});
+
+test("Python supporting lines share the global cap and deduplicate repeated evidence", () => {
+  const source = Array.from({ length: 20 }, (_, i) => `@decorate\ndef f${i}():\n    return ${i}`).join("\n");
+  withFile(source, (root) => {
+    const evidence = Array.from({ length: 20 }, (_, i) => ({ file: "m.py", line: i * 3 + 3 }));
+    const lines = structuralSupport(root, evidence.concat(evidence));
+    assert.equal(lines.length, 12);
+    assert.equal(new Set(lines.map((line) => `${line.file}:${line.line}`)).size, lines.length);
+  }, "m.py");
+  const entries = Array.from({ length: 20 }, (_, i) => `    'key${i}': ${i},`);
+  withFile(`config = {\n${entries.join("\n")}\n}`, (root) => {
+    const evidence = [3, 4, 5, 6, 7].map((line) => ({ file: "m.py", line }));
+    const lines = structuralSupport(root, evidence.concat(evidence));
+    assert.equal(lines.length, 12);
+    assert.ok(lines.every((line) => !evidence.some((item) => item.line === line.line)));
+  }, "m.py");
+});

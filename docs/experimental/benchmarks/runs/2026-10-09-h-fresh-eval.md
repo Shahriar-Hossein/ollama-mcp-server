@@ -80,6 +80,23 @@ Tests use synthetic PHP sources covering nested scopes, attributes, multiline
 names, malformed code and invalid selections. No fresh model evaluation has
 been run for this addition; the earlier replay remains diagnostic only.
 
+## Python source context (same day, synthetic checks only)
+
+Python selections now add the nearest def/async def/class/lambda header and
+up to three single-line decorators. Nested scopes and selected headers never
+fall back to an outer declaration. Dictionary entries add up to three
+same-dictionary single-line string/numeric keyed scalar siblings; dynamic,
+unpacked, nested, multiline, byte and f-string values are excluded.
+
+Selected direct imports/from-imports add the first subsequent identifier
+occurrence for up to three names or aliases. Wildcards, comments, strings and
+other import declarations are excluded. This is text context: shadowing,
+reassignment, attribute names and binding identity remain unresolved.
+
+The shared 12-entry cap and source-line deduplication still apply. Evidence,
+coverage and status are unchanged. Checks use synthetic Python sources only;
+no fresh model evaluation has been run for this addition.
+
 ## Next
 
 - Run a new fresh set (new sources) to measure the fix.

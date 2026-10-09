@@ -166,6 +166,14 @@ This is the canonical instructions file for this repo — other agent configs
   add up to three same-array single-line string/numeric scalar siblings for both array
   syntaxes; dynamic, unpacked, nested and multiline values are excluded. Context is
   lexical, not runtime or data-flow verification.
+  Python adds the nearest def/async def/class/lambda header and up to three
+  single-line decorators, without falling back from nested or selected headers.
+  Dictionary entries add up to three same-dictionary single-line string/numeric
+  keyed scalar siblings; unpacking, dynamic values, f-strings, bytes and nested
+  containers are excluded. Direct imports/from-imports add the first subsequent
+  identifier occurrence for up to three names/aliases, excluding wildcard imports,
+  comments, strings and other import declarations. These are text context;
+  shadowing, reassignment, attribute names and binding identity are not resolved.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
