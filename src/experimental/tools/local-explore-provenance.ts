@@ -2,6 +2,7 @@ import type Parser from "tree-sitter";
 import type { RepositoryIndex } from "../../explorer/indexer.js";
 import { configurationContextRequests } from "./local-explore-config-context.js";
 import { selectableEvidenceText } from "./local-explore-validation.js";
+import { defaultInstanceContexts } from "./local-explore-instances.js";
 
 type Location = { file: string; line: number };
 export type ProvenanceContext = { requirement: string; locations: Location[] };
@@ -61,14 +62,14 @@ export function configurationReaderOwner(node: Parser.SyntaxNode, names: string[
   });
   return {
     matches: !names.length || matched.length > 0,
-    lines: (names.length ? matched : []).flatMap((owner) => {
+    lines: (names.length ? [...matched, ...owners.slice(0, 1)] : []).flatMap((owner) => {
       const name = owner.childForFieldName("name");
       return name ? [name.startPosition.row + 1] : [];
     }),
   };
 }
 
-function linesFor(file: string, node: Parser.SyntaxNode): Location[] {
+export function provenanceLines(file: string, node: Parser.SyntaxNode): Location[] {
   const source = node.tree.rootNode.text.split("\n");
   const lines: Location[] = [];
   for (let row = node.startPosition.row; row <= node.endPosition.row; row++) {
@@ -79,6 +80,18 @@ function linesFor(file: string, node: Parser.SyntaxNode): Location[] {
   return lines;
 }
 
+function metadataToken(use: Parser.SyntaxNode): boolean {
+  const value = use.parent?.type === "array" ? use.parent : use;
+  const pair = value.parent;
+  return (
+    pair?.type === "pair" &&
+    pair.childForFieldName("value")?.id === value.id &&
+    /^(?:imports|providers|exports|inject|provide)$/.test(
+      (pair.childForFieldName("key")?.text ?? "").replace(/^['"]|['"]$/g, ""),
+    )
+  );
+}
+
 // One direct import and initializer only; the source chain does not prove runtime values.
 export function configurationProvenanceContexts(
   index: RepositoryIndex,
@@ -86,9 +99,9 @@ export function configurationProvenanceContexts(
   treeFor: (file: string) => Parser.Tree,
 ): ProvenanceContext[] {
   const request = configurationContextRequests(question);
-  if (!request.constant && !request.order) return [];
+  if (!request.constant && !request.order && !request.instance) return [];
   const names = configurationOwnerNames(question, index);
-  const contexts: ProvenanceContext[] = [];
+  const contexts: ProvenanceContext[] = defaultInstanceContexts(index, question, treeFor, names);
   const seen = new Set<string>();
   const symbols = new Map(index.symbols.map((symbol) => [symbol.id, symbol]));
   const importsByFile = new Map<string, Parser.SyntaxNode[]>();
@@ -134,6 +147,7 @@ export function configurationProvenanceContexts(
       use.parent.childForFieldName("function")?.id === use.id
     )
       continue;
+    if (metadataToken(use) || use.parent?.type === "new_expression") continue;
     let ancestor: Parser.SyntaxNode | null = use;
     let unsupported = false;
     while (ancestor && ancestor.type !== "program") {
@@ -223,11 +237,11 @@ export function configurationProvenanceContexts(
     const locations =
       valid && binding && declaration && initializer
         ? [
-            ...linesFor(reference.file, imported),
+            ...provenanceLines(reference.file, imported),
             ...owner.lines.map((line) => ({ file: reference.file, line })),
-            ...linesFor(reference.file, use),
+            ...provenanceLines(reference.file, use),
             { file: binding.file, line: declaration.startPosition.row + 1 },
-            ...linesFor(binding.file, initializer),
+            ...provenanceLines(binding.file, initializer),
           ]
         : [];
     for (let parent = use.parent; parent; parent = parent.parent) {
@@ -235,16 +249,16 @@ export function configurationProvenanceContexts(
         parent.type === "call_expression" &&
         /\.(?:register|registerAsync)$/.test(parent.childForFieldName("function")?.text ?? "")
       )
-        locations.push(...linesFor(reference.file, parent.childForFieldName("function")!));
+        locations.push(...provenanceLines(reference.file, parent.childForFieldName("function")!));
       if (parent.type === "if_statement" && parent.childForFieldName("condition"))
-        locations.push(...linesFor(reference.file, parent.childForFieldName("condition")!));
+        locations.push(...provenanceLines(reference.file, parent.childForFieldName("condition")!));
     }
     contexts.push({
       requirement: `imported configuration ${use.text} provenance at ${reference.file}:${use.startPosition.row + 1}`,
       locations: valid ? locations : [],
     });
   }
-  if (!contexts.length)
+  if (!contexts.length && (request.constant || request.instance))
     contexts.push({
       requirement: "imported configuration constant/property provenance",
       locations: [],

@@ -75,6 +75,9 @@ Fixture SHA-256: `6cda6a3215015518f0ffef996a46e8bbc00eda36a41124cc61ebc9796c31c5
 
 ## Next step
 
+Development continues in [default-instance context](2026-10-09-h-config-instances.md).
+The screen above remains frozen.
+
 Develop separate cases distinguishing actual configuration-value imports from
 module/provider tokens. Add default-import instance and constructor-argument
 context, preserving the difference between an environment object reference and

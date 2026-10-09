@@ -19,6 +19,7 @@ export function configurationContextRequests(question: string) {
     constant:
       configuration &&
       /\bconstants?\b|\bpropert(?:y|ies)\b|\bimport(?:ed)?\b|\bprovenance\b/i.test(question),
+    instance: configuration && /\bdefault[ -](?:import|export)|\binstance\b/i.test(question),
     order,
   };
 }

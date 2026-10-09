@@ -208,7 +208,7 @@ export function buildCandidates(
     (file) => !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file),
   );
   const contextRequests = configurationContextRequests(part?.question ?? query);
-  if (contextRequests.constant || contextRequests.order) {
+  if (contextRequests.constant || contextRequests.order || contextRequests.instance) {
     const trees = new Map<string, ReturnType<typeof parseConfigurationTree>>();
     const contexts = configurationProvenanceContexts(index, part?.question ?? query, (file) => {
       let tree = trees.get(file);

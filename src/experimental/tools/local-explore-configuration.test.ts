@@ -198,6 +198,302 @@ function packedEvidence(root: string, query: string) {
   return { index, part, candidates, evidence, checks: createRelationshipChecks(root, index) };
 }
 
+test("configuration value provenance excludes module arrays and provider tokens", () =>
+  provenanceFixture((root) => {
+    const source = readFileSync(join(root, "signer.ts"), "utf8");
+    writeFileSync(
+      join(root, "signer.ts"),
+      source.replace(
+        "@Module({ imports: [",
+        "import { unknownModule, providerToken } from './tokens.js';\n@Module({ providers: [{ provide: providerToken, inject: [providerToken], useValue: token }], exports: [unknownModule], imports: [unknownModule,",
+      ),
+    );
+    const { part, evidence, checks } = packedEvidence(
+      root,
+      "Which imported constant supplies configuration to SignerModule registration?",
+    );
+    const requirements = checks.checklist(
+      part,
+      evidence.map((item, i) => ({ ...item, ref: `E${i}` })),
+    );
+    const values = requirements.filter((item) =>
+      item.requirement.startsWith("imported configuration"),
+    );
+    assert.equal(values.length, 2);
+    assert.ok(values.every((item) => /token provenance/.test(item.requirement)));
+    assert.ok(values.every((item) => item.alternative_ref_sets.length === 1));
+    assert.ok(
+      !checks.missing(part, evidence).some((name) => /unknownModule|providerToken/.test(name)),
+    );
+  }));
+
+async function instanceFixture(run: (root: string) => unknown | Promise<unknown>) {
+  return fixture(async (root) => {
+    writeFileSync(
+      join(root, "service.ts"),
+      [
+        "import { config as load } from 'dotenv';",
+        "load({ path: '.env.service' });",
+        "class StorageSettings {",
+        "  constructor(private environment: NodeJS.ProcessEnv) {}",
+        "  options() {",
+        "    return { endpoint: this.environment.STORAGE_ENDPOINT };",
+        "  }",
+        "}",
+        "const service = new StorageSettings(process.env);",
+        "export default service;",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "storage.ts"),
+      [
+        "import settings from './service.js';",
+        "import { StorageModule } from '@vendor/storage';",
+        "export class StorageFeature {",
+        "  setup() {",
+        "    return StorageModule.register(settings.options());",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    execFileSync("git", ["-C", root, "add", "service.ts", "storage.ts"]);
+    await run(root);
+  });
+}
+
+const instanceQuery =
+  "Does the default-import instance read STORAGE_ENDPOINT in StorageSettings.options before environment initialization?";
+
+test("default-import instance binds construction, constructor argument and named reader call", () =>
+  instanceFixture((root) => {
+    const { part, evidence, checks, candidates } = packedEvidence(root, instanceQuery);
+    const requirements = checks.checklist(
+      part,
+      evidence.map((item, i) => ({ ...item, ref: `E${i}` })),
+    );
+    const context = requirements.find((item) =>
+      /construction and reader context/.test(item.requirement),
+    );
+    assert.ok(context);
+    assert.equal(context.alternative_ref_sets.length, 1);
+    for (const text of [
+      "import settings",
+      "settings.options()",
+      "class StorageSettings",
+      "constructor(",
+      "options() {",
+      "this.environment.STORAGE_ENDPOINT",
+      "new StorageSettings(process.env)",
+      "export default service",
+    ])
+      assert.ok(
+        checks
+          .missing(
+            part,
+            evidence.filter((item) => !item.quote.includes(text)),
+          )
+          .some((name) => /construction and reader context/.test(name)),
+        text,
+      );
+    assert.ok(evidence.some((item) => item.quote.includes("load({ path: '.env.service' })")));
+    assert.ok(
+      checks
+        .missing(part, evidence)
+        .includes("default-import instance configuration semantics require parent review"),
+    );
+    assert.ok(
+      checks
+        .missing(part, evidence)
+        .includes("configuration initialization order requires parent review"),
+    );
+    assert.equal(part.completeness, "unchecked");
+    assert.ok(new Set(candidates.map((item) => item.file)).size <= 6);
+  }));
+
+test("instance context preserves object reference, scalar capture and copied environment arguments", () =>
+  instanceFixture((root) => {
+    const base = readFileSync(join(root, "service.ts"), "utf8");
+    for (const argument of ["process.env", "process.env.STORAGE_ENDPOINT", "{ ...process.env }"]) {
+      writeFileSync(
+        join(root, "service.ts"),
+        base.replace("new StorageSettings(process.env)", `new StorageSettings(${argument})`),
+      );
+      const { part, evidence, checks } = packedEvidence(root, instanceQuery);
+      assert.ok(evidence.some((item) => item.quote.includes(`new StorageSettings(${argument})`)));
+      assert.ok(
+        !checks
+          .missing(part, evidence)
+          .some((name) => /construction and reader context/.test(name)),
+      );
+      assert.ok(
+        checks.missing(part, evidence).some((name) => /semantics require parent review/.test(name)),
+      );
+    }
+    writeFileSync(
+      join(root, "service.ts"),
+      base.replace(
+        "const service = new StorageSettings(process.env);\nexport default service;",
+        "export default new StorageSettings(process.env);",
+      ),
+    );
+    const next = packedEvidence(root, instanceQuery);
+    assert.ok(
+      !next.checks
+        .missing(next.part, next.evidence)
+        .some((name) => /construction and reader context/.test(name)),
+    );
+  }));
+
+test("shadowed, reassigned, factory and reexported default instances remain unresolved", () =>
+  instanceFixture((root) => {
+    const base = readFileSync(join(root, "service.ts"), "utf8");
+    const consumer = readFileSync(join(root, "storage.ts"), "utf8");
+    for (const source of [
+      base.replace("new StorageSettings(process.env)", "makeSettings(process.env)"),
+      base.replace("const service", "let service"),
+      base.replace("export default service", "service = replacement;\nexport default service"),
+      base.replace(
+        "export default service",
+        "function demo(service) { return service; }\nexport default service",
+      ),
+      base.replace("new StorageSettings(process.env)", "new StorageSettings(...args)"),
+      base.replace(
+        "class StorageSettings",
+        "const StorageSettings = replacement;\nclass StorageSettings",
+      ),
+      "export { default } from './elsewhere.js';",
+    ]) {
+      writeFileSync(join(root, "service.ts"), source);
+      const next = packedEvidence(
+        root,
+        "Explain configuration provenance for the default-import instance STORAGE_ENDPOINT.",
+      );
+      assert.ok(
+        next.checks
+          .missing(next.part, next.evidence)
+          .some((name) => /construction and reader context/.test(name)),
+        source,
+      );
+    }
+    writeFileSync(join(root, "service.ts"), base);
+    for (const source of [
+      consumer.replace("setup()", "setup(settings)"),
+      consumer.replace("return StorageModule", "settings = replacement;\n    return StorageModule"),
+      consumer.replace("import settings", "import type settings"),
+    ]) {
+      writeFileSync(join(root, "storage.ts"), source);
+      const next = packedEvidence(root, instanceQuery);
+      assert.ok(
+        next.checks
+          .missing(next.part, next.evidence)
+          .some((name) => /construction and reader context/.test(name)),
+        source,
+      );
+    }
+  }));
+
+test("default instance reader selection excludes unrelated keys and competing owners", () =>
+  instanceFixture((root) => {
+    for (const question of [
+      "Explain configuration provenance for the default-import instance OTHER_SETTING in StorageSettings.options.",
+      "Explain configuration provenance for the default-import instance STORAGE_ENDPOINT in DifferentReader.",
+    ]) {
+      const { part, evidence, checks } = packedEvidence(root, question);
+      assert.ok(
+        !checks
+          .checklist(
+            part,
+            evidence.map((item, i) => ({ ...item, ref: `E${i}` })),
+          )
+          .some((item) => /construction and reader context/.test(item.requirement)),
+      );
+      assert.ok(
+        checks
+          .missing(part, evidence)
+          .includes("imported configuration constant/property provenance"),
+      );
+    }
+  }));
+
+test("instance key context excludes comments and nested example reads", () =>
+  instanceFixture((root) => {
+    const base = readFileSync(join(root, "service.ts"), "utf8");
+    for (const replacement of [
+      "// STORAGE_ENDPOINT\n    return {};",
+      "function example() { return process.env.STORAGE_ENDPOINT; }\n    return {};",
+    ]) {
+      writeFileSync(
+        join(root, "service.ts"),
+        base.replace("return { endpoint: this.environment.STORAGE_ENDPOINT };", replacement),
+      );
+      const { part, evidence, checks } = packedEvidence(root, instanceQuery);
+      assert.ok(
+        !checks
+          .checklist(
+            part,
+            evidence.map((item, i) => ({ ...item, ref: `E${i}` })),
+          )
+          .some((item) => /construction and reader context/.test(item.requirement)),
+      );
+      assert.ok(
+        checks
+          .missing(part, evidence)
+          .includes("imported configuration constant/property provenance"),
+      );
+    }
+  }));
+
+test("instance shortlists remain under review and oversized constructors refuse generation", () =>
+  instanceFixture(async (root) => {
+    let calls = 0;
+    const generate = async (_model: string, prompt: string) => {
+      calls++;
+      const parts = JSON.parse(
+        prompt.split("Question parts: ")[1].split("\nRelevant repo map:")[0],
+      ) as { relationships: { alternative_ref_sets: string[][] }[] }[];
+      const refs = [
+        ...new Set(parts[0].relationships.flatMap((group) => group.alternative_ref_sets[0] ?? [])),
+      ];
+      return JSON.stringify({
+        part_evidence: [{ part_id: "P1", evidence_refs: refs }],
+        confidence: "high",
+        unresolved: [],
+        next_action: { ref: "" },
+      });
+    };
+    const budget: typeof resolveModelBudget = (model, overrides) =>
+      resolveModelBudget(model, overrides, async () => ({
+        parameters: "num_ctx 50000\nnum_predict 2048",
+      }));
+    const result = await runLocalExploreRepo(
+      { repository_root: root, query: instanceQuery, model: "fixture:instance" },
+      generate,
+      budget,
+    );
+    assert.equal(result.status, "needs_review");
+    assert.ok(
+      result.evidence.some((item) => item.quote.includes("new StorageSettings(process.env)")),
+    );
+    assert.ok(result.evidence.some((item) => item.quote.includes("options() {")));
+    assert.ok(result.unresolved.some((name) => /semantics require parent review/.test(name)));
+    const before = calls;
+    const source = readFileSync(join(root, "service.ts"), "utf8");
+    writeFileSync(
+      join(root, "service.ts"),
+      source.replace(
+        "constructor(private environment: NodeJS.ProcessEnv) {}",
+        `constructor(private environment: NodeJS.ProcessEnv) {\n${Array.from({ length: 500 }, (_, i) => `    console.log('${i}${"x".repeat(100)}');`).join("\n")}\n  }`,
+      ),
+    );
+    const oversized = await runLocalExploreRepo(
+      { repository_root: root, query: instanceQuery, model: "fixture:instance" },
+      generate,
+      budget,
+    );
+    assert.equal(oversized.packing_overflow, true);
+    assert.equal(calls, before);
+  }));
+
 test("imported scalar provenance binds the alias, initializer, registration and named reader", () =>
   provenanceFixture((root) => {
     const query = "Which imported constant supplies configuration to SignerModule registration?";

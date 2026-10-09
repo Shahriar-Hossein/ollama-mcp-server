@@ -97,6 +97,7 @@ const protocol = {
       "src/experimental/tools/local-explore-prompt.ts",
       "src/experimental/tools/local-explore-config-context.ts",
       "src/experimental/tools/local-explore-provenance.ts",
+      "src/experimental/tools/local-explore-instances.ts",
       "src/ollama-client.ts",
       "src/qwen-tokenizer.ts",
     ].map((file) => [

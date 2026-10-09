@@ -78,6 +78,14 @@ test("runner scores source lines and retains raw answers when a later rubric aud
       );
       assert.equal(run.status, fail ? 1 : 0, run.stderr);
       const artifact = JSON.parse(readFileSync(outputPath, "utf8"));
+      assert.equal(
+        artifact.protocol.implementation_sha256[
+          "src/experimental/tools/local-explore-instances.ts"
+        ],
+        createHash("sha256")
+          .update(readFileSync("src/experimental/tools/local-explore-instances.ts"))
+          .digest("hex"),
+      );
       const question = artifact.results[0].questions[0];
       assert.ok(question.calls[0].output);
       assert.ok(question.result.evidence.length > 0);

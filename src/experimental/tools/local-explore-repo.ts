@@ -120,14 +120,15 @@ export function decomposeQuestion(query: string): QuestionPart[] {
         contextRequests.initialization ||
         contextRequests.provider ||
         contextRequests.constant ||
+        contextRequests.instance ||
         contextRequests.order
       ) {
         part.completeness = "unchecked";
         part.evidence_needed +=
           " Include configuration initialization options and the reader's factory token/inject/parameters or constructor injection when requested. These are source context; parent review must establish provider provenance and initialization semantics.";
-        if (contextRequests.constant || contextRequests.order)
+        if (contextRequests.constant || contextRequests.order || contextRequests.instance)
           part.evidence_needed +=
-            " Bind the actual imported constant/property use to its import, initializer and named reader declaration. Include direct registration and setup calls; source order does not prove environment preload or runtime evaluation order.";
+            " Bind actual configuration-value imports to their import, initializer and named reader declarations, including the reader method. For direct default-import instances include the reader call, construction and constructor arguments; distinguish an environment object reference from a scalar read or copy. Module and provider tokens alone are not configuration values. Include direct registration and setup calls; source order does not prove environment preload or runtime evaluation order.";
       }
       const uncheckedTail = question.replace(
         /\band\s+(?:return|issue)\s+[a-z][\w$]*[A-Z][\w$]*|\band\s+call(?:s)?\s+[A-Za-z_$][\w$.]*|\band\s+its\s+implementation\b/g,

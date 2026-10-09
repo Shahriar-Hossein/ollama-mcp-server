@@ -36,6 +36,7 @@ numbers behind one specific series.
 | [2026-10-06-h-desktop-gpu.md](runs/2026-10-06-h-desktop-gpu.md) | H/24K GPU default, desktop-pressure fit, fixed-input timing and capacity tradeoffs |
 | [2026-10-09-h-config-provenance.md](runs/2026-10-09-h-config-provenance.md) | Configuration initialization/injection context, checkpoint-before-audit runner and fresh source screen |
 | [2026-10-09-h-config-order.md](runs/2026-10-09-h-config-order.md) | Imported-constant/reader checks, loader-order review and fresh default-instance boundary screen |
+| [2026-10-09-h-config-instances.md](runs/2026-10-09-h-config-instances.md) | Default-instance context and module-token filtering development checks; fresh source screen pending |
 
 ## The rule for benchmark work
 
