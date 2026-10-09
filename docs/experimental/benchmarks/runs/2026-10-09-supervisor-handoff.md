@@ -1,69 +1,79 @@
-# Configuration scout continuation
+# Python dictionary selection handoff — 2026-10-09
 
-Continues [default-instance context](2026-10-09-h-config-instances.md).
-Branch `main`, baseline `92b6454`. The previous session exhausted its context
-window during delegated discovery/review. The user confirmed that no total task
-token budget was requested. At handoff, no implementation changes or fresh H
-generation had completed. Prior frozen evidence remains unchanged.
+Branch `main`; implementation/evaluation baseline `4fec7ab`. Goal is paused for
+handoff; resume it explicitly in the next session. No total token budget was set.
 
-## Verified progress
+## Working agreement
 
-Two fresh Luna source searches found a direct imported `jwtConstants.secret`
-property use in `nest-auth-api/src/auth/constants.ts:2` and
-`src/auth/auth.module.ts:6`. No fresh supported default-import local-instance
-positive was found in the bounded search. The whole imported `jwtConfig` object
-from Codesyard is unsupported by the current provenance check; do not label it
-a supported positive. Earlier database/order and storage-driver cases stay
-excluded from a new screen. External source repositories remain read-only.
+H `qwen-context:h-q4_0-24k` attempts small defined tasks first. Inspect and document
+failures, then use Sol (user approved fallback when Luna was unavailable).
+One implementation agent at a time, one local commit per piece, no pushes.
+Lead plans/reviews/runs tools; implementation edits stay delegated.
+After 2–3 pieces, improve the harness based on observed failures.
 
-Sol reproduced accepted helper contexts for:
+## Done and verified
 
-- Destructured consumer bindings shadowing the default import.
-- Static/accessor declarations treated as callable instance readers.
-- Constructor reassignment and overwritten reader members.
-- Ordinary returned `provide` properties suppressed as metadata tokens.
+- `b8d845d`: explicit question recognizer.
+- `9da5ebb`: complete literal dictionary entry rows.
+- `e50ff88`: strict source-tree shortlist. Nine named helper tests pass.
+- `4fec7ab`: fresh four-case source-only fixture and runner; seven fixture/runner
+  tests, strict script/repository typechecks, scoped lint and diff checks pass.
+- Details/limits: [selection checkpoint](2026-10-09-python-dictionary-selection.md).
+  Helpers are still UNUSED by `local-explore-repo.ts`; no integration yet.
+- All three H code drafts failed inspection and were repaired by Sol. H's source
+  data retained correct names/values but needed multiline dictionaries/newlines.
+- New manifest: `2026-10-09-python-dictionary-eval.json`, SHA-256
+  `23d07f4887ce460e4cf0ae8a3e634b61680c4248a626ab47ebad70e8b0a203fd`.
+  Four source hashes and independent keys are frozen; do not edit them.
+- One real H baseline finished against clean `4fec7ab`; raw file:
+  `benchmark-data/language-eval/python-dictionary-development/baseline.json`,
+  SHA `eae3b11b6997a345abff98a41c283234e3ffaf7c9ec372cfe532230b28069e4f`.
+  Required 17, retrieved-range 11, packed 17, selected 14; all `needs_review`.
+  Total question intervals 103,322 ms; individual stage times are in raw JSON.
 
-These reproductions use tree-sitter and a minimal reference/dependency index.
-They establish helper-contract gaps, not real-index completeness or a final false
-`supported` result. Instance semantics still require parent review.
+Initial lead inspection (NOT independent final scoring): module answer mixes
+queued/13 with neighboring local direct/2 despite complete required selection;
+local answer omits literal ephemeral; async selects only header/read and has an
+unfinished `OPTIONS[` answer under valid JSON/normal stop; parameter answer
+does not infer unused/99 but still needs completeness/citation audit.
+Initial lead review: 17:29:37.929–17:30:23.313 UTC, 45,384 ms, source already known.
+This agent/tool/reading interval excludes later work; per-case/full workflow
+effort and human effort remain unmeasured. Baseline raw manual review stays null.
 
-Detailed findings, acceptance cases and reproduction files are preserved under
-ignored `benchmark-data/supervisor-2026-10-09/`. Working scratchpad:
-`/tmp/ollama-supervisor-2026-10-09/`. The original reproduction fixture root is
-recorded in `instance-review-repro.json`.
+## Concrete next step
 
-## Original next step
+Use the ALREADY COMPLETED H mapper draft; do not call H again for the same task:
+`benchmark-data/language-eval/python-dictionary-development/local-ref-draft.json`
+(tool wall 6,552 ms; SHA
+`f25a90c4003ec82b1996b2da3b1b3fabdacb7971e6fe4ced6cc1cd868d31dbc2`).
+It maps required file:line locations to first offered E refs, returns null if
+empty/missing, and deduplicates in required order. Initial inspection finds
+plausible semantics; it exceeds requested 15 lines. NOT applied, compiled or
+tested. Have one Sol worker apply/test it, document actual result, and integrate
+the source shortlist plus missing-location gate. Commit that piece locally.
 
-Assign a fresh Sol engineer the review file and narrowly fix instance binding
-invalidation and reader-method eligibility, with real-index configuration
-regressions. Have Luna handle isolated mechanical work through scratch request
-files. Separately verify the metadata-filter finding and choose the smallest
-recognized metadata scope. Preserve `needs_review`, six-file/character/two-call
-limits and frozen evidence. Run targeted tests and required project checks.
+Integration constraints: use full-query named request; unique indexed Python
+reader and checked contained source; bound extra source parsing to 24,000 chars.
+Existing pure planner deliberately rejects imports, parameters, decorations,
+extra statements, mutation/rebinding and other unsupported whole-module shapes.
+Map only displayed source-checked refs; missing lines yield no passing alternative.
+Do not auto-add selected evidence, infer binding/runtime, replace generic semantic
+review, increase six-file/character/two-call/16-ref caps, or change MCP defaults.
+Add meaningful unit/integration regressions and register them in scout test command.
 
-Then review the proposed two-file Nest source screen, freeze exact questions and
-rubrics before generation, and record the missing instance-positive limitation.
-Use one detached `setsid nohup flock -n` H supervisor; score supplied and selected
-rubric lines separately from parent completion. Never launch concurrent local
-models. No commits or publication were requested.
+Then run same frozen four queries to ignored `enhanced.json` using
+`scripts/experimental/run-python-dictionary-eval.ts --output <absolute path>`.
+Use one detached `setsid nohup flock -n` supervisor; do not overlap H tasks.
+Independently audit BOTH artifacts after clocks start before reading/drafting.
+Separate truth, citation support, completeness, retries, latency and correction
+effort; retain raw files and write a hash-pinned review sidecar. Report small-pair
+limits. Update selection report, field-feedback and language-support checkpoint.
 
-## Continuation
+## Process/cleanup state
 
-The user authorized delegated fixes and a commit from each agent for completed
-tasks. Instance bindings are fixed in `11fd4eb`; metadata scope is fixed in
-`e396f13`. Real-index regressions and stubbed end-to-end checks preserve
-`needs_review`; all 90 integrated scout tests pass.
-
-The proposed nest-auth-api property case already appeared in the frozen
-provenance screen and was rejected as fresh evidence. A bounded local search
-found no suitable fresh production pair. The new screen uses the pinned official
-NestJS JWT example, with domain/symbol overlap and the missing real-source
-instance positive recorded explicitly. See [the binding screen](2026-10-09-h-binding-screen.md)
-for the frozen questions, run status and next actionable step.
-The follow-up [fresh real-app evaluation](2026-10-09-h-fresh-eval.md) used the
-user's sharks-capital and infivro-loyalty-rewards projects and added
-generic `supporting_context` rules; it is the current next step.
-
-Agents must not spawn other agents or run local models independently. Announce
-each spawn, use fresh contexts and concise file handoffs. Local Ollama requires
-the approved network escalation from this sandbox; model listing via MCP works.
+No evaluator/supervisor process remains; baseline complete and log confirms finish.
+`/tmp/ollama-python-dictionary-eval.lock` is free; retaining its file is harmless.
+All subagents are completed/idle; no running exec cell or local-model task remains.
+No process needs closing. Keep ignored draft/raw artifacts; do not kill Ollama.
+Working tree is clean after the local handoff checkpoint commit.
+Prior multilingual, scope and citation freezes/raws stay unchanged.
