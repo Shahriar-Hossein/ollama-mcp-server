@@ -71,3 +71,9 @@ test("source file, directory and root symlinks cannot escape the frozen fixture"
     assert.throws(() => validatePythonDictionaryFixture(load(), alias), /Symlink source root/);
   });
 });
+
+test("fresh Python dictionary fixture validates against its frozen sources", async () => {
+  const { PYTHON_DICTIONARY_FRESH_FIXTURE: fresh } = await import("./run-python-dictionary-fresh-eval.js");
+  const manifest = JSON.parse(readFileSync(fresh.manifestPath, "utf8"));
+  fresh.validate(manifest, fresh.sourcePath);
+});

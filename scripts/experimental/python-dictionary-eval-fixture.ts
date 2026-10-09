@@ -3,13 +3,35 @@ import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import type { LanguageFixture } from "./language-eval-fixture.js";
 
-const files = ["python/async.py", "python/local.py", "python/module.py", "python/parameter.py"];
-const questions: Record<string, string> = {
-  "PD-MODULE": "python/module.py", "PD-LOCAL": "python/local.py",
-  "PD-ASYNC": "python/async.py", "PD-PARAM": "python/parameter.py",
+export type PythonDictionarySpec = {
+  questions: Record<string, string>;
+  requiredLines: Record<string, number>;
 };
 
-export function validatePythonDictionaryFixture(fixture: LanguageFixture, sourceRoot: string): void {
+export const FROZEN_SPEC: PythonDictionarySpec = {
+  questions: {
+    "PD-MODULE": "python/module.py", "PD-LOCAL": "python/local.py",
+    "PD-ASYNC": "python/async.py", "PD-PARAM": "python/parameter.py",
+  },
+  requiredLines: { "PD-MODULE": 5, "PD-LOCAL": 5, "PD-ASYNC": 5, "PD-PARAM": 2 },
+};
+
+export const FRESH_SPEC: PythonDictionarySpec = {
+  questions: {
+    "FR-PLAIN": "python/shadow_plain.py", "FR-DEFAULT": "python/shadow_default.py",
+    "FR-TYPED": "python/shadow_typed.py", "FR-ASYNC": "python/async_local.py",
+    "FR-MODULE": "python/module_two.py",
+  },
+  requiredLines: { "FR-PLAIN": 2, "FR-DEFAULT": 2, "FR-TYPED": 2, "FR-ASYNC": 5, "FR-MODULE": 5 },
+};
+
+export function validatePythonDictionaryFixture(
+  fixture: LanguageFixture,
+  sourceRoot: string,
+  spec: PythonDictionarySpec = FROZEN_SPEC,
+): void {
+  const questions = spec.questions;
+  const files = Object.values(questions).sort();
   const fail = (message: string): never => { throw new Error(message); };
   const root = resolve(sourceRoot);
   if (lstatSync(root).isSymbolicLink()) fail("Symlink source root");
@@ -29,10 +51,10 @@ export function validatePythonDictionaryFixture(fixture: LanguageFixture, source
     if (createHash("sha256").update(data).digest("hex") !== fixture.source_hashes[file]) fail(`Frozen source changed: ${file}`);
     sources.set(file, data.toString("utf8").split("\n"));
   }
-  if (!Array.isArray(fixture.questions) || JSON.stringify(fixture.questions.map((question) => question.id).sort()) !== JSON.stringify(Object.keys(questions).sort())) fail("Expected exactly four question IDs");
+  if (!Array.isArray(fixture.questions) || JSON.stringify(fixture.questions.map((question) => question.id).sort()) !== JSON.stringify(Object.keys(questions).sort())) fail("Unexpected question IDs");
   for (const question of fixture.questions) {
     if (question.language !== "python" || !question.query?.trim() || !question.answer?.trim() || !question.forbidden_claims?.length || question.forbidden_claims.some((claim) => !claim.trim())) fail("Incomplete Python question");
-    if (question.required?.length !== (question.id === "PD-PARAM" ? 2 : 5)) fail("Unexpected required line count");
+    if (question.required?.length !== spec.requiredLines[question.id]) fail("Unexpected required line count");
     const seen = new Set<number>();
     for (const ref of question.required) {
       if (!ref.file || ref.file.includes("\\") || ref.file.split("/").some((part) => !part || part === "." || part === "..") || ref.file.startsWith("/")) fail("Unsafe source reference");

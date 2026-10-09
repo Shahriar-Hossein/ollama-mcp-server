@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "python/async_local.py": "491db7bd7857679667d15b77c43d2f3abc679305fa655263d8c70230d3e53807",
+    "python/module_two.py": "d2452032db2ebd62c5f16088911020d7cfcc3318cea892d151030f5e0d0127e2",
+    "python/shadow_default.py": "e5700f2d67ffb2c54ae21518cdac912dddd09d990db1deb27a69684caed990cf",
+    "python/shadow_plain.py": "1c4fb02ca5dbac23d08af06d086128e72e40ab366ea284df3df45aacda0bab4b",
+    "python/shadow_typed.py": "9f5311f8cf8fe93f4847779bbce2bca52235e255241d3a852ee18857f6fcd2f4"
+  },
+  "questions": [
+    {
+      "id": "FR-PLAIN",
+      "language": "python",
+      "query": "Which LIMITS dictionary does limit_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/shadow_plain.py",
+          "line": 6,
+          "text": "def limit_mode(LIMITS):"
+        },
+        {
+          "file": "python/shadow_plain.py",
+          "line": 7,
+          "text": "    return LIMITS[\"mode\"]"
+        }
+      ],
+      "answer": "limit_mode reads its own LIMITS parameter, not the module LIMITS dictionary (plain parameter). The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "limit_mode returns strict",
+        "limit_mode dictionary attempts is 41",
+        "limit_mode reads the module LIMITS dictionary"
+      ]
+    },
+    {
+      "id": "FR-DEFAULT",
+      "language": "python",
+      "query": "Which RETRY dictionary does retry_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/shadow_default.py",
+          "line": 6,
+          "text": "def retry_mode(RETRY=\"backoff\"):"
+        },
+        {
+          "file": "python/shadow_default.py",
+          "line": 7,
+          "text": "    return RETRY[\"mode\"]"
+        }
+      ],
+      "answer": "retry_mode reads its own RETRY parameter, not the module RETRY dictionary (parameter with a default value). The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "retry_mode returns fixed",
+        "retry_mode dictionary attempts is 17",
+        "retry_mode reads the module RETRY dictionary"
+      ]
+    },
+    {
+      "id": "FR-TYPED",
+      "language": "python",
+      "query": "Which ROUTES dictionary does route_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/shadow_typed.py",
+          "line": 6,
+          "text": "def route_mode(ROUTES: dict):"
+        },
+        {
+          "file": "python/shadow_typed.py",
+          "line": 7,
+          "text": "    return ROUTES[\"mode\"]"
+        }
+      ],
+      "answer": "route_mode reads its own ROUTES parameter, not the module ROUTES dictionary (annotated parameter). The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "route_mode returns static",
+        "route_mode dictionary attempts is 6",
+        "route_mode reads the module ROUTES dictionary"
+      ]
+    },
+    {
+      "id": "FR-ASYNC",
+      "language": "python",
+      "query": "Which BUDGET dictionary does local_budget read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/async_local.py",
+          "line": 6,
+          "text": "async def local_budget():"
+        },
+        {
+          "file": "python/async_local.py",
+          "line": 7,
+          "text": "    BUDGET = {"
+        },
+        {
+          "file": "python/async_local.py",
+          "line": 8,
+          "text": "        \"mode\": \"private\","
+        },
+        {
+          "file": "python/async_local.py",
+          "line": 9,
+          "text": "        \"attempts\": 4,"
+        },
+        {
+          "file": "python/async_local.py",
+          "line": 11,
+          "text": "    return BUDGET[\"mode\"]"
+        }
+      ],
+      "answer": "local_budget reads its local BUDGET dictionary, returns private, and that dictionary has attempts 4. The module BUDGET (shared, 30) is read by shared_budget.",
+      "forbidden_claims": [
+        "local_budget returns shared",
+        "local_budget dictionary attempts is 30",
+        "local_budget reads the module BUDGET dictionary"
+      ]
+    },
+    {
+      "id": "FR-MODULE",
+      "language": "python",
+      "query": "Which LEVELS dictionary does default_levels read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/module_two.py",
+          "line": 1,
+          "text": "LEVELS = {"
+        },
+        {
+          "file": "python/module_two.py",
+          "line": 2,
+          "text": "    \"mode\": \"verbose\","
+        },
+        {
+          "file": "python/module_two.py",
+          "line": 3,
+          "text": "    \"attempts\": 9,"
+        },
+        {
+          "file": "python/module_two.py",
+          "line": 20,
+          "text": "def default_levels():"
+        },
+        {
+          "file": "python/module_two.py",
+          "line": 21,
+          "text": "    return LEVELS[\"mode\"]"
+        }
+      ],
+      "answer": "default_levels reads the module LEVELS dictionary, returns verbose, and that dictionary has attempts 9. quiet_levels and loud_levels each have a separate local LEVELS.",
+      "forbidden_claims": [
+        "default_levels returns quiet",
+        "default_levels returns loud",
+        "default_levels dictionary attempts is 1",
+        "default_levels dictionary attempts is 7"
+      ]
+    }
+  ]
+}
