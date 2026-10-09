@@ -65,7 +65,7 @@ export function pythonDictionaryPlanForTree(
 export function pythonParameterShadowForTree(
   root: Parser.SyntaxNode,
   request: { dictionary: string; reader: string },
-): { readerHeader: number; readRow: number } | null {
+): { readerHeader: number; readRow: number; moduleRows: number[] } | null {
   const valid = (node: Parser.SyntaxNode): boolean => !node.hasError && !node.isMissing && node.namedChildren.every(valid);
   if (root.type !== "module" || !valid(root)) return null;
   const readers = root.namedChildren.filter(
@@ -77,14 +77,24 @@ export function pythonParameterShadowForTree(
   const body = reader.childForFieldName("body");
   if (parameters?.type !== "parameters" || body?.type !== "block") return null;
   if (parameters.startPosition.row !== reader.startPosition.row || parameters.endPosition.row !== reader.startPosition.row) return null;
-  if (!parameters.namedChildren.some((node) => node.type === "identifier" && node.text === request.dictionary)) return null;
+  const parameterName = (node: Parser.SyntaxNode) =>
+    node.type === "identifier" ? node.text
+      : node.type === "default_parameter" || node.type === "typed_default_parameter" ? node.childForFieldName("name")?.text
+      : node.type === "typed_parameter" && node.namedChildren[0]?.type === "identifier" ? node.namedChildren[0].text
+      : undefined;
+  if (!parameters.namedChildren.some((node) => parameterName(node) === request.dictionary)) return null;
   const parts = body.namedChildren.filter((child) => child.type !== "comment");
   const returned = parts[0];
   if (parts.length !== 1 || returned.type !== "return_statement" || returned.startPosition.row !== returned.endPosition.row) return null;
   const subscript = returned.namedChildren[0];
   const value = subscript?.childForFieldName("value");
   if (subscript?.type !== "subscript" || value?.type !== "identifier" || value.text !== request.dictionary) return null;
-  return { readerHeader: reader.startPosition.row + 1, readRow: returned.startPosition.row + 1 };
+  const moduleRows = root.namedChildren.flatMap((statement) => {
+    const assignment = statement.type === "expression_statement" ? statement.namedChildren[0] : undefined;
+    if (assignment?.type !== "assignment" || assignment.childForFieldName("left")?.text !== request.dictionary) return [];
+    return Array.from({ length: assignment.endPosition.row - assignment.startPosition.row + 1 }, (_, i) => assignment.startPosition.row + 1 + i);
+  });
+  return { readerHeader: reader.startPosition.row + 1, readRow: returned.startPosition.row + 1, moduleRows };
 }
 
 export function pythonDictionaryEntryRows(dictionary: Parser.SyntaxNode): number[] | null {
@@ -138,9 +148,14 @@ export function pythonDictionaryLocations(root: string, symbols: PythonSymbols, 
   return [...rows].sort((a, b) => a - b).map((line) => ({ file: parsed.file, line }));
 }
 
-export function pythonParameterShadowLocations(root: string, symbols: PythonSymbols, query: string): { file: string; line: number }[] | null {
+export function pythonParameterShadowLocations(
+  root: string,
+  symbols: PythonSymbols,
+  query: string,
+): { locations: { file: string; line: number }[]; excluded: { file: string; line: number }[] } | null {
   const parsed = pythonTreeFor(root, symbols, query);
   const shadow = parsed && pythonParameterShadowForTree(parsed.tree, parsed.request);
   if (!parsed || !shadow) return null;
-  return [shadow.readerHeader, shadow.readRow].map((line) => ({ file: parsed.file, line }));
+  const at = (line: number) => ({ file: parsed.file, line });
+  return { locations: [shadow.readerHeader, shadow.readRow].map(at), excluded: shadow.moduleRows.map(at) };
 }

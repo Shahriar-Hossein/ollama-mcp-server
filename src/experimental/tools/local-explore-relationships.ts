@@ -26,7 +26,7 @@ import {
 } from "./local-explore-provenance.js";
 
 type Location = { file: string; line: number };
-type Relationship = { requirement: string; alternatives: Location[][] };
+type Relationship = { requirement: string; alternatives: Location[][]; excluded?: Location[] };
 const callableKinds = new Set(["function", "method", "constructor"]);
 const identifier = "[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*";
 const scopedOperations = new Set([
@@ -448,7 +448,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex, q
     if (!pythonDictionaryRequest(query)) return [];
     const locations = pythonDictionaryLocations(root, index.symbols, query);
     const shadow = locations ? null : pythonParameterShadowLocations(root, index.symbols, query);
-    if (shadow) return [{ requirement: "Python dictionary shadowed by reader parameter", alternatives: [shadow] }];
+    if (shadow) return [{ requirement: "Python dictionary shadowed by reader parameter", alternatives: [shadow.locations], excluded: shadow.excluded }];
     return [{ requirement: "Python dictionary source rows", alternatives: locations ? [locations] : [] }];
   }
 
@@ -576,6 +576,10 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex, q
     replacedRequirements(part: QuestionPart) {
       if (scopesOperation(part)) return operationChecks(part).map((check) => check.name);
       return callRequests(part).map(({ calleeName }) => `${calleeName} call`);
+    },
+    // Source rows a requirement proves are not read; the model must not cite them.
+    excluded(part: QuestionPart): Location[] {
+      return plan(part).flatMap((check) => check.excluded ?? []);
     },
     missing(part: QuestionPart, evidence: ValidEvidence[]) {
       const satisfied = (check: Relationship) =>

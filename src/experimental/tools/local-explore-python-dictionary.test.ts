@@ -297,7 +297,9 @@ test("parameter shadow plan shortlists only the header and return rows", () => {
   const source = readFileSync(join(fixtureDir, "parameter.py"), "utf8");
   const query = ask("CONFIG", "parameter_choice");
   repoWith({ "parameter.py": source }, (root, index) => {
-    assert.deepEqual(pythonParameterShadowLocations(root, index.symbols, query)?.map((item) => item.line), [6, 7]);
+    const shadow = pythonParameterShadowLocations(root, index.symbols, query);
+    assert.deepEqual(shadow?.locations.map((item) => item.line), [6, 7]);
+    assert.deepEqual(shadow?.excluded.map((item) => item.line), [1, 2, 3, 4]);
     assert.equal(pythonParameterShadowLocations(root, index.symbols, ask("OTHER", "parameter_choice")), null);
   });
   for (const module of ["module.py", "local.py", "async.py"]) {
@@ -320,4 +322,25 @@ test("relationship checks pass the shadow plan only with header and return rows"
     assert.deepEqual(checks.missing(part, [cite(7)]), ["Python dictionary shadowed by reader parameter"]);
     assert.deepEqual(checks.missing(part, [cite(6), cite(7), cite(3)]), []);
   });
+});
+
+test("parameter shadow plan accepts default and annotated parameters", () => {
+  for (const [header, name] of [["def r(CFG='x'):", "default"], ["def r(CFG: dict = {}):", "typed default"], ["def r(CFG: dict):", "typed"], ["def r(a, CFG):", "second"]]) {
+    repoWith({ "a.py": `CFG = {\n    "mode": "m",\n}\n\n${header}\n    return CFG["mode"]\n` }, (root, index) => {
+      const shadow = pythonParameterShadowLocations(root, index.symbols, ask("CFG", "r"));
+      assert.deepEqual(shadow?.locations.map((item) => item.line), [5, 6], name);
+      assert.deepEqual(shadow?.excluded.map((item) => item.line), [1, 2, 3], name);
+    });
+  }
+  repoWith({ "a.py": 'CFG = {\n    "mode": "m",\n}\n\ndef r(other, *CFG):\n    return CFG["mode"]\n' }, (root, index) =>
+    assert.equal(pythonParameterShadowLocations(root, index.symbols, ask("CFG", "r")), null));
+});
+
+test("relationship checks expose module dictionary rows excluded by a parameter shadow", () => {
+  const query = ask("CONFIG", "parameter_choice");
+  const part = decomposeQuestion(query)[0];
+  repoWith({ "parameter.py": readFileSync(join(fixtureDir, "parameter.py"), "utf8") }, (root, index) =>
+    assert.deepEqual(createRelationshipChecks(root, index, query).excluded(part).map((item) => item.line), [1, 2, 3, 4]));
+  repoWith({ "module.py": readFileSync(join(fixtureDir, "module.py"), "utf8") }, (root, index) =>
+    assert.deepEqual(createRelationshipChecks(root, index, ask("POLICY", "module_policy")).excluded(part), []));
 });

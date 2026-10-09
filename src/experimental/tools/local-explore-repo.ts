@@ -713,6 +713,12 @@ export async function runLocalExploreRepo(
             answer.evidence.push(item);
         }
       }
+      const excluded = new Set(parts.flatMap((part) => relationships.excluded(part)).map((item) => `${item.file}:${item.line}`));
+      if (excluded.size) {
+        answer.evidence = answer.evidence.filter((item) => !excluded.has(`${item.file}:${item.line}`));
+        for (const coverage of answer.coverage)
+          coverage.evidence_locations = coverage.evidence_locations.filter((location) => !excluded.has(location));
+      }
       answer.coverage = answer.coverage.map((coverage) => {
         const part = parts.find((item) => item.id === coverage.part_id)!;
         const cited = answer.evidence.filter((item) =>
