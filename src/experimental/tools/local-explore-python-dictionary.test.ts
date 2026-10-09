@@ -9,7 +9,7 @@ import { createRelationshipChecks } from "./local-explore-relationships.js";
 import { decomposeQuestion } from "./local-explore-repo.js";
 import Parser from "tree-sitter";
 import Python from "tree-sitter-python";
-import { pythonDictionaryEntryRows, pythonDictionaryLocations, pythonDictionaryPlanForTree, pythonDictionaryRequest, pythonParameterShadowLocations } from "./local-explore-python-dictionary.js";
+import { pythonClassScopeLocations, pythonDictionaryEntryRows, pythonDictionaryLocations, pythonDictionaryPlanForTree, pythonDictionaryRequest, pythonParameterShadowLocations } from "./local-explore-python-dictionary.js";
 
 test("Python dictionary request preserves identifiers and accepts surrounding prose", () => {
   for (const query of [
@@ -189,7 +189,7 @@ test("Python dictionary entry rows reject missing or erroneous nodes and fields"
 test("Python dictionary request rejects unsupported names and partial prose matches", () => {
   for (const query of [
     "Which pkg.OPTIONS dictionary does worker read?",
-    "Which OPTIONS dictionary does pkg.worker read?",
+    "Which OPTIONS dictionary does a.b.worker read?",
     "Which OPTIONS-name dictionary does worker read?",
     "Which OPTIONS dictionary does do-work read?",
     "Which 2OPTIONS dictionary does worker read?",
@@ -343,4 +343,22 @@ test("relationship checks expose module dictionary rows excluded by a parameter 
     assert.deepEqual(createRelationshipChecks(root, index, query).excluded(part).map((item) => item.line), [1, 2, 3, 4]));
   repoWith({ "module.py": readFileSync(join(fixtureDir, "module.py"), "utf8") }, (root, index) =>
     assert.deepEqual(createRelationshipChecks(root, index, ask("POLICY", "module_policy")).excluded(part), []));
+});
+
+test("class attribute is out of method scope: module rows are planned and class rows excluded", () => {
+  const heldout = join(import.meta.dirname, "../../../scripts/experimental/fixtures/python-dictionary-heldout/source/python/class_scope.py");
+  const query = "Which SCALE dictionary does Meter.mode read, what mode does it return?";
+  assert.deepEqual(pythonDictionaryRequest(query), { dictionary: "SCALE", reader: "mode", owner: "Meter" });
+  const part = decomposeQuestion(query)[0];
+  repoWith({ "class_scope.py": readFileSync(heldout, "utf8") }, (root, index) => {
+    const plan = pythonClassScopeLocations(root, index.symbols, query);
+    assert.deepEqual(plan?.locations.map((item) => item.line), [1, 2, 3, 12, 13]);
+    assert.deepEqual(plan?.excluded.map((item) => item.line), [7, 8, 9, 10]);
+    assert.deepEqual(createRelationshipChecks(root, index, query).excluded(part).map((item) => item.line), [7, 8, 9, 10]);
+    assert.equal(pythonClassScopeLocations(root, index.symbols, "Which SCALE dictionary does mode read?"), null);
+    assert.equal(pythonClassScopeLocations(root, index.symbols, "Which SCALE dictionary does Other.mode read?"), null);
+  });
+  const source = 'CFG = {\n    "mode": "m",\n}\n\nclass C:\n    CFG = {\n        "mode": "c",\n    }\n\n    def r(self):\n        CFG = {"mode": "x"}\n        return CFG["mode"]\n';
+  repoWith({ "a.py": source }, (root, index) =>
+    assert.equal(pythonClassScopeLocations(root, index.symbols, "Which CFG dictionary does C.r read?"), null));
 });

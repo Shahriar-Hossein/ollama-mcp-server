@@ -159,3 +159,11 @@ for the run. Shapes: keyword-only parameter, annotated default parameter, closur
   parameter cases avoided false claims but stayed incomplete.
 - One run each, non-blind, n=5: the strip fix held on new parameter shapes, the
   class-scope shape is a new gap.
+
+### Class-scope fix (development data)
+
+`Class.method` requests now plan the module dictionary rows plus the method header
+and return, and strip the class attribute's rows from selected evidence. Rerun of
+HO-CLASS only: the false claim (`log`, 3) is gone, but the answer still omits the
+values (`linear`, 5) and says the module dictionary is unknown. The held-out set is
+now development data; the omitted-value case is next.

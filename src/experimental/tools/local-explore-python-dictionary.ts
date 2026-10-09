@@ -3,13 +3,13 @@ import Parser from "tree-sitter";
 import Python from "tree-sitter-python";
 import { checkedFile } from "./local-explore-packing.js";
 
-export function pythonDictionaryRequest(query: string): { dictionary: string; reader: string } | null {
+export function pythonDictionaryRequest(query: string): { dictionary: string; reader: string; owner?: string } | null {
   const unquoted = query.replace(/(["'`])[\s\S]*?\1/g, "\0");
-  const matches = [...unquoted.matchAll(/\bwhich\s+([A-Za-z_][A-Za-z0-9_]*)\s+dictionary\s+does\s+([A-Za-z_][A-Za-z0-9_]*)\s+read(?=[,?\s]|$)/gi)];
+  const matches = [...unquoted.matchAll(/\bwhich\s+([A-Za-z_][A-Za-z0-9_]*)\s+dictionary\s+does\s+(?:([A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z_][A-Za-z0-9_]*)\s+read(?=[,?\s]|$)/gi)];
   if (matches.length !== 1) return null;
   const match = matches[0];
-  if (!match?.[1] || !match[2]) return null;
-  return { dictionary: match[1], reader: match[2] };
+  if (!match?.[1] || !match[3]) return null;
+  return match[2] ? { dictionary: match[1], reader: match[3], owner: match[2] } : { dictionary: match[1], reader: match[3] };
 }
 
 export function pythonDictionaryPlanForTree(
@@ -97,6 +97,47 @@ export function pythonParameterShadowForTree(
   return { readerHeader: reader.startPosition.row + 1, readRow: returned.startPosition.row + 1, moduleRows };
 }
 
+// A class attribute is not in method scope, so a method reads the module dictionary.
+export function pythonClassScopeForTree(
+  root: Parser.SyntaxNode,
+  request: { dictionary: string; reader: string; owner?: string },
+): { moduleRows: number[]; readerHeader: number; readRow: number; classRows: number[] } | null {
+  const valid = (node: Parser.SyntaxNode): boolean => !node.hasError && !node.isMissing && node.namedChildren.every(valid);
+  if (!request.owner || root.type !== "module" || !valid(root)) return null;
+  const assignmentTo = (statement: Parser.SyntaxNode) => {
+    const assignment = statement.type === "expression_statement" ? statement.namedChildren[0] : undefined;
+    return assignment?.type === "assignment" && assignment.childForFieldName("left")?.text === request.dictionary ? assignment : null;
+  };
+  const rowsOf = (node: Parser.SyntaxNode) =>
+    Array.from({ length: node.endPosition.row - node.startPosition.row + 1 }, (_, i) => node.startPosition.row + 1 + i);
+  const classes = root.namedChildren.filter((child) => child.type === "class_definition" && child.childForFieldName("name")?.text === request.owner);
+  const modules = root.namedChildren.map(assignmentTo).filter((assignment) => assignment !== null);
+  if (classes.length !== 1 || modules.length !== 1) return null;
+  const literal = modules[0].childForFieldName("right");
+  const entryRows = literal && pythonDictionaryEntryRows(literal);
+  const body = classes[0].childForFieldName("body");
+  if (!entryRows || !body) return null;
+  const members = body.namedChildren.filter((child) => child.type !== "comment");
+  const attributes = members.map(assignmentTo).filter((assignment) => assignment !== null);
+  const methods = members.filter((child) => child.type === "function_definition" && child.childForFieldName("name")?.text === request.reader);
+  if (attributes.length !== 1 || methods.length !== 1) return null;
+  const parameters = methods[0].childForFieldName("parameters");
+  const method = methods[0].childForFieldName("body");
+  if (parameters?.type !== "parameters" || parameters.namedChildren.length !== 1 || parameters.namedChildren[0].type !== "identifier" || method?.type !== "block") return null;
+  const parts = method.namedChildren.filter((child) => child.type !== "comment");
+  const returned = parts[0];
+  if (parts.length !== 1 || returned.type !== "return_statement" || returned.startPosition.row !== returned.endPosition.row) return null;
+  const subscript = returned.namedChildren[0];
+  const value = subscript?.childForFieldName("value");
+  if (subscript?.type !== "subscript" || value?.type !== "identifier" || value.text !== request.dictionary) return null;
+  return {
+    moduleRows: [modules[0].startPosition.row + 1, ...entryRows],
+    readerHeader: methods[0].startPosition.row + 1,
+    readRow: returned.startPosition.row + 1,
+    classRows: rowsOf(attributes[0]),
+  };
+}
+
 export function pythonDictionaryEntryRows(dictionary: Parser.SyntaxNode): number[] | null {
   if (dictionary.type !== "dictionary" || dictionary.hasError || dictionary.isMissing) return null;
   const pairs = dictionary.namedChildren.filter((child) => child.type !== "comment");
@@ -158,4 +199,25 @@ export function pythonParameterShadowLocations(
   if (!parsed || !shadow) return null;
   const at = (line: number) => ({ file: parsed.file, line });
   return { locations: [shadow.readerHeader, shadow.readRow].map(at), excluded: shadow.moduleRows.map(at) };
+}
+
+export function pythonClassScopeLocations(
+  root: string,
+  symbols: PythonSymbols,
+  query: string,
+): { locations: { file: string; line: number }[]; excluded: { file: string; line: number }[] } | null {
+  const request = pythonDictionaryRequest(query);
+  if (!request?.owner) return null;
+  const readers = symbols.filter((symbol) => symbol.language === "python" && symbol.name === request.reader);
+  if (readers.length !== 1) return null;
+  const file = readers[0].file;
+  const source = readFileSync(checkedFile(root, file), "utf8");
+  if (source.length > MAX_PYTHON_SOURCE_CHARS) return null;
+  const parser = new Parser();
+  parser.setLanguage(Python);
+  const plan = pythonClassScopeForTree(parser.parse(source).rootNode, request);
+  if (!plan) return null;
+  const at = (line: number) => ({ file, line });
+  const rows = [...new Set([...plan.moduleRows, plan.readerHeader, plan.readRow])].sort((a, b) => a - b);
+  return { locations: rows.map(at), excluded: plan.classRows.map(at) };
 }
