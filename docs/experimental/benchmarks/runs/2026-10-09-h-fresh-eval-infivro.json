@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "state": "frozen_before_generation",
+  "authorship": "Parent-authored key from the user's private infivro-loyalty-rewards WordPress plugin (not used in any prior screen or development test).",
+  "protocol": "Fresh real-application evaluation. Answer key written and frozen by the parent before any H generation. Score required lines supplied and exact selected lines separately from parent completion. Negative questions score appropriate abstention and any unsupported claim. needs_review stays pending parent interpretation. No runtime behavior is measured. Run after the 2026-10-09 selection fix; do not tune against this set. Cross-language (PHP localize -> JS global) relation is outside the scout's relationship checks.",
+  "source_repository": "local:/home/shahriar/Local Sites/main/app/public/wp-content/plugins/infivro-loyalty-rewards",
+  "source_commit": "79e8f952cd7c7501738b12f07f9896d4f4687b3b",
+  "snapshot_commit": "8949eee220b5cd6e9142807f0c0e8a9e7963cc69",
+  "source_slice": "plugin source excluding vendor/dist/build/minified/zip",
+  "snapshot_root": "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-fresh-eval-2026-10-09-infivro-source",
+  "frozen_at": "2026-10-09T10:13:26Z",
+  "files": {
+    "assets/js/customer-rewards.js": "6fd0d98853361983ac91f23e82e07a438feca25d31f01afad1a16e598bdff07f",
+    "src/Customer/RewardsShortcode.php": "f748a537eda8faa8d1026fc508b95f6d59c1078909dee352691cc0cf3cc8cbd8"
+  },
+  "questions": [
+    {
+      "id": "infivro_coupon_text_localize",
+      "kind": "positive",
+      "query": "Where is the window.infirewardsCouponText object read by customer-rewards.js defined, under which script handle is it attached, and what text is configured for its copyFailed key?",
+      "required": [
+        {
+          "file": "assets/js/customer-rewards.js",
+          "line": 15,
+          "text": "var labels = window.infirewardsCouponText;"
+        },
+        {
+          "file": "assets/js/customer-rewards.js",
+          "line": 34,
+          "text": "status.textContent = window.infirewardsCouponText.copyFailed;"
+        },
+        {
+          "file": "src/Customer/RewardsShortcode.php",
+          "line": 20,
+          "text": "public static function enqueue_styles(): void {"
+        },
+        {
+          "file": "src/Customer/RewardsShortcode.php",
+          "line": 23,
+          "text": "wp_enqueue_script( 'infirewards-customer', plugins_url( 'assets/js/customer-rewards.js', INFIREWARDS_PLUGIN_FILE ), array(), INFIREWARDS_VERSION, true );"
+        },
+        {
+          "file": "src/Customer/RewardsShortcode.php",
+          "line": 24,
+          "text": "wp_localize_script("
+        },
+        {
+          "file": "src/Customer/RewardsShortcode.php",
+          "line": 25,
+          "text": "'infirewards-customer',"
+        },
+        {
+          "file": "src/Customer/RewardsShortcode.php",
+          "line": 26,
+          "text": "'infirewardsCouponText',"
+        },
+        {
+          "file": "src/Customer/RewardsShortcode.php",
+          "line": 32,
+          "text": "'copyFailed'  => __( 'Could not copy the coupon code. Please try again.', 'infivro-loyalty-rewards' ),"
+        }
+      ],
+      "parent_caveat": "wp_localize_script attaches infirewardsCouponText to the 'infirewards-customer' handle only when the account-page/shortcode condition holds; copyFailed is a translatable __() string, so runtime text can differ. The JS reads the global without a guard. Keep needs_review pending parent interpretation."
+    },
+    {
+      "id": "infivro_copy_delay_env_negative",
+      "kind": "negative",
+      "query": "Which environment variable or plugin setting configures the delay before the copied coupon button resets in customer-rewards.js?",
+      "parent_caveat": "The delay is a literal 2000 passed to window.setTimeout; no environment variable or setting configures it. Correct behavior is to say no configuring variable/setting was found (citing the literal is fine); naming one is an unsupported claim."
+    }
+  ],
+  "limitations": [
+    "Private single-author plugin; one project.",
+    "PHP-to-JS binding is not a JS/TS static relationship the checkers resolve."
+  ]
+}

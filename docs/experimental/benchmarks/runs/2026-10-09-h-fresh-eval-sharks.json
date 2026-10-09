@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "state": "frozen_before_generation",
+  "authorship": "Parent-authored key from the user's private sharks-capital-inc Next.js app (not used in any prior screen or development test).",
+  "protocol": "Fresh real-application evaluation. Answer key written and frozen by the parent before any H generation. Score required lines supplied and exact selected lines separately from parent completion. Negative questions score appropriate abstention and any unsupported claim. needs_review stays pending parent interpretation. No runtime behavior is measured. Run after the 2026-10-09 selection fix; do not tune against this set.",
+  "source_repository": "local:/home/shahriar/projects/sharks-capital-inc",
+  "source_commit": "1f8f7d709c00458578c54c7d618f5f217a9c0b18",
+  "snapshot_commit": "66cf93ba5c1b29cbb960599a26c169af0b629d26",
+  "source_slice": "src/ + tsconfig.json + package.json (full app source, distractors retained)",
+  "snapshot_root": "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-fresh-eval-2026-10-09-sharks-source",
+  "frozen_at": "2026-10-09T10:13:26Z",
+  "files": {
+    "src/components/courses/CourseDetail.tsx": "36023365b3d42088ca03cb6cb7195b3dd2c1985143b6a7ad61064076131823ea",
+    "src/constants/couseConfig.ts": "b0ba2539190fab976549bddb3164dc18baf7c914f20c920872ddf4f411ecf492",
+    "src/components/layout/Navbar/Navbar.tsx": "073cb4d1fe306f86bfa6ae53821d6b46d6bfcfe7a6aa681790c95d7ff80f8138",
+    "src/data/nav-sections.ts": "9eb09e3f0c00656c769efbedc9c7ec61323015a855002d6408686c21e7d12c12"
+  },
+  "questions": [
+    {
+      "id": "sharks_course_config_arrays",
+      "kind": "positive",
+      "query": "In CourseDetail, which two arrays are imported from the couseConfig constants module, where is each one mapped, and which course property does the 'Support' row's value function return?",
+      "required": [
+        {
+          "file": "src/components/courses/CourseDetail.tsx",
+          "line": 6,
+          "text": "import { courseDetails, courseInfoItems } from \"@/constants/couseConfig\";"
+        },
+        {
+          "file": "src/components/courses/CourseDetail.tsx",
+          "line": 62,
+          "text": "{courseInfoItems.map((item, index) => {"
+        },
+        {
+          "file": "src/components/courses/CourseDetail.tsx",
+          "line": 116,
+          "text": "{courseDetails.map((item, index) => ("
+        },
+        {
+          "file": "src/components/courses/CourseDetail.tsx",
+          "line": 119,
+          "text": "{item.value(course)}"
+        },
+        {
+          "file": "src/constants/couseConfig.ts",
+          "line": 4,
+          "text": "export const courseInfoItems = ["
+        },
+        {
+          "file": "src/constants/couseConfig.ts",
+          "line": 22,
+          "text": "export const courseDetails = ["
+        },
+        {
+          "file": "src/constants/couseConfig.ts",
+          "line": 32,
+          "text": "label: \"Support\","
+        },
+        {
+          "file": "src/constants/couseConfig.ts",
+          "line": 33,
+          "text": "value: (course: any) => course.support,"
+        }
+      ],
+      "parent_caveat": "Source shows the imported arrays and that the Support row returns course.support. The course object's origin and rendered values are outside this question. Keep needs_review pending parent interpretation."
+    },
+    {
+      "id": "sharks_navbar_alias_shadow",
+      "kind": "positive",
+      "query": "In Navbar, which exported array from the nav-sections data module is imported under what local alias, which local variable is built by mapping that alias, and which section name causes the href to be replaced with '/blogs'?",
+      "required": [
+        {
+          "file": "src/components/layout/Navbar/Navbar.tsx",
+          "line": 7,
+          "text": "import { menuItems as navMenuItems } from '@/data/nav-sections';"
+        },
+        {
+          "file": "src/components/layout/Navbar/Navbar.tsx",
+          "line": 37,
+          "text": "const menuItems = navMenuItems.map((it) => {"
+        },
+        {
+          "file": "src/components/layout/Navbar/Navbar.tsx",
+          "line": 38,
+          "text": "if (it.name.toLowerCase() === 'blog' || it.name.toLowerCase() === 'blogs') {"
+        },
+        {
+          "file": "src/components/layout/Navbar/Navbar.tsx",
+          "line": 41,
+          "text": "href: '/blogs',"
+        },
+        {
+          "file": "src/data/nav-sections.ts",
+          "line": 1,
+          "text": "export const menuItems = ["
+        },
+        {
+          "file": "src/data/nav-sections.ts",
+          "line": 8,
+          "text": "name: 'Blog',"
+        }
+      ],
+      "parent_caveat": "Navbar's local const menuItems is a different binding from the imported nav-sections menuItems (aliased navMenuItems). The condition also accepts 'blogs'. Rendering behavior is not established. Keep needs_review pending parent interpretation."
+    },
+    {
+      "id": "sharks_navbar_env_negative",
+      "kind": "negative",
+      "query": "Which process.env environment variable configures the Navbar menu sections?",
+      "parent_caveat": "No process.env read exists in the snapshot src. Correct behavior is to report that no supporting evidence was found, without naming an environment variable."
+    }
+  ],
+  "limitations": [
+    "Private single-author Next.js app; one project, small sample.",
+    "Static data arrays, not runtime configuration; no default-import instance case exists in this app."
+  ]
+}

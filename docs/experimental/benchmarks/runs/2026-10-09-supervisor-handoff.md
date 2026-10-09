@@ -60,6 +60,9 @@ found no suitable fresh production pair. The new screen uses the pinned official
 NestJS JWT example, with domain/symbol overlap and the missing real-source
 instance positive recorded explicitly. See [the binding screen](2026-10-09-h-binding-screen.md)
 for the frozen questions, run status and next actionable step.
+The follow-up [fresh real-app evaluation](2026-10-09-h-fresh-eval.md) used the
+user's sharks-capital and infivro-loyalty-rewards projects and added
+generic `supporting_context` rules; it is the current next step.
 
 Agents must not spawn other agents or run local models independently. Announce
 each spawn, use fresh contexts and concise file handoffs. Local Ollama requires
