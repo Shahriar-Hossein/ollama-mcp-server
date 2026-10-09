@@ -3,6 +3,10 @@ import { relative, resolve, sep } from "node:path";
 import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
 import type { HybridRetrievalResult } from "../../explorer/retrieval.js";
 import {
+  configurationContextRequests,
+  parseConfigurationContexts,
+} from "./local-explore-config-context.js";
+import {
   configurationKeys,
   packingPatterns,
   type QuestionPart,
@@ -197,6 +201,32 @@ export function buildCandidates(
   const sourceFiles = [...new Set(index.symbols.map((symbol) => symbol.file))].filter(
     (file) => !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file),
   );
+  const contextRequests = configurationContextRequests(part?.question ?? query);
+  if (contextRequests.initialization) {
+    for (const file of sourceFiles.filter((file) => /\.[cm]?[jt]sx?$/.test(file))) {
+      const source = readFileSync(checkedFile(root, file), "utf8");
+      if (!source.includes("@nestjs/config") || !/\.forRoot(?:Async)?\s*\(/.test(source)) continue;
+      const contexts = parseConfigurationContexts(source, file, part?.question ?? query);
+      const rows = [
+        ...new Set(
+          contexts
+            .filter((context) => context.requirement.startsWith("configuration initialization"))
+            .flatMap((context) => context.lines),
+        ),
+      ];
+      if (rows.length)
+        add({
+          id: "",
+          kind: "configuration",
+          file,
+          lines: rows.map((line) => ({
+            line,
+            text: source.split("\n")[line - 1].slice(0, MAX_LINE_CHARS).trimEnd(),
+          })),
+        });
+      if (files.size >= 2) break;
+    }
+  }
   const matches = terms.length
     ? sourceFiles.flatMap((file) => {
         const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
@@ -339,6 +369,11 @@ export function buildCandidates(
       /\bthrow\b/,
     );
   }
+  if (contextRequests.provider)
+    configurationPatterns.push(
+      /\b(?:provide|inject|useFactory|useClass|useExisting|useValue)\s*:/,
+      /\bconstructor\s*\(/,
+    );
   if (
     namedConfigurationKeys.length ||
     /environment|\benv\b|\bflags?\b|gate|enabled|default|configur|setting/i.test(query)
@@ -421,6 +456,23 @@ export function buildCandidates(
       ? configurationPatterns.slice(0, namedConfigurationKeys.length)
       : configurationPatterns,
   ).forEach(add);
+  if (contextRequests.initialization || contextRequests.provider) {
+    for (const file of [...files].filter((file) => /\.[cm]?[jt]sx?$/.test(file))) {
+      const source = readFileSync(checkedFile(root, file), "utf8");
+      const contexts = parseConfigurationContexts(source, file, part?.question ?? query);
+      for (const context of contexts) {
+        add({
+          id: "",
+          kind: "configuration",
+          file,
+          lines: context.lines.map((line) => ({
+            line,
+            text: source.split("\n")[line - 1].slice(0, MAX_LINE_CHARS).trimEnd(),
+          })),
+        });
+      }
+    }
+  }
   for (const result of results) {
     if (candidates.length >= results.length) break;
     const file = result.evidence.file;

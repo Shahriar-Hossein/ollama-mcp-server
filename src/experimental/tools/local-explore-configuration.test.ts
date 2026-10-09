@@ -13,6 +13,7 @@ import {
   runLocalExploreRepo,
   validateModelAnswer,
 } from "./local-explore-repo.js";
+import { parseConfigurationContexts } from "./local-explore-config-context.js";
 import { configurationKeys } from "./local-explore-validation.js";
 
 const query = "How does DELIVERY_CHANNEL affect startup, defaults and validation?";
@@ -287,4 +288,213 @@ test("the scout exposes configuration shortlists and keeps semantics under revie
       ),
       JSON.stringify(result.unresolved),
     );
+  }));
+
+test("initialization context recognizes imported aliases and preserves multiline options", () => {
+  const source = [
+    "import { ConfigModule as Settings } from '@nestjs/config';",
+    "export const setup = Settings.forRoot({",
+    "  isGlobal: true,",
+    "  envFilePath: ['.env.stage', '.env'],",
+    "  ignoreEnvFile: false,",
+    "});",
+  ].join("\n");
+  const query = "Where is configuration initialized and which environment files are loaded?";
+  const contexts = parseConfigurationContexts(source, "app.ts", query);
+  assert.equal(contexts.length, 1);
+  assert.deepEqual(contexts[0].lines, [1, 2, 3, 4, 5]);
+  assert.equal(decomposeQuestion(query)[0].completeness, "unchecked");
+  for (const rejected of [
+    source.replace("@nestjs/config", "./unrelated"),
+    "// ConfigModule.forRoot({ isGlobal: true })",
+    "export const setup = OtherModule.forRoot({ isGlobal: true });",
+  ])
+    assert.deepEqual(parseConfigurationContexts(rejected, "app.ts", query), []);
+  const shadowed = source + "\nfunction demo(Settings: unknown) { return Settings.forRoot({}); }";
+  assert.ok(
+    parseConfigurationContexts(shadowed, "app.ts", query).every((context) => !context.lines.length),
+  );
+});
+
+test("factory provenance context pairs the named read with token, injection and parameter", () => {
+  const source = [
+    "export const providers = [{",
+    "  provide: 'MESSAGE_TRANSPORT',",
+    "  inject: [Logger, SettingsService],",
+    "  useFactory: (logger: Logger, settings: SettingsService) => {",
+    "    const channel = settings.get('MESSAGE_CHANNEL', 'console');",
+    "    return createTransport(channel);",
+    "  },",
+    "}];",
+  ].join("\n");
+  const query = "Which injected configuration provider supplies MESSAGE_CHANNEL?";
+  const contexts = parseConfigurationContexts(source, "provider.ts", query);
+  assert.equal(contexts.length, 1);
+  assert.deepEqual(contexts[0].lines, [2, 3, 4, 5]);
+  for (const invalid of [
+    source.replace("settings.get", "unrelated.get"),
+    source.replace("const channel =", "const settings = other; const channel ="),
+    source.replace("inject: [Logger, SettingsService]", "inject: [Logger]"),
+    source.replace("inject: [Logger, SettingsService]", "inject: tokens"),
+    source.replace("inject: [Logger, SettingsService]", "inject: [...tokens, SettingsService]"),
+    source.replace("provide: 'MESSAGE_TRANSPORT',", "provide: 'MESSAGE_TRANSPORT', ...overrides,"),
+    source.replace(
+      "provide: 'MESSAGE_TRANSPORT',",
+      "provide: 'MESSAGE_TRANSPORT', provide: Other,",
+    ),
+  ])
+    assert.ok(
+      parseConfigurationContexts(invalid, "provider.ts", query).every(
+        (context) => !context.lines.length,
+      ),
+    );
+  const nested = source.replace(
+    "const channel = settings.get('MESSAGE_CHANNEL', 'console');",
+    "const demo = () => settings.get('MESSAGE_CHANNEL', 'console');",
+  );
+  assert.deepEqual(parseConfigurationContexts(nested, "provider.ts", query), []);
+});
+
+test("constructor context retains the reader parameter and refuses a missing binding", () => {
+  const source = [
+    "export class Endpoint {",
+    "  constructor(private settings: SettingsService) {}",
+    ...Array.from({ length: 60 }, () => "// distant reader"),
+    "  address() { return this.settings.get('PUBLIC_ADDRESS'); }",
+    "}",
+  ].join("\n");
+  const query = "Which injected configuration provider supplies PUBLIC_ADDRESS?";
+  const contexts = parseConfigurationContexts(source, "endpoint.ts", query);
+  assert.equal(contexts.length, 1);
+  assert.deepEqual(contexts[0].lines, [2, 63]);
+  assert.deepEqual(
+    parseConfigurationContexts(
+      source.replace("this.settings", "this.other"),
+      "endpoint.ts",
+      query,
+    )[0].lines,
+    [],
+  );
+});
+
+test("initialization and factory context packing preserves distant declarations within six files", () =>
+  fixture((root) => {
+    writeFileSync(
+      join(root, "app.ts"),
+      "import { ConfigModule as Settings } from '@nestjs/config';\nimport { chooseDelivery } from './delivery.js';\nexport const init = Settings.forRoot({ isGlobal: true, envFilePath: '.env.dev' });\n",
+    );
+    writeFileSync(
+      join(root, "factory.ts"),
+      [
+        "import { chooseDelivery } from './delivery.js';",
+        "export const provider = {",
+        "  provide: 'DELIVERY',",
+        ...Array.from({ length: 55 }, () => "// separated factory options"),
+        "  inject: [SettingsService],",
+        ...Array.from({ length: 55 }, () => "// separated factory options"),
+        "  useFactory: (settings: SettingsService) => settings.get('DELIVERY_CHANNEL', 'console'),",
+        "};",
+      ].join("\n"),
+    );
+    execFileSync("git", ["-C", root, "add", "app.ts", "factory.ts"]);
+    const query =
+      "How is configuration initialized for DELIVERY_CHANNEL with the provider injecting its settings?";
+    const index = indexRepository(root);
+    const part = decomposeQuestion(query)[0];
+    const candidates = buildCandidates(root, [], index, query, part);
+    for (const text of [
+      "envFilePath",
+      "provide: 'DELIVERY'",
+      "inject: [SettingsService]",
+      "useFactory:",
+    ])
+      assert.ok(
+        candidates.some((candidate) => candidate.lines.some((line) => line.text.includes(text))),
+        text,
+      );
+    assert.ok(new Set(candidates.map((candidate) => candidate.file)).size <= 6);
+    const evidence = candidates.flatMap((candidate) =>
+      candidate.lines.map((line) => ({
+        id: candidate.id,
+        file: candidate.file,
+        line: line.line,
+        quote: line.text,
+        ref: `${candidate.file}:${line.line}`,
+      })),
+    );
+    const checks = createRelationshipChecks(root, index);
+    assert.deepEqual(checks.missing(part, evidence), []);
+    for (const text of ["envFilePath", "provide: 'DELIVERY'", "inject: [SettingsService]"])
+      assert.ok(
+        checks.missing(
+          part,
+          evidence.filter((item) => !item.quote.includes(text)),
+        ).length > 0,
+      );
+  }));
+
+test("absent initialization and provider context stay unresolved despite nearby getters", () =>
+  fixture((root) => {
+    const part = decomposeQuestion(
+      "Explain configuration initialization with the provider supplying DELIVERY_CHANNEL.",
+    )[0];
+    const checks = createRelationshipChecks(root, indexRepository(root));
+    const missing = checks.missing(part, []);
+    assert.ok(missing.some((name) => name === "configuration initialization context"));
+    assert.ok(missing.some((name) => name === "configuration provider provenance context"));
+  }));
+
+test("complete initialization citations still require review and oversized options refuse generation", () =>
+  fixture(async (root) => {
+    const base =
+      "import { ConfigModule } from '@nestjs/config';\nexport const init = ConfigModule.forRoot({\n  isGlobal: true,\n});\n";
+    writeFileSync(join(root, "app.ts"), base);
+    execFileSync("git", ["-C", root, "add", "app.ts"]);
+    const query = "Where is application configuration initialized?";
+    let calls = 0;
+    const generate = async (_model: string, prompt: string) => {
+      calls++;
+      const parts = JSON.parse(
+        prompt.split("Question parts: ")[1].split("\nRelevant repo map:")[0],
+      ) as { relationships: { alternative_ref_sets: string[][] }[] }[];
+      const refs = [
+        ...new Set(parts[0].relationships.flatMap((group) => group.alternative_ref_sets[0] ?? [])),
+      ];
+      return JSON.stringify({
+        part_evidence: [{ part_id: "P1", evidence_refs: refs }],
+        confidence: "high",
+        unresolved: [],
+        next_action: { ref: "" },
+      });
+    };
+    const budget: typeof resolveModelBudget = (model, overrides) =>
+      resolveModelBudget(model, overrides, async () => ({
+        parameters: "num_ctx 50000\nnum_predict 2048",
+      }));
+    const result = await runLocalExploreRepo(
+      { repository_root: root, query, model: "fixture:initialization" },
+      generate,
+      budget,
+    );
+    assert.equal(result.status, "needs_review");
+    assert.ok(result.evidence.some((item) => item.quote === "isGlobal: true,"));
+    assert.ok(
+      !result.unresolved.some((item) => item.includes("configuration initialization context")),
+    );
+    assert.ok(result.unresolved.some((item) => item.includes("semantic completeness")));
+    writeFileSync(
+      join(root, "app.ts"),
+      base.replace(
+        "  isGlobal: true,",
+        Array.from({ length: 500 }, (_, i) => `  option${i}: '${"x".repeat(100)}',`).join("\n"),
+      ),
+    );
+    const before = calls;
+    const oversized = await runLocalExploreRepo(
+      { repository_root: root, query, model: "fixture:initialization" },
+      generate,
+      budget,
+    );
+    assert.equal(oversized.packing_overflow, true);
+    assert.equal(calls, before);
   }));

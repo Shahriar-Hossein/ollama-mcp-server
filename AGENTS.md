@@ -129,6 +129,13 @@ This is the canonical instructions file for this repo — other agent configs
   preserves separated getter, constructor and outcome windows in import
   neighbors. Getter names and adjacency are context hints, not provider or
   data-flow resolution; configuration semantics always require parent review.
+  Initialization questions pack imported Nest ConfigModule `forRoot`/`forRootAsync`
+  call context, including aliases and options. Provider questions pair named
+  reads with direct factory `provide`/`inject`/parameter declarations or constructor
+  parameter context. Spreads, duplicate fields, dynamic inject arrays, missing
+  bindings and recognized shadowing stay unresolved. These are source-context
+  checks, not dependency-container or environment-load resolution. Module scope,
+  provider overrides and runtime provenance still require parent review.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still

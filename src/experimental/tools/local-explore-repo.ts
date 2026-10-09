@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
+import { configurationContextRequests } from "./local-explore-config-context.js";
 import {
   evidenceChecklist,
   missingEvidenceRequirements,
@@ -113,6 +114,12 @@ export function decomposeQuestion(query: string): QuestionPart[] {
         part.completeness = "unchecked";
         part.evidence_needed +=
           " Include named configuration reads, defaults, enclosing conditions and direct outcomes; parent review is required for configuration semantics.";
+      }
+      const contextRequests = configurationContextRequests(question);
+      if (contextRequests.initialization || contextRequests.provider) {
+        part.completeness = "unchecked";
+        part.evidence_needed +=
+          " Include configuration initialization options and the reader's factory token/inject/parameters or constructor injection when requested. These are source context; parent review must establish provider provenance and initialization semantics.";
       }
       const uncheckedTail = question.replace(
         /\band\s+(?:return|issue)\s+[a-z][\w$]*[A-Z][\w$]*|\band\s+call(?:s)?\s+[A-Za-z_$][\w$.]*|\band\s+its\s+implementation\b/g,

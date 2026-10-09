@@ -13,6 +13,10 @@ import {
   type ValidEvidence,
 } from "./local-explore-validation.js";
 import { operationChecks, operationTarget } from "./local-explore-operations.js";
+import {
+  configurationContextRequests,
+  configurationContexts,
+} from "./local-explore-config-context.js";
 
 type Location = { file: string; line: number };
 type Relationship = { requirement: string; alternatives: Location[][] };
@@ -452,6 +456,34 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
       return checks;
     }
     const checks: Relationship[] = [...flagResolverPlan(part), ...configurationReadPlan(part)];
+    const contextRequests = configurationContextRequests(part.question);
+    if (contextRequests.initialization || contextRequests.provider) {
+      const contexts = [...new Set(index.symbols.map((symbol) => symbol.file))]
+        .filter(
+          (file) =>
+            /\.[cm]?[jt]sx?$/.test(file) &&
+            !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file),
+        )
+        .flatMap((file) =>
+          configurationContexts(treeFor(file), file, part.question).map((context) => ({
+            requirement: context.requirement,
+            alternatives: context.lines.length
+              ? [context.lines.map((line) => ({ file, line }))]
+              : [],
+          })),
+        );
+      checks.push(...contexts);
+      if (
+        contextRequests.initialization &&
+        !contexts.some((context) => context.requirement.startsWith("configuration initialization"))
+      )
+        checks.push({ requirement: "configuration initialization context", alternatives: [] });
+      if (
+        contextRequests.provider &&
+        !contexts.some((context) => !context.requirement.startsWith("configuration initialization"))
+      )
+        checks.push({ requirement: "configuration provider provenance context", alternatives: [] });
+    }
     for (const { callerName, calleeName } of part.operation ? [] : callRequests(part)) {
       const callers = index.symbols.filter(
         (symbol) => callableKinds.has(symbol.kind) && matchesName(symbol, callerName),
