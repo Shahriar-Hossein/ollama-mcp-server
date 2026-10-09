@@ -83,3 +83,32 @@ All six static cases are tested against their independently frozen foreign and
 unresolved refs, including the true contrast claim. Additional tests cover nested
 functions, scope barriers, malformed/ambiguous scopes, target validation, paths,
 exact quotes, bounds, duplicate refs and fresh reads after source edits.
+
+## Baseline runner and posthoc ownership artifact
+
+`node --import tsx scripts/experimental/run-citation-eval.ts` reuses the language
+evaluation runner with a pinned citation descriptor and `selected_only` answer
+context. Default output is the ignored
+`benchmark-data/language-eval/citation-development/model-run.json`; `--model`,
+`--only` and `--output` retain the existing argument contract. The H descriptor
+fragment supplied correct paths/hash in 14,872 ms of tool elapsed time, but missed
+the explicitly requested validator type cast. Sol repaired that callback.
+
+Only source files enter the temporary Git target. Queries and selected evidence
+enter model prompts; static claims, owner rubrics, explicit target locations and
+answer keys do not. Target locations come from the frozen manifest after generation.
+
+The raw result is saved unchanged. Its sibling `${output}.owners.json` pins the
+raw SHA-256, frozen manifest/source hashes and evaluated implementation hashes.
+Source and manifest are checked again before analysis. All six static cases keep
+independent claim truth and compare the frozen foreign/unresolved references.
+Model claim locations must match selected, source-validated evidence; those quotes
+are materialized from source before lexical review. Invalid or unselected refs,
+malformed answers and absent answers remain `not_checked`; an empty citation list
+retains `no_citations` with `needs_review`. Raw malformed output is preserved.
+
+Both artifacts retain pending manual review with correctness and correction metrics
+null. A checked ownership record describes lexical comparison only, never semantic
+support or answer correctness. Output checks protect source/manifest paths from
+raw and sibling writes, including existing symlink aliases. No real model results
+are recorded by this implementation step.
