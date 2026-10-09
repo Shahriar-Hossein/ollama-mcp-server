@@ -26,9 +26,15 @@ separate source audit found mixed outcomes and corrected seven cases. See the
 [language evaluation report](2026-10-09-language-eval.md); it records stage
 coverage, claim/citation distinctions and the small-sample limitation.
 
-Next: test filename-anchored PHP top-level guard/key packing on a fresh
-non-evaluation fixture. Carry enclosing headers and paired configuration values
-into answer context, then check citations against function scope. Measure
-generation time before considering index caching; any cache must handle
-working-tree invalidation. Keep parent-only semantic checks visible in timing
-reports rather than skipping them.
+The separate filename-packing development piece now covers tracked PHP files
+without symbols. Its fresh two-case probe supplied and selected all six required
+lines; both cases stayed `needs_review`. This is evidence selection, not answer
+correctness or a revision of the frozen evaluation. See the
+[PHP packing checkpoint](2026-10-09-php-filename-packing.md) for hashes and limits.
+The final scout suite passed 144/144; typecheck passed with existing lint warnings.
+
+Next: exercise Python/PHP enclosing declaration context and cross-scope citations
+on a bounded relationship fixture, preserving paired configuration values and
+parent review of semantics. Measure generation time before considering index
+caching; any cache must handle working-tree invalidation. Keep semantic-review
+costs visible in timing reports rather than skipping them.

@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
 import type { HybridRetrievalResult } from "../../explorer/retrieval.js";
+import { phpFilenameAnchors } from "./local-explore-php-context.js";
 import {
   configurationContextRequests,
   parseConfigurationContexts,
@@ -180,6 +182,23 @@ export function buildCandidates(
     candidate.id = `C${candidates.length + 1}`;
     candidates.push(candidate);
   };
+  if (query.includes(".php")) {
+    const tracked = execFileSync("git", ["ls-files", "-z", "--", "*.php"], {
+      cwd: root,
+      encoding: "utf8",
+    }).split("\0").filter(Boolean);
+    const phpPatterns = [
+      /\b(?:namespace|use|include(?:_once)?|require(?:_once)?)\b/,
+      /\b(?:function|class|interface|trait|enum)\b/,
+      /\b(?:if|else|elseif|return)\b/,
+      /["'][^"']+["']\s*=>\s*(?:["'][^"']*["']|[-+]?\d|true\b|false\b|null\b)/,
+    ];
+    // Reserve explicitly named files before unrelated lexical matches fill the cap.
+    for (const file of phpFilenameAnchors(query, tracked).files) {
+      const source = readFileSync(checkedFile(root, file), "utf8");
+      add({ id: "", kind: "text_match", file, lines: selectedLines(source, 1, query, phpPatterns) });
+    }
+  }
   const terms = [
     ...new Set(
       (query.toLowerCase().match(/[a-z0-9_]{4,}/g) ?? []).filter(

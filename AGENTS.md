@@ -98,6 +98,10 @@ This is the canonical instructions file for this repo — other agent configs
   directions for at most two hops, capped at six files per part. Packing
   preserves each retrieved chain file, merges shared lines, and refuses
   overflow before generation. Import adjacency does not prove runtime calls.
+  Explicit PHP filenames can add tracked top-level context without indexed symbols.
+  Exact safe root-relative paths or unique basenames supply at most two anchors
+  before lexical ranking. Existing source windows and caps remain bounded;
+  filename hints do not resolve includes or aliases or prove complete guard coverage.
   One bounded source expansion is allowed within the same character cap.
   Candidate IDs and line numbers are checked, and quotes are copied from source;
   named call/configuration and token-operation checklists guide selection.
