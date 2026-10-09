@@ -4,8 +4,8 @@ Frozen before generation at `2026-10-09T09:36:57Z`. The exact questions and
 required source lines are in
 [`2026-10-09-h-binding-screen.json`](2026-10-09-h-binding-screen.json).
 
-The source is the official NestJS public sample `sample/19-auth-jwt` at pinned
-commit `0498c13a63239fdef2d964acee67b57a22f87c65`. The origin manifest records
+The source is the [official NestJS public sample](https://github.com/nestjs/nest/tree/0498c13a63239fdef2d964acee67b57a22f87c65/sample/19-auth-jwt)
+at pinned commit `0498c13a63239fdef2d964acee67b57a22f87c65`. The origin manifest records
 the upstream paths and hashes. The two-file Git snapshot is at
 `d7c2d7095c857f3b8676f1883dbc9bb46d97ed87`. Direct checks matched both recorded
 hashes and every frozen rubric line. The reviewed source windows are:
@@ -76,8 +76,8 @@ generic provider provenance for question two also remains unresolved.
 
 The screen is a public framework sample with structural overlap, not production
 or independent-generalization evidence. No fresh production case or real-source
-default-import locally constructed-instance positive was available. H supplied
-every rubric line but still missed the reader declaration and provider
+default-import locally constructed-instance positive was available. Deterministic
+packing supplied every rubric line; H still missed the reader declaration and provider
 registration/use lines at selection time. Develop those selection gaps
 separately and look for fresh production and instance candidates; do not tune
 or rerun this frozen screen.
