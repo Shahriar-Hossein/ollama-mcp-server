@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "python/posonly.py": "64fa627204191acfbcb5a111a139aca10baed269aec88b38a9c685735c2c9639",
+    "python/varkw.py": "88411a37db0d4034b2263dd6d7c7eca7c49a66181b8eb997cba3d6fa25ed4c5a",
+    "python/local_assign.py": "51f7e6b3119cb5b8b3b4094391ef3a2fdfb8775f2ad360800046f3d2dd1ce0c3",
+    "python/nonlocal_read.py": "d4ed07fe9eadf4e24657356371f90615cda69ae6ea7da0c494cd414c742d23d9",
+    "python/two_dicts.py": "89c6bd00edf6a0c68cbfa9425d6d2f84f291b8ad91d498b2b9345ab911e4342e"
+  },
+  "questions": [
+    {
+      "id": "H2-POSONLY",
+      "language": "python",
+      "query": "Which LIMITS dictionary does limit_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/posonly.py",
+          "line": 6,
+          "text": "def limit_mode(LIMITS, /):"
+        },
+        {
+          "file": "python/posonly.py",
+          "line": 7,
+          "text": "    return LIMITS[\"mode\"]"
+        }
+      ],
+      "answer": "limit_mode reads its own positional-only LIMITS parameter, not the module LIMITS dictionary. The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "limit_mode returns strict",
+        "limit_mode dictionary attempts is 9",
+        "limit_mode reads the module LIMITS dictionary"
+      ]
+    },
+    {
+      "id": "H2-VARKW",
+      "language": "python",
+      "query": "Which ROUTE dictionary does route_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/varkw.py",
+          "line": 6,
+          "text": "def route_mode(**ROUTE):"
+        },
+        {
+          "file": "python/varkw.py",
+          "line": 7,
+          "text": "    return ROUTE[\"mode\"]"
+        }
+      ],
+      "answer": "route_mode reads its own **ROUTE keyword-collection parameter, not the module ROUTE dictionary. The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "route_mode returns direct",
+        "route_mode dictionary attempts is 31",
+        "route_mode reads the module ROUTE dictionary"
+      ]
+    },
+    {
+      "id": "H2-LOCALASSIGN",
+      "language": "python",
+      "query": "Which TIER dictionary does tier_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/local_assign.py",
+          "line": 6,
+          "text": "def tier_mode():"
+        },
+        {
+          "file": "python/local_assign.py",
+          "line": 7,
+          "text": "    TIER = {"
+        },
+        {
+          "file": "python/local_assign.py",
+          "line": 8,
+          "text": "        \"mode\": \"bronze\","
+        },
+        {
+          "file": "python/local_assign.py",
+          "line": 9,
+          "text": "        \"attempts\": 1,"
+        },
+        {
+          "file": "python/local_assign.py",
+          "line": 11,
+          "text": "    return TIER[\"mode\"]"
+        }
+      ],
+      "answer": "tier_mode reads the TIER dictionary assigned inside the function, returns bronze, and that dictionary has attempts 1. The module TIER (gold, 6) is shadowed.",
+      "forbidden_claims": [
+        "tier_mode returns gold",
+        "tier_mode dictionary attempts is 6",
+        "tier_mode reads the module TIER dictionary"
+      ]
+    },
+    {
+      "id": "H2-NONLOCAL",
+      "language": "python",
+      "query": "Which LEVEL dictionary does read_level read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/nonlocal_read.py",
+          "line": 6,
+          "text": "def make_level():"
+        },
+        {
+          "file": "python/nonlocal_read.py",
+          "line": 7,
+          "text": "    LEVEL = {"
+        },
+        {
+          "file": "python/nonlocal_read.py",
+          "line": 8,
+          "text": "        \"mode\": \"debug\","
+        },
+        {
+          "file": "python/nonlocal_read.py",
+          "line": 9,
+          "text": "        \"attempts\": 4,"
+        },
+        {
+          "file": "python/nonlocal_read.py",
+          "line": 12,
+          "text": "    def read_level():"
+        },
+        {
+          "file": "python/nonlocal_read.py",
+          "line": 14,
+          "text": "        return LEVEL[\"mode\"]"
+        }
+      ],
+      "answer": "read_level reads the LEVEL dictionary local to the enclosing make_level (declared nonlocal), returns debug, and that dictionary has attempts 4. The module LEVEL (info, 40) is shadowed.",
+      "forbidden_claims": [
+        "read_level returns info",
+        "read_level dictionary attempts is 40",
+        "read_level reads the module LEVEL dictionary"
+      ]
+    },
+    {
+      "id": "H2-TWODICTS",
+      "language": "python",
+      "query": "Which BUDGET dictionary does budget_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/two_dicts.py",
+          "line": 1,
+          "text": "BUDGET = {"
+        },
+        {
+          "file": "python/two_dicts.py",
+          "line": 2,
+          "text": "    \"mode\": \"capped\","
+        },
+        {
+          "file": "python/two_dicts.py",
+          "line": 3,
+          "text": "    \"attempts\": 17,"
+        },
+        {
+          "file": "python/two_dicts.py",
+          "line": 4,
+          "text": "}"
+        },
+        {
+          "file": "python/two_dicts.py",
+          "line": 12,
+          "text": "    return BUDGET[\"mode\"]"
+        }
+      ],
+      "answer": "budget_mode reads the module BUDGET dictionary, returns capped, and that dictionary has attempts 17. The RESERVE dictionary (open, 2) is a different dictionary and is not read.",
+      "forbidden_claims": [
+        "budget_mode returns open",
+        "budget_mode dictionary attempts is 2",
+        "budget_mode reads the RESERVE dictionary"
+      ]
+    }
+  ]
+}

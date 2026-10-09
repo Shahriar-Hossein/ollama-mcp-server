@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import type { LanguageFixture } from "./language-eval-fixture.js";
-import { HELDOUT_SPEC, validatePythonDictionaryFixture } from "./python-dictionary-eval-fixture.js";
+import { HELDOUT_SPEC, HELDOUT2_SPEC, validatePythonDictionaryFixture } from "./python-dictionary-eval-fixture.js";
 
 const source = resolve("scripts/experimental/fixtures/python-dictionary-eval/source");
 const load = (): LanguageFixture => JSON.parse(readFileSync("docs/experimental/benchmarks/runs/2026-10-09-python-dictionary-eval.json", "utf8"));
@@ -81,4 +82,11 @@ test("fresh Python dictionary fixture validates against its frozen sources", asy
 test("held-out Python dictionary set validates against its frozen sources", () => {
   const fixture: LanguageFixture = JSON.parse(readFileSync("docs/experimental/benchmarks/runs/2026-10-10-python-dictionary-heldout-eval.json", "utf8"));
   validatePythonDictionaryFixture(fixture, resolve("scripts/experimental/fixtures/python-dictionary-heldout/source"), HELDOUT_SPEC);
+});
+
+test("second held-out Python dictionary set validates against its frozen sources", async () => {
+  const { PYTHON_DICTIONARY_HELDOUT2_FIXTURE: set } = await import("./run-python-dictionary-heldout2-eval.js");
+  const raw = readFileSync(set.manifestPath);
+  assert.equal(createHash("sha256").update(raw).digest("hex"), set.sha256);
+  validatePythonDictionaryFixture(JSON.parse(raw.toString("utf8")), set.sourcePath, HELDOUT2_SPEC);
 });

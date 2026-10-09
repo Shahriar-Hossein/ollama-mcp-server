@@ -34,6 +34,15 @@ export const HELDOUT_SPEC: PythonDictionarySpec = {
   requiredLines: { "HO-KWONLY": 2, "HO-TYPEDDEFAULT": 2, "HO-CLOSURE": 6, "HO-GLOBAL": 5, "HO-CLASS": 5 },
 };
 
+export const HELDOUT2_SPEC: PythonDictionarySpec = {
+  questions: {
+    "H2-POSONLY": "python/posonly.py", "H2-VARKW": "python/varkw.py",
+    "H2-LOCALASSIGN": "python/local_assign.py", "H2-NONLOCAL": "python/nonlocal_read.py",
+    "H2-TWODICTS": "python/two_dicts.py",
+  },
+  requiredLines: { "H2-POSONLY": 2, "H2-VARKW": 2, "H2-LOCALASSIGN": 5, "H2-NONLOCAL": 6, "H2-TWODICTS": 5 },
+};
+
 export function validatePythonDictionaryFixture(
   fixture: LanguageFixture,
   sourceRoot: string,
