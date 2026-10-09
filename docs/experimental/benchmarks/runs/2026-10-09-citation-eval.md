@@ -50,3 +50,36 @@ owner file and declaration line, skips null owners, deduplicates foreign citatio
 locations in first-seen order, and returns copied locations. A null target yields
 an empty result. An empty result is no foreign-owner cue, never a semantic pass;
 module ownership and missing target resolution require separate review.
+
+## Checked Python source adapter
+
+The H adapter draft took 29,029 ms of tool elapsed time and failed source
+inspection. It was never executed. Parser imports/API, checked reads, cache
+population, source accounting, quote validation and scope coordinates were
+incorrect. Sol implemented the bounded adapter and source validation.
+
+`pythonCitationOwners` accepts complete source-line quotes modulo leading/trailing whitespace, checks containment
+before reading, and parses pinned Python grammar through the shared parse helper.
+Original source indentation supplies AST coordinates; partial or changed text is rejected.
+Each request allows at most 96 positions, six unique Python files and 24,000
+unique source characters. The review target counts toward the position cap.
+Overflow or invalid evidence throws; evidence is never silently discarded.
+Caches live only within one request.
+
+Function declaration headers own themselves. Other lines use the nearest lexical
+function ancestor at the first non-whitespace source column. Class and lambda
+scopes block attribution to outer functions. Multiple scopes starting on one
+physical row, malformed files and module lines have unknown owners. These are
+lexical source coordinates, not binding, import, runtime or claim resolution.
+
+`reviewPythonCitations` takes an explicit checked target source line. Only a
+function header owning itself resolves the target; body lines and natural-language
+names cannot select it. It always returns `needs_review`, with copied owner
+records, foreign-owner cues, unresolved citations and applicable reasons. Missing
+targets leave all citations unresolved; no citations produces `no_citations`.
+The wrapper does not score answer correctness or classify claim truth.
+
+All six static cases are tested against their independently frozen foreign and
+unresolved refs, including the true contrast claim. Additional tests cover nested
+functions, scope barriers, malformed/ambiguous scopes, target validation, paths,
+exact quotes, bounds, duplicate refs and fresh reads after source edits.
