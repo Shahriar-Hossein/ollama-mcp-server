@@ -433,3 +433,37 @@ test("the scout accepts an aliased call and its configuration binding across par
     assert.equal(result.model_calls, 1);
     assert.equal(result.evidence.length, 3);
   }));
+
+
+test("Unicode preserves JS/TS nested shadow rejection and same-line provider lookups", () =>
+  fixture((root) => {
+    for (const extension of ["js", "ts"]) {
+      const file = `unicode.${extension}`;
+      writeFileSync(join(root, file), [
+        "// é😀".repeat(40),
+        "import { renderPage as render } from './render.js';",
+        "import { policy as settings } from './policy.js';",
+        "export function unicodeShadow() {",
+        "  /* é😀 */ { const render = () => 'local'; render(); }",
+        "}",
+        "export function unicodeDirect() { /* é😀 */ return render(); }",
+        "export function unicodeConfig() { /* é😀 */ return settings.displayWidth; }",
+      ].join("\n"));
+      execFileSync("git", ["-C", root, "add", file]);
+      const checks = createRelationshipChecks(root, indexRepository(root));
+      assert.equal(checks.missing(
+        decomposeQuestion("Where does unicodeShadow call renderPage?")[0],
+        [cite(root, file, 5)],
+      ).length, 1);
+      assert.deepEqual(checks.missing(
+        decomposeQuestion("Where does unicodeDirect call renderPage?")[0],
+        [cite(root, file, 7)],
+      ), []);
+      assert.deepEqual(checks.missing(
+        decomposeQuestion("How is displayWidth configured and used in unicodeConfig?")[0],
+        [cite(root, "policy.ts", 2), cite(root, file, 8)],
+      ), []);
+      rmSync(join(root, file));
+      execFileSync("git", ["-C", root, "rm", "--cached", file]);
+    }
+  }));

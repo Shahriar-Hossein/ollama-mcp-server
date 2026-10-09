@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import Parser from "tree-sitter";
 import { parseSource } from "../../explorer/parse.js";
+import { nodeForRange, offsetsForTree } from "../../explorer/source-offsets.js";
 import JavaScript from "tree-sitter-javascript";
 import TypeScript from "tree-sitter-typescript";
 import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
@@ -132,6 +133,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
     name: string,
     bindingId: string,
   ): boolean {
+    const offsets = offsetsForTree(node.tree);
     for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
       const parameters = ancestor.childForFieldName("parameters");
       if (parameters?.descendantsOfType("identifier").some((item) => item.text === name))
@@ -142,8 +144,8 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
             symbol.file === file &&
             symbol.name === name &&
             symbol.id !== bindingId &&
-            symbol.range.start.byte >= ancestor!.startIndex &&
-            symbol.range.end.byte <= ancestor!.endIndex &&
+            symbol.range.start.byte >= offsets.toByte(ancestor!.startIndex) &&
+            symbol.range.end.byte <= offsets.toByte(ancestor!.endIndex) &&
             ancestor!.type !== "program",
         )
       )
@@ -168,10 +170,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
       if (binding.kind !== "variable" || binding.parent_id) continue;
       if (providerName && binding.name !== providerName) continue;
       const useTree = treeFor(reference.file);
-      const object = useTree.rootNode.descendantForPosition(
-        { row: reference.range.start.line - 1, column: reference.range.start.column - 1 },
-        { row: reference.range.end.line - 1, column: reference.range.end.column - 1 },
-      );
+      const object = nodeForRange(useTree, reference.range);
       const member = object.parent;
       if (
         member?.type !== "member_expression" ||
@@ -220,10 +219,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         /(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(call.file)
       )
         return [];
-      const name = treeFor(call.file).rootNode.descendantForPosition(
-        { row: call.range.start.line - 1, column: call.range.start.column - 1 },
-        { row: call.range.end.line - 1, column: call.range.end.column - 1 },
-      );
+      const name = nodeForRange(treeFor(call.file), call.range);
       const node = name.parent;
       if (
         node?.type !== "call_expression" ||
@@ -274,13 +270,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         checks.push({ requirement: `${flag} resolved helper`, alternatives: [] });
         continue;
       }
-      const helperName = treeFor(helper.file).rootNode.descendantForPosition(
-        {
-          row: helper.selection_range.start.line - 1,
-          column: helper.selection_range.start.column - 1,
-        },
-        { row: helper.selection_range.end.line - 1, column: helper.selection_range.end.column - 1 },
-      );
+      const helperName = nodeForRange(treeFor(helper.file), helper.selection_range);
       const declaration = helperName.parent;
       const implementation =
         declaration?.type === "variable_declarator"
@@ -389,10 +379,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         )
           continue;
         const tree = treeFor(call.file);
-        let node: Parser.SyntaxNode | null = tree.rootNode.descendantForPosition(
-          { row: call.range.start.line - 1, column: call.range.start.column - 1 },
-          { row: call.range.end.line - 1, column: call.range.end.column - 1 },
-        );
+        let node: Parser.SyntaxNode | null = nodeForRange(tree, call.range);
         while (node && node.type !== "call_expression") node = node.parent;
         const argument = node?.childForFieldName("arguments")?.namedChildren[0];
         if (!node || argument?.type !== "string" || argument.text.slice(1, -1) !== key) continue;
@@ -515,10 +502,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         for (const call of index.calls) {
           if (callable(call.caller_symbol_id)?.id !== callers[0].id) continue;
           const callee = call.callee_symbol_id ? symbols.get(call.callee_symbol_id) : undefined;
-          const node = treeFor(call.file).rootNode.descendantForPosition(
-            { row: call.range.start.line - 1, column: call.range.start.column - 1 },
-            { row: call.range.end.line - 1, column: call.range.end.column - 1 },
-          );
+          const node = nodeForRange(treeFor(call.file), call.range);
           const shadowed =
             callee &&
             !call.callee_name.includes(".") &&

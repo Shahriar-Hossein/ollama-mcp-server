@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import Parser from "tree-sitter";
 import { parseSource } from "../../explorer/parse.js";
+import { offsetsForTree } from "../../explorer/source-offsets.js";
 import JavaScript from "tree-sitter-javascript";
 import TypeScript from "tree-sitter-typescript";
 import {
@@ -96,10 +97,12 @@ function parserFor(file: string): Parser {
 
 function position(node: Parser.SyntaxNode, edge: "start" | "end"): SourcePosition {
   const point = edge === "start" ? node.startPosition : node.endPosition;
+  const index = edge === "start" ? node.startIndex : node.endIndex;
+  const offsets = offsetsForTree(node.tree);
   return {
     line: point.row + 1,
-    column: point.column + 1,
-    byte: edge === "start" ? node.startIndex : node.endIndex,
+    column: offsets.toByte(index) - offsets.toByte(index - point.column) + 1,
+    byte: offsets.toByte(index),
   };
 }
 
@@ -115,11 +118,14 @@ function literalString(node: Parser.SyntaxNode | undefined): string | null {
 }
 
 function containingSymbol(symbols: SymbolRecord[], node: Parser.SyntaxNode): SymbolRecord | null {
+  const offsets = offsetsForTree(node.tree);
+  const start = offsets.toByte(node.startIndex);
+  const end = offsets.toByte(node.endIndex);
   let containing: SymbolRecord | null = null;
   for (const symbol of symbols) {
     if (
-      symbol.range.start.byte <= node.startIndex &&
-      node.endIndex <= symbol.range.end.byte &&
+      symbol.range.start.byte <= start &&
+      end <= symbol.range.end.byte &&
       (!containing || symbol.range.start.byte >= containing.range.start.byte)
     ) {
       containing = symbol;

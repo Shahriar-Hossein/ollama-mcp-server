@@ -156,3 +156,16 @@ test("complete metadata and ordinary-value selections still require parent revie
     },
   );
 });
+
+
+test("Unicode before imported constant uses preserves provenance parser lookups", () =>
+  fixture([
+    "// é😀".repeat(30),
+    imported,
+    "export function config() { /* é😀 */ return { secret: token }; }",
+  ].join("\n"), (root) => {
+    const { requirements, checks, part, evidence } = packed(root);
+    assert.equal(requirements.length, 1);
+    assert.ok(requirements[0].alternative_ref_sets.length);
+    assert.ok(!checks.missing(part, evidence).some((requirement) => requirement.startsWith("imported configuration")));
+  }));

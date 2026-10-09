@@ -1,5 +1,6 @@
 import type Parser from "tree-sitter";
 import type { RepositoryIndex } from "../../explorer/indexer.js";
+import { nodeForRange } from "../../explorer/source-offsets.js";
 import { configurationContextRequests } from "./local-explore-config-context.js";
 import { selectableEvidenceText } from "./local-explore-validation.js";
 import { defaultInstanceContexts } from "./local-explore-instances.js";
@@ -204,10 +205,7 @@ export function configurationProvenanceContexts(
     )
       continue;
     const tree = treeFor(reference.file);
-    const node = tree.rootNode.descendantForPosition(
-      { row: reference.range.start.line - 1, column: reference.range.start.column - 1 },
-      { row: reference.range.end.line - 1, column: reference.range.end.column - 1 },
-    );
+    const node = nodeForRange(tree, reference.range);
     if (node.type !== "identifier") continue;
     let imports = importsByFile.get(reference.file);
     if (!imports) {

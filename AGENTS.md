@@ -23,6 +23,9 @@ This is the canonical instructions file for this repo — other agent configs
   master flag.
 - `src/explorer/` — the supported deterministic repository index, outlines,
   symbol reads, structural queries, basic retrieval, and their CLIs.
+  Public ranges use UTF-8 bytes and byte columns in every language. Keep
+  UTF-16 parser coordinates during indexing; convert at the public boundary
+  and back before parser lookups (see `src/explorer/source-offsets.ts`).
   Tracked Go sources use a pinned grammar. Calls, references and imports stay
   unresolved; do not apply JS name resolution or env guards to Go nodes.
 - `src/experimental/` — advanced Explorer pipelines, adapters, benchmarks,

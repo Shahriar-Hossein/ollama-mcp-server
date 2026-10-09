@@ -9,6 +9,7 @@ import PHP from "tree-sitter-php";
 import Python from "tree-sitter-python";
 import TypeScript from "tree-sitter-typescript";
 import { parseSource } from "./parse.js";
+import { SourceOffsets } from "./source-offsets.js";
 
 export const SYMBOL_SCHEMA_VERSION = 1;
 
@@ -192,25 +193,6 @@ function position(node: Parser.SyntaxNode, edge: "start" | "end"): SourcePositio
 
 function range(node: Parser.SyntaxNode): SourceRange {
   return { start: position(node, "start"), end: position(node, "end") };
-}
-
-function normalizeUtf8Ranges(source: string, ranges: SourceRange[]): void {
-  // The Node parser uses UTF-16 indices; public source slices use UTF-8 bytes.
-  const offsets: number[] = [];
-  let index = 0;
-  let byte = 0;
-  for (const character of source) {
-    for (let part = 0; part < character.length; part++) offsets[index + part] = byte;
-    index += character.length;
-    byte += Buffer.byteLength(character);
-  }
-  offsets[index] = byte;
-  for (const range of ranges) {
-    for (const position of [range.start, range.end]) {
-      position.column = offsets[position.byte] - offsets[position.byte - position.column + 1] + 1;
-      position.byte = offsets[position.byte];
-    }
-  }
 }
 
 function nameFrom(node: Parser.SyntaxNode | null): string | null {
@@ -1104,13 +1086,18 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
     collectTests(file, source.language, source.source, references, calls, tests, testSymbols);
   }
 
-  for (const [file, { language, source }] of sources) {
-    if (language !== "go") continue;
+  // Keep parser coordinates until all containment and resolution checks finish.
+  for (const [file, { source }] of sources) {
     const ranges = [
-      ...records.filter((record) => record.file === file).flatMap((record) => [record.range, record.selection_range]),
-      ...[...references, ...dependencies, ...calls].filter((record) => record.file === file).map((record) => record.range),
+      ...records
+        .filter((record) => record.file === file)
+        .flatMap((record) => [record.range, record.selection_range]),
+      ...[...references, ...dependencies, ...calls, ...inheritance, ...tests]
+        .filter((record) => record.file === file)
+        .map((record) => record.range),
+      ...testSymbols.filter((record) => record.test_file === file).map((record) => record.test_range),
     ];
-    normalizeUtf8Ranges(source, ranges);
+    new SourceOffsets(source).normalizeRanges(ranges);
   }
 
   return {
