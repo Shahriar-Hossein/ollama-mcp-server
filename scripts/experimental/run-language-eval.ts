@@ -230,10 +230,20 @@ async function answerFromEvidence(
 
 export type AnswerFromEvidenceResult = Awaited<ReturnType<typeof answerFromEvidence>>;
 
+export type EvalFixtureDescriptor = {
+  manifestPath: string;
+  sourcePath: string;
+  sha256: string;
+  validate: typeof validateLanguageFixture;
+  implementationFiles: string[];
+};
+
 export async function runLanguageEval(options: {
   output: string;
   model: string;
   only?: string[];
+  fixture?: EvalFixtureDescriptor;
+  generate?: typeof generateResult;
   scout?: typeof runLocalExploreRepo;
   answer?: (
     query: string,
@@ -246,12 +256,24 @@ export async function runLanguageEval(options: {
   modelDigest?: string;
   ollamaVersion?: string;
 }) {
-  const fixture = JSON.parse(readFileSync(manifestPath, "utf8")) as LanguageFixture;
-  const fixtureSha = hashFile(manifestPath);
-  if (fixtureSha !== FROZEN_FIXTURE_SHA256)
+  const descriptor = options.fixture;
+  const fixtureManifestPath = resolve(descriptor?.manifestPath ?? manifestPath);
+  const fixtureSourcePath = resolve(descriptor?.sourcePath ?? sourcePath);
+  const pinnedHash = descriptor?.sha256 ?? FROZEN_FIXTURE_SHA256;
+  const validateFixture = descriptor?.validate ?? validateLanguageFixture;
+  const output = resolve(options.output);
+  const protectedPaths = [fixtureManifestPath, fixtureSourcePath];
+  for (const path of [output, `${output}.tmp`]) {
+    if (protectedPaths.some((protectedPath) => path === protectedPath ||
+        path.startsWith(`${protectedPath}/`)))
+      throw new Error("Evaluation output would overwrite the frozen fixture");
+  }
+  const fixture = JSON.parse(readFileSync(fixtureManifestPath, "utf8")) as LanguageFixture;
+  const fixtureSha = hashFile(fixtureManifestPath);
+  if (fixtureSha !== pinnedHash)
     throw new Error("Language evaluation manifest differs from the frozen fixture commit");
   const validationStarted = performance.now();
-  validateLanguageFixture(fixture, sourcePath);
+  validateFixture(fixture, fixtureSourcePath);
   const fixtureValidationMs = Math.round(performance.now() - validationStarted);
   if (options.only?.some((id) => !id.trim())) throw new Error("--only requires nonempty question IDs");
   if (options.only && new Set(options.only).size !== options.only.length)
@@ -264,7 +286,7 @@ export async function runLanguageEval(options: {
   if (!requested.length) throw new Error("No questions selected");
 
   const preflight = {
-    fixture_path: manifestPath,
+    fixture_path: fixtureManifestPath,
     fixture_sha256: fixtureSha,
     source_hashes: fixture.source_hashes,
     model: options.model,
@@ -288,27 +310,33 @@ export async function runLanguageEval(options: {
   const materializationStarted = performance.now();
   let targetRoot: string;
   try {
-    targetRoot = materializeTarget(sourcePath);
+    targetRoot = materializeTarget(fixtureSourcePath);
   } catch (error) {
     checkpoint(options.output, { ...preflight, setup_error: error instanceof Error ? error.message : String(error) }, []);
     throw error;
   }
   const materializationMs = Math.round(performance.now() - materializationStarted);
+  const checkFrozen = () => {
+    if (hashFile(fixtureManifestPath) !== pinnedHash)
+      throw new Error("Frozen answer manifest changed during evaluation");
+    validateFixture(fixture, fixtureSourcePath);
+    validateFixture(fixture, targetRoot);
+  };
   let targetValidationMs = 0;
   try {
     const targetValidationStarted = performance.now();
-    validateLanguageFixture(fixture, targetRoot);
+    checkFrozen();
     targetValidationMs = Math.round(performance.now() - targetValidationStarted);
   } catch (error) {
     rmSync(targetRoot, { recursive: true, force: true });
     throw error;
   }
   const protocol = {
-    fixture_path: manifestPath,
+    fixture_path: fixtureManifestPath,
     fixture_sha256: fixtureSha,
     source_hashes: fixture.source_hashes,
     implementation_sha256: Object.fromEntries(
-      implementationFiles().map((file) => [file, hashFile(resolve(file))]),
+      [...implementationFiles(), ...(descriptor?.implementationFiles ?? [])].map((file) => [file, hashFile(resolve(file))]),
     ),
     model: options.model,
     model_digest: modelDigest,
@@ -327,7 +355,7 @@ export async function runLanguageEval(options: {
       "-1",
       "--format=%H",
       "--",
-      relative(process.cwd(), manifestPath),
+      relative(process.cwd(), fixtureManifestPath),
     ]),
     requested_ids: requested.map((question) => question.id),
     setup_ms: {
@@ -383,13 +411,11 @@ export async function runLanguageEval(options: {
       let result: Awaited<ReturnType<typeof runLocalExploreRepo>> | undefined;
       const scoutStarted = performance.now();
       try {
-        if (hashFile(manifestPath) !== fixtureSha)
-          throw new Error("Frozen answer manifest changed during evaluation");
-        validateLanguageFixture(fixture, sourcePath);
-        validateLanguageFixture(fixture, targetRoot);
+        checkFrozen();
         result = await (options.scout ?? runLocalExploreRepo)(
           { repository_root: targetRoot, query: question.query, model: options.model, limit: 10 },
           async (model, prompt, system, format, think, modelOptions) => {
+            checkFrozen();
             const attempt = scoutCalls.length + 1;
             const call: Record<string, unknown> = {
               attempt,
@@ -408,7 +434,7 @@ export async function runLanguageEval(options: {
             save();
             const callStarted = performance.now();
             try {
-              const response = await generateResult(
+              const response = await (options.generate ?? generateResult)(
                 model,
                 prompt,
                 system,
@@ -472,11 +498,13 @@ export async function runLanguageEval(options: {
           cell.answer_call = answerCallRecord;
           save();
           try {
+            checkFrozen();
             const answer = await (options.answer ?? answerFromEvidence)(
               question.query,
               result.evidence,
               options.model,
               (request, input, modelOptions) => {
+                checkFrozen();
                 answerCallRecord.prompt = request.prompt;
                 answerCallRecord.system = request.system;
                 answerCallRecord.format = request.format;
@@ -532,10 +560,7 @@ export async function runLanguageEval(options: {
         checkpoint(options.output, protocol, results);
       }
     }
-    validateLanguageFixture(fixture, sourcePath);
-    validateLanguageFixture(fixture, targetRoot);
-    if (hashFile(manifestPath) !== fixtureSha)
-      throw new Error("Frozen answer manifest changed during evaluation");
+    checkFrozen();
     const final = `${JSON.stringify({ protocol, results, complete: true }, null, 2)}\n`;
     writeFileSync(options.output, final);
     return { protocol, results, complete: true };
