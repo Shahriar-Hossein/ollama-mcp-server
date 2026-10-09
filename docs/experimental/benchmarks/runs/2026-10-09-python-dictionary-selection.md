@@ -141,3 +141,21 @@ and a module dictionary beside two local ones. Review: [sidecar](2026-10-10-pyth
   (now flagged `incomplete_text`) and FR-MODULE omits the mode value.
 - The fixes were built from this set's results, so post-fix is development data.
   Held-out evidence needs a new frozen set. One run each, non-blind.
+
+## Held-out set (five questions)
+
+Frozen in `06b2ac8` (manifest SHA `bfb47e24…a15`) before any run; code unchanged
+for the run. Shapes: keyword-only parameter, annotated default parameter, closure,
+`global` read, class attribute beside a module dictionary. Review: [sidecar](2026-10-10-python-dictionary-heldout-review.json).
+
+| | Held-out |
+|---|---|
+| Answers with a false claim | 1 (HO-CLASS) |
+| Correct and complete | 1/5 (HO-CLOSURE) |
+
+- HO-CLASS: answer read the class attribute (`log`, 3) instead of the module
+  dictionary; the checklist has no class-scope rule.
+- HO-GLOBAL omitted the mode value (the open omitted-value case); the two
+  parameter cases avoided false claims but stayed incomplete.
+- One run each, non-blind, n=5: the strip fix held on new parameter shapes, the
+  class-scope shape is a new gap.

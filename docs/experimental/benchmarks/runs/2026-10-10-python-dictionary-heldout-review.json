@@ -1,0 +1,13 @@
+{
+  "reviewer": "lead (Claude Sonnet 5.5), non-blind: answers checked against source",
+  "manifest_sha256": "bfb47e24ab181707aeedbbba573d51e1ce7e79ba9ce675fa9481607ba4487a15",
+  "run": {"file": "benchmark-data/language-eval/python-dictionary-heldout/run1.json", "sha256": "b4b6f1777980812061faeaa2d8161399033dcf2c6b00452baba7b0808a86fe1f", "code": "06b2ac8 (no code change between freeze and run)"},
+  "cases": {
+    "HO-KWONLY": "no false claim; says 'passed as keyword argument'; no mode value, no attempts statement; incomplete",
+    "HO-TYPEDDEFAULT": "no false claim; says argument CACHE, attempts not in evidence; incomplete",
+    "HO-CLOSURE": "correct and complete: lifo, 2, enclosing local QUEUE; module QUEUE not mentioned",
+    "HO-GLOBAL": "attempts 8 correct; mode value idle omitted; incomplete",
+    "HO-CLASS": "false claim: reads class SCALE, log, 3 (class attribute is not in method scope; module is linear, 5)"
+  },
+  "totals": {"false_claim": 1, "correct_and_complete": 1, "questions": 5}
+}
