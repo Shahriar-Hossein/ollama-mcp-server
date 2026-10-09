@@ -39,9 +39,18 @@ lexical answer context establishes no improvement; source audits separate claim
 truth, citation support and wording. The original frozen evaluation was unchanged
 and was not rerun.
 
-Next: test a fresh bounded Python cross-scope citation check on known-bad and
-clean examples before routing. Flag inconsistent lexical owners while leaving
-binding targets unresolved. Start review/correction clocks before inspection and
-drafting. PHP aliases/includes and Python package imports remain future bounded
-work. Keep six-file/24,000-character packing bounds; working-tree cache
-invalidation and aggregate checks remain pending.
+The fresh two-question [Python citation evaluation](2026-10-09-citation-eval.md)
+completed at `be8a1e4` against freeze `fc76f1f`. The six static cases establish
+lexical review cues only: both known wrong claims and a true cross-scope contrast
+are flagged. The inline answer is complete; background drops the module dictionary
+values despite complete packing and emits unfinished semantic strings under a
+normal stop. Independent source review supplies one corrected answer without a
+model rerun. Original language/scope freezes and raw artifacts remain unchanged.
+
+Next: develop bounded Python named module-dictionary declaration/value retention
+in selected context, then freeze fresh questions. Separately test incomplete
+answer-string detection; valid JSON and normal stops do not prove completeness.
+Do not generalize these cues into binding/import resolution or routing claims.
+PHP aliases/includes and Python package imports remain future bounded work. Keep
+six-file/24,000-character packing bounds; working-tree cache invalidation and
+aggregate checks remain pending.

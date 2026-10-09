@@ -20,7 +20,7 @@ prove a false claim. Absence of a flag does not prove binding or correctness.
 
 Question query text is separate from gold answers, required refs and forbidden
 claims. Model runs must send only queries and source evidence, never golden
-fields or static case claims. No model runs or accuracy results are recorded here.
+fields or static case claims. The baseline model run and independent source audit are recorded below.
 
 The local H draft took 20,730 ms and supplied the requested six IDs, schema,
 shadowing, async function and scalar returns. It missed multiline dictionaries,
@@ -110,5 +110,85 @@ retains `no_citations` with `needs_review`. Raw malformed output is preserved.
 Both artifacts retain pending manual review with correctness and correction metrics
 null. A checked ownership record describes lexical comparison only, never semantic
 support or answer correctness. Output checks protect source/manifest paths from
-raw and sibling writes, including existing symlink aliases. No real model results
-are recorded by this implementation step.
+raw and sibling writes, including existing symlink aliases. The model result is
+separate from these implementation checks.
+
+## Frozen baseline result and independent source audit
+
+Command: `node --import tsx scripts/experimental/run-citation-eval.ts --model qwen-context:h-q4_0-24k`.
+Implementation `be8a1e4`; source/manifest freeze `fc76f1f`. Saved context is
+24,576; scout output reserve 2,048 and answer limit 512. One frozen run, no parent
+model rerun. Raw and owner artifacts remain unchanged; independent review and
+checked full answers are in ignored `model-run.review.json` beside them.
+
+| Question | Required | Retrieved range | Packed initial/any | Selected | Source audit |
+| --- | ---: | ---: | ---: | ---: | --- |
+| PY-INLINE | 5 | 5 | 5/5 | 5 | Complete local inline/4 answer; key/value wording mildly imprecise |
+| PY-BACKGROUND | 5 | 2 | 5/5 | 2 | Incomplete; module batch/11 declaration/values omitted from selection |
+
+Stage intervals in milliseconds (not isolated model time):
+
+| Question | Index | Retrieval | Packing | Scout queue/request wall | Answer queue/request wall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| PY-INLINE | 22 | 8 | 3 | 19,826 | 7,042 |
+| PY-BACKGROUND | 17 | 0 | 1 | 13,389 | 6,819 |
+
+These stage intervals exclude run-level setup: fixture validation 1 ms, source/Git
+materialization 17 ms, target validation 3 ms and model settings 21 ms. Request
+wall intervals include local queue wait and API work. Question end-to-end intervals
+include in-question tools and observer/checkpoint overhead, not that run-level setup.
+The stages are not a complete additive breakdown or isolated inference latency.
+
+All selected quotes and claim citation locations match source. Inline's four
+claims are source-correct in answer context. Background's dictionary-read claim
+is true but cites only its header; its return claim and main answer end at
+`OPTIONS[` and cannot express a complete claim. Its mode-read claim is true.
+Its attempts abstention accurately describes the selected evidence, not the full
+source, and is not counted as an incorrect source claim. Across eight structured
+claims, seven are source-correct or qualified (including imprecise wording and the
+evidence-limited abstention), one is unassessable because incomplete, and zero are
+independently known false structured claims. This is not an overall zero-wrong-claims
+result: the separate scout text
+incorrectly says no OPTIONS read/constant return; line 16 contradicts it.
+
+Both questions had two scout attempts (one retry), one bounded source expansion,
+one answer call and zero answer retries. All six generation completions have
+`done_reason: stop`; neither semantic truncation nor valid JSON establishes a
+length stop or timeout. End-to-end question intervals were 27,433 and 20,249 ms,
+including tools and orchestration. One source-corrected answer is needed: background
+reads module OPTIONS and returns batch; its dictionary attempts value is 11.
+Inline needs no answer correction. Exact checked citations and all eight individual
+claim classifications are preserved in the review artifact.
+
+No real claim has a foreign-owner cue, yet background is incomplete. The six
+static cases flag both known wrong claims and the true contrast; module refs
+remain unresolved and UNKNOWN has no evidence. Owner comparison is a review cue,
+not a truth/completeness classifier.
+
+Measured intervals are agent wall time, never human effort or isolated reasoning:
+
+- Root initial structured-answer/source review: 16:53:52.757–16:54:29.448 UTC,
+  36,691 ms, source already known. This excludes later scout/report verification;
+  per-case and full-workflow effort remain unmeasured.
+- Independent Sol audit: 16:55:20.904–16:56:13.556 UTC, 52,652 ms; includes tools,
+  truncated output/reread and trailing-newline verification retry.
+- Sol correction drafting: 16:56:21.658–16:57:02.593 UTC, 40,935 ms, separately
+  bracketed before writing full answers and checked citations.
+
+Per-case parent-review/correction times remain null; global intervals are not
+divided between cases. Four local H development tasks preceded Sol fallback:
+fixture useful but incomplete, pure typed helper passed, broader supplied-interface
+adapter failed, and the smaller descriptor omitted an explicitly requested cast.
+This supports smaller typed tasks with executable gates, not promotion or savings.
+
+Artifact SHA-256:
+
+- Raw: `d39f676a57e5d5155237e4d979f94b096591656669a0348b53647cdf89f946d3`
+- Owners: `11737da1ef7a571b858372cbe6e66d414c2e32e098fb5b7f9a16f8c051532cad`
+- Review: `9e29bbd5022070b017e47e8d8f625ba6e784e9ab3116e6d36b5b5fc9ff4e847a`
+
+Original multilingual and scope manifests/raw artifacts were hash-checked unchanged.
+The 26 focused named tests and typechecks passed before this documentation-only
+step. Next: develop explicit retention of named module dictionary declarations
+and scalar values in Python selected context; separately bound incomplete-string
+checks, then freeze fresh questions. Do not tune this screen or infer imports.
