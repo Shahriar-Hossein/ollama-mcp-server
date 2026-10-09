@@ -55,14 +55,49 @@ queue and API request time; question end-to-end time includes observer and
 checkpoint overhead, so neither is labeled model-only latency. Do not start a
 second run while the benchmark supervisor lock is held.
 
-Verification before generation: fixture 4/4 tests, scorer 6/6, runner 3/3, and
-the local-explore suite 130/130 passed; repository and script TypeScript checks
-passed. Logs are ignored under `benchmark-data/language-eval/check-*.log`.
-The suite checks that the source target contains no keys, the final prompt
-contains only checked selected evidence, retries do not double-count exact
-tuples, wrong text at the same location earns no credit, observer snapshots
-cannot mutate packing input, and malformed final-answer output remains in the
-audit artifact. No model-generation evaluation has run yet.
+Pre-generation verification passed: fixture 4/4, scorer 6/6, runner 3/3, and
+local-explore 130/130; repository and script TypeScript checks passed. The
+tests check the source-only target, key isolation, retry tuple deduplication,
+wrong-text rejection, immutable observer snapshots and malformed-answer
+preservation. The completed run and separate answer audit are local ignored
+artifacts; the raw run SHA-256 is
+`038d2ed36a5df41334edec1a165dcd7245d1a718b6d38820f612644f10333809`.
+
+The completed run used `qwen-context:h-q4_0-24k` with saved `num_ctx=24576` and
+`num_predict=16000`; the lead checked 100% GPU placement during the first
+question. The deterministic summary recomputed 42 required lines, 28 contained in a
+retrieved symbol range, 36 packed before generation and 34 selected. Packing
+coverage stayed at 36 across attempts. By language, required/range/packed/any/
+selected counts were PHP 16/5/10/10/8, Python 14/12/14/14/14, Go 6/6/6/6/6,
+and Rust 6/5/6/6/6. Every result was `needs_review`; these status counts are not
+correctness scores. There were 24 scout calls, 12 answer calls, 12 retries, and
+12 bounded expansions with `outcome: added`; their per-event duration rounded
+to 0 ms, while the added lines appeared in each second-attempt prompt. Raw
+required-ref selections improved from 2 to 3 in PHP-03 and PY-03, were
+unchanged in the other ten cases, and did not change aggregate packed required
+coverage.
+
+End-to-end time summed to 320,677 ms (median 26,146 ms). Index, retrieval and
+packing sums were 321, 38 and 35 ms; input checks were 426 ms. Scout and answer
+queue/API wall sums were 249,352 and 69,566 ms. Native Ollama completion time
+across 36 calls summed to 318,685.477 ms. These measurements include queue,
+API, observer and checkpoint costs as labeled by the runner; the tiny fixture
+does not support a production indexing-cache conclusion. Generation dominates
+this run's measured time.
+
+The source-checked answer audit found five fully correct and cited cases, two
+semantically correct cases needing citation/presentation repair, two incorrect
+valid answers, one safe abstention, one invalid truncated answer, and one
+unsupported dispatch-resolution narrative. All recorded citation locations
+match checked source lines; that check does not establish that a citation
+entails its claim. Corrected answers for the seven intervention cases and the
+category rationale are in the ignored `benchmark-data/language-eval/claim-audit.json`,
+pinned to the raw run hash. The lead's measured agent review/correction wall
+proxy totals 178 seconds across two dedicated measured lead intervals. It
+excludes later integration/report checks and Luna's separate completion work,
+and is not human effort, savings or per-case time. Per-case review and
+correction times remain null because no per-case allocation was measured. No
+general reliability rate is inferred from this single small controlled run.
 
 The local scorer drafts failed repeatedly. The first stopped with truncated JSON
 under a 3000-token output ceiling and invalid `Set<Line>.some`, omitted text from its
@@ -78,7 +113,9 @@ three focused tests; validate output with a standalone typecheck, run the tests
 directly, and report each failed assertion before expanding scope. These
 failures did not change the fixture freeze.
 
-Next: lead reviews this runner diff, then starts one detached, locked full
-12-question evaluation. After its artifact is complete, audit H's claim and
-citation correctness against the frozen manifest and enter measured aggregate
-review/correction effort without inventing per-question effort allocations.
+Next: test filename-anchored PHP top-level guard/key packing on a fresh
+non-evaluation fixture. Carry enclosing headers and paired configuration values
+into answer context, and add cross-scope citation checks. Measure generation
+time before considering an index cache; a cache must later account for working-
+tree invalidation. Track the cost of parent-only semantic checks rather than
+skipping them for speed.

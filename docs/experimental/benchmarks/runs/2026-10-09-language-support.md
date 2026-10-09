@@ -19,8 +19,16 @@ binding, crate paths, macros and cfg evaluation remain outside this scope.
 Go/Rust callable and package semantics still require parent review; lexical
 context and mocked selections do not establish runtime behavior.
 
-Next: run a fresh PHP/Python-first model evaluation on new sources and questions.
-Inspect required evidence, actual selected citations and fallback quality
-separately. Do not tune against private evaluation answers or reuse historical
-non-error response counts as correctness scores. Real-model selection reliability
-for these new language contexts remains unmeasured.
+The fresh 12-case PHP/Python/Go/Rust evaluation completed on frozen source
+fixtures. It selected 34 of 42 required lines; all cases returned
+`needs_review`, which is a pipeline status rather than an answer score. A
+separate source audit found mixed outcomes and corrected seven cases. See the
+[language evaluation report](2026-10-09-language-eval.md); it records stage
+coverage, claim/citation distinctions and the small-sample limitation.
+
+Next: test filename-anchored PHP top-level guard/key packing on a fresh
+non-evaluation fixture. Carry enclosing headers and paired configuration values
+into answer context, then check citations against function scope. Measure
+generation time before considering index caching; any cache must handle
+working-tree invalidation. Keep parent-only semantic checks visible in timing
+reports rather than skipping them.
