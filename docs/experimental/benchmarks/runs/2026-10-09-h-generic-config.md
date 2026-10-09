@@ -70,3 +70,5 @@ Carry answer checkpointing into the next reproducible benchmark runner. Develop
 configuration initialization and provider-provenance cases separately.
 Then freeze fresh real-source questions before measuring again. Keep supplied
 evidence, selected evidence and parent completion separate.
+
+Continued in [configuration initialization and provenance](2026-10-09-h-config-provenance.md).

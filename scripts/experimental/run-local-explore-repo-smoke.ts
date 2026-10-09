@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -5,11 +6,16 @@ import { resolve } from "node:path";
 import axios from "axios";
 import { OLLAMA_HOST, REQUEST_TIMEOUT_MS } from "../../src/ollama-client.js";
 import { runLocalExploreRepo } from "../../src/experimental/tools/local-explore-repo.js";
+import { checkedFile } from "../../src/experimental/tools/local-explore-packing.js";
 
 type Fixture = {
   version: number;
   files?: Record<string, string>;
-  questions: Array<{ id: string; query: string }>;
+  questions: Array<{
+    id: string;
+    query: string;
+    required?: Array<{ file: string; line: number; text: string }>;
+  }>;
 };
 
 const arguments_ = process.argv.slice(2);
@@ -89,6 +95,7 @@ const protocol = {
       "src/experimental/tools/local-explore-relationships.ts",
       "src/experimental/tools/local-explore-operations.ts",
       "src/experimental/tools/local-explore-prompt.ts",
+      "src/experimental/tools/local-explore-config-context.ts",
       "src/ollama-client.ts",
       "src/qwen-tokenizer.ts",
     ].map((file) => [
@@ -126,6 +133,8 @@ const protocol = {
     import_call_expansion_hops: 2,
     named_caller_identity: true,
     direct_object_provider_pairs: true,
+    configuration_initialization_context: true,
+    configuration_injection_context: true,
     bundled_context_dedup: true,
     evidence_line_refs: true,
     bounded_expansion_rounds: 1,
@@ -138,6 +147,13 @@ const protocol = {
   ollama_version: runCommand("ollama", ["--version"]),
 };
 const results: unknown[] = [];
+mkdirSync(resolve(outputPath, ".."), { recursive: true });
+function checkpoint(current: unknown) {
+  writeFileSync(
+    resolve(outputPath),
+    `${JSON.stringify({ protocol, results: [...results, current], complete: false }, null, 2)}\n`,
+  );
+}
 
 for (const model of models) {
   const modelStartedAt = new Date().toISOString();
@@ -185,19 +201,97 @@ for (const model of models) {
     process.stderr.write(
       `  ${model} ${question.id} finished in ${elapsed_ms}ms (${result.status})\n`,
     );
-    questions.push({
+    const cell = {
       id: question.id,
       query: question.query,
       started_at,
       elapsed_ms,
       calls,
       result,
+      audit: {
+        status: "pending" as "pending" | "passed" | "failed",
+        error: undefined as string | undefined,
+      },
+      score: undefined as
+        | { required: number; supplied: number; selected: number; parent_completion: "pending" }
+        | undefined,
+    };
+    questions.push(cell);
+    // Save raw answers before an audit can abort the run.
+    checkpoint({
+      model,
+      model_digest: modelDigests.get(model),
+      model_started_at: modelStartedAt,
+      questions,
     });
-    mkdirSync(resolve(outputPath, ".."), { recursive: true });
-    writeFileSync(
-      resolve(outputPath),
-      `${JSON.stringify({ protocol, results: [...results, { model, questions }] }, null, 2)}\n`,
-    );
+    try {
+      for (const evidence of result.evidence) {
+        assert.equal(
+          readFileSync(checkedFile(root, evidence.file), "utf8")
+            .split("\n")
+            [evidence.line - 1]?.trim(),
+          evidence.quote,
+          `Selected quote differs from source: ${evidence.file}:${evidence.line}`,
+        );
+      }
+      for (const [file, hash] of Object.entries(fixture.files ?? {})) {
+        assert.equal(
+          createHash("sha256")
+            .update(readFileSync(resolve(root, file)))
+            .digest("hex"),
+          hash,
+          `Frozen source changed: ${file}`,
+        );
+      }
+      assert.equal(
+        createHash("sha256").update(readFileSync(fixturePath)).digest("hex"),
+        protocol.fixture_sha256,
+        "Frozen fixture changed",
+      );
+      const required = question.required ?? [];
+      for (const expected of required) {
+        assert.equal(
+          readFileSync(resolve(root, expected.file), "utf8").split("\n")[expected.line - 1]?.trim(),
+          expected.text,
+          `Rubric differs from source: ${expected.file}:${expected.line}`,
+        );
+      }
+      cell.score = question.required
+        ? {
+            required: required.length,
+            supplied: required.filter((expected) =>
+              result.candidates.some(
+                (candidate) =>
+                  candidate.file === expected.file &&
+                  candidate.lines.some(
+                    (line) => line.line === expected.line && line.text.trim() === expected.text,
+                  ),
+              ),
+            ).length,
+            selected: required.filter((expected) =>
+              result.evidence.some(
+                (evidence) =>
+                  evidence.file === expected.file &&
+                  evidence.line === expected.line &&
+                  evidence.quote === expected.text,
+              ),
+            ).length,
+            parent_completion: "pending",
+          }
+        : undefined;
+      cell.audit.status = "passed";
+    } catch (error) {
+      cell.audit.status = "failed";
+      cell.audit.error = error instanceof Error ? error.message : String(error);
+      checkpoint({ model, questions });
+      throw error;
+    }
+    checkpoint({
+      model,
+      model_digest: modelDigests.get(model),
+      model_started_at: modelStartedAt,
+      questions,
+    });
   }
   results.push({
     model,

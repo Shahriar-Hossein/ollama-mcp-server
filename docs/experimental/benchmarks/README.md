@@ -34,6 +34,7 @@ numbers behind one specific series.
 | [2026-10-06-h-provider-conditions.md](runs/2026-10-06-h-provider-conditions.md) | Provider search hints, explicit image conditions and a frozen follow-up screen |
 | [2026-10-06-h-operation-scoping.md](runs/2026-10-06-h-operation-scoping.md) | Negated operation planning, method-bound conditions/errors and H development regression |
 | [2026-10-06-h-desktop-gpu.md](runs/2026-10-06-h-desktop-gpu.md) | H/24K GPU default, desktop-pressure fit, fixed-input timing and capacity tradeoffs |
+| [2026-10-09-h-config-provenance.md](runs/2026-10-09-h-config-provenance.md) | Configuration initialization/injection context, checkpoint-before-audit runner and fresh source screen |
 
 ## The rule for benchmark work
 

@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "authorship": "Bounded fresh-context Luna source scouting; lead verified all rubric lines after development tests and before generation.",
+  "protocol": "Run once after freeze; do not tune or rerun from answers. Separate supplied lines, selected exact lines and parent completion. Four-file real-source slice, not unseen-repository accuracy. An earlier generic local scout query on this repository returned low-confidence irrelevant setup citations; these specific questions are fresh.",
+  "source_repository": "/home/shahriar/projects/nest-auth-api",
+  "source_commit": "c989984e439e6db9e9805d169e0a0e20749adfb8",
+  "source_working_tree_modified_files": [
+    "src/auth/jwt.strategy.ts"
+  ],
+  "snapshot_root": "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-config-provenance-2026-10-09-source",
+  "files": {
+    "src/app.module.ts": "8b3f9809e80009c1692b7da0599481735bc231b4897f7a0095a8ce367480bc34",
+    "src/auth/auth.module.ts": "6ef877051b4a417fe16e0a6ff4b7c068bdcbe09f5711311324da7224c52918a1",
+    "src/auth/jwt.strategy.ts": "ccbb729ed0c374e238f68e48037a662297741a740c84c4964f3eb5b13b15de79",
+    "src/auth/constants.ts": "37ca44e515acbb4d04325ddd9ec737803bd78911fec91c93fd782b7354d8696b"
+  },
+  "frozen_at": "2026-10-09T08:09:04.672602+00:00",
+  "questions": [
+    {
+      "id": "global_initialization",
+      "kind": "positive",
+      "query": "Where does the application initialize configuration with its global setting?",
+      "required": [
+        {
+          "file": "src/app.module.ts",
+          "line": 6,
+          "text": "import { ConfigModule } from '@nestjs/config';"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 9,
+          "text": "@Module({"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 10,
+          "text": "imports: ["
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 11,
+          "text": "ConfigModule.forRoot({"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 12,
+          "text": "isGlobal: true,"
+        }
+      ]
+    },
+    {
+      "id": "secret_provenance_contrast",
+      "kind": "positive",
+      "query": "How is JWT_SECRET supplied to JwtStrategy compared with the secret configured by AuthModule, including the injected configuration reader and the constant's source?",
+      "required": [
+        {
+          "file": "src/auth/jwt.strategy.ts",
+          "line": 5,
+          "text": "import { ConfigService } from '@nestjs/config';"
+        },
+        {
+          "file": "src/auth/jwt.strategy.ts",
+          "line": 9,
+          "text": "constructor(private config: ConfigService) {"
+        },
+        {
+          "file": "src/auth/jwt.strategy.ts",
+          "line": 13,
+          "text": "secretOrKey: config.get<string>('JWT_SECRET')!,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 6,
+          "text": "import { jwtConstants } from './constants.js';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 12,
+          "text": "JwtModule.register({"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 14,
+          "text": "secret: jwtConstants.secret,"
+        },
+        {
+          "file": "src/auth/constants.ts",
+          "line": 2,
+          "text": "export const jwtConstants = {"
+        },
+        {
+          "file": "src/auth/constants.ts",
+          "line": 3,
+          "text": "secret: process.env.JWT_SECRET,"
+        }
+      ]
+    },
+    {
+      "id": "absent_injected_signer_factory",
+      "kind": "negative",
+      "query": "Does AuthModule register an injected configuration provider factory for JWT_SECRET, or configure JwtModule through a constant?",
+      "required": [
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 6,
+          "text": "import { jwtConstants } from './constants.js';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 12,
+          "text": "JwtModule.register({"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 14,
+          "text": "secret: jwtConstants.secret,"
+        },
+        {
+          "file": "src/auth/constants.ts",
+          "line": 2,
+          "text": "export const jwtConstants = {"
+        },
+        {
+          "file": "src/auth/constants.ts",
+          "line": 3,
+          "text": "secret: process.env.JWT_SECRET,"
+        }
+      ],
+      "absence": "This four-file snapshot shows JwtModule.register with jwtConstants.secret, sourced directly from process.env; no signer useFactory/inject registration occurs in AuthModule. Constructor injection in JwtStrategy does not establish a signer factory. Parent source review is required; this is not a full-repository absence claim."
+    }
+  ]
+}
