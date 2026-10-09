@@ -231,6 +231,36 @@ test("Go scout retrieves tracked source and supplies lexical closure context", a
   }
 });
 
+test("Rust scout retrieves tracked source and supplies lexical closure context", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-rust-"));
+  const source = "// é😀\nfn total(amount: i32) -> i32 {\n  let callback = || {\n    amount * 5\n  };\n  callback()\n}\n";
+  try {
+    writeFileSync(join(root, "billing.rs"), source);
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root });
+    execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", "commit", "-qm", "fixture"], { cwd: root });
+    let calls = 0;
+    const result = await runLocalExploreRepo({ repository_root: root, query: "Where is total defined in the Rust billing.rs code?" }, async (_model, prompt) => {
+      calls++;
+      const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
+      const file = sources.find((item) => item.file === "billing.rs")!;
+      assert.ok(file);
+      const selected = file.lines.find((line) => line.text.includes("amount * 5"))!;
+      const header = file.lines.find((line) => line.text.includes("fn total"))!;
+      assert.ok(selected && header);
+      return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [header.ref, selected.ref] }], confidence: "high", unresolved: [], next_action: { ref: "" } });
+    });
+    assert.ok(calls > 0 && calls <= 2);
+    assert.equal(result.status, "needs_review");
+    assert.ok(result.evidence.some((line) => line.file === "billing.rs" && line.quote.trim() === "amount * 5"));
+    assert.ok("supporting_context" in result);
+    assert.ok(result.supporting_context.some((line) => line.file === "billing.rs" && line.line === 3));
+    assert.equal(readFileSync(join(root, "billing.rs"), "utf8"), source);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("decomposes independent evidence requirements", () => {
   assert.deepEqual(decomposeQuestion("Where is x registered, and is it enabled by default?"), [
     {

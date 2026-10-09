@@ -7,6 +7,7 @@ import Go from "tree-sitter-go";
 import JavaScript from "tree-sitter-javascript";
 import PHP from "tree-sitter-php";
 import Python from "tree-sitter-python";
+import Rust from "tree-sitter-rust";
 import TypeScript from "tree-sitter-typescript";
 import { parseSource } from "./parse.js";
 import { SourceOffsets } from "./source-offsets.js";
@@ -49,7 +50,7 @@ export interface SymbolRecord {
   repository_root: ".";
   commit_hash: string;
   file: string;
-  language: "typescript" | "javascript" | "php" | "python" | "go";
+  language: "typescript" | "javascript" | "php" | "python" | "go" | "rust";
   kind: SymbolKind;
   name: string;
   qualified_name: string;
@@ -144,6 +145,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, SupportedLanguage> = {
   ".php": "php",
   ".py": "python",
   ".go": "go",
+  ".rs": "rust",
 };
 
 function command(root: string, args: string[]): string {
@@ -167,7 +169,9 @@ function languageForPath(path: string): SupportedLanguage | null {
 function parserFor(language: SupportedLanguage, file: string): Parser {
   const parser = new Parser();
   parser.setLanguage(
-    language === "go"
+    language === "rust"
+      ? Rust
+      : language === "go"
       ? Go
       : language === "python"
         ? Python
@@ -253,6 +257,7 @@ function pythonDeclarationFor(node: Parser.SyntaxNode): Declaration | null {
 }
 
 function declarationFor(node: Parser.SyntaxNode, language: SupportedLanguage): Declaration | null {
+  if (language === "rust") return rustDeclarationFor(node);
   if (language === "php") return phpDeclarationFor(node);
   if (language === "python") return pythonDeclarationFor(node);
   const name = nameFrom(node.childForFieldName("name"));
@@ -294,6 +299,33 @@ function declarationFor(node: Parser.SyntaxNode, language: SupportedLanguage): D
     default:
       return null;
   }
+}
+
+const RUST_DECLARATIONS: Record<string, SymbolKind> = {
+  function_item: "function",
+  function_signature_item: "function",
+  struct_item: "type",
+  enum_item: "enum",
+  trait_item: "trait",
+  type_item: "type",
+  mod_item: "module",
+  const_item: "constant",
+  static_item: "variable",
+};
+
+function rustDeclarationFor(node: Parser.SyntaxNode): Declaration | null {
+  const kind = RUST_DECLARATIONS[node.type];
+  const nameNode = node.childForFieldName("name");
+  if (!kind || !nameNode || node.hasError) return null;
+  const owner = node.parent?.type === "declaration_list" ? node.parent.parent : null;
+  const method = kind === "function" && ["impl_item", "trait_item"].includes(owner?.type ?? "");
+  // The full lexical impl header distinguishes inherent and trait impls without resolving either.
+  const qualifiedPrefix = owner?.type === "impl_item"
+    ? owner.text
+        .slice(0, (owner.childForFieldName("body")?.startIndex ?? owner.endIndex) - owner.startIndex)
+        .replace(/\s+/g, " ").trim()
+    : undefined;
+  return { kind: method ? "method" : kind, name: nameNode.text, nameNode, qualifiedPrefix };
 }
 
 function goDeclarationsFor(node: Parser.SyntaxNode): Declaration[] {
@@ -538,7 +570,7 @@ function collectTests(
   tests: TestRecord[],
   testSymbols: TestSymbolEdge[],
 ): void {
-  if (language === "go") return;
+  if (language === "go" || language === "rust") return;
   if (!isTestFile(file)) return;
   const framework = testFramework(source);
   const fileTests: TestRecord[] = [];
@@ -631,6 +663,41 @@ function collectStructuralRecords(
 ): void {
   const tree = parseSource(parserFor(language, file), source);
   const declarationRanges = new Set(records.map((record) => record.selection_range.start.byte));
+  if (language === "rust") {
+    const ownerFor = (node: Parser.SyntaxNode): string | null => {
+      for (let scope = node.parent; scope; scope = scope.parent) {
+        if (scope.type === "closure_expression") return null;
+        if (scope.type === "function_item") return records.find((record) =>
+          ["function", "method"].includes(record.kind) &&
+          record.range.start.byte === scope.startIndex && record.range.end.byte === scope.endIndex
+        )?.id ?? null;
+      }
+      return null;
+    };
+    const visitRust = (node: Parser.SyntaxNode): void => {
+      const imported = node.type === "use_declaration" ? node.childForFieldName("argument")
+        : node.type === "mod_item" && !node.childForFieldName("body") ? node.childForFieldName("name") : null;
+      if (imported && !node.hasError) dependencies.push({
+        file, range: range(imported), module_specifier: imported.text,
+        target_file: null, resolution: "unresolved",
+      });
+      if (node.type === "call_expression" && !node.hasError) {
+        const callee = node.childForFieldName("function");
+        if (callee) calls.push({
+          caller_symbol_id: ownerFor(node), callee_name: callee.text, callee_symbol_id: null,
+          file, range: range(callee), resolution: "unresolved", guard_condition: null,
+        });
+      }
+      if (["identifier", "type_identifier", "field_identifier"].includes(node.type) &&
+        !node.hasError && !declarationRanges.has(node.startIndex)) references.push({
+          file, range: range(node), name: node.text, source_symbol_id: ownerFor(node),
+          target_symbol_id: null, resolution: "unresolved",
+        });
+      for (const child of node.namedChildren) visitRust(child);
+    };
+    visitRust(tree.rootNode);
+    return;
+  }
   if (language === "go") {
     const visitGo = (node: Parser.SyntaxNode): void => {
       if (node.type === "import_spec") {
@@ -988,7 +1055,7 @@ function collectSymbols(
   for (const declaration of declarations) {
     const parentQualifiedName = parent?.qualified_name ?? "";
     const baseQualifiedName = declaration.qualifiedPrefix
-      ? `${escapeQualifiedNamePart(declaration.qualifiedPrefix)}.${escapeQualifiedNamePart(declaration.name)}`
+      ? `${language === "rust" && parentQualifiedName ? `${parentQualifiedName}.` : ""}${escapeQualifiedNamePart(declaration.qualifiedPrefix)}.${escapeQualifiedNamePart(declaration.name)}`
       : parentQualifiedName
         ? `${parentQualifiedName}.${escapeQualifiedNamePart(declaration.name)}`
         : escapeQualifiedNamePart(declaration.name);

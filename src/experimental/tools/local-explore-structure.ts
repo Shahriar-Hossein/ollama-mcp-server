@@ -4,6 +4,7 @@ import Parser from "tree-sitter";
 import Go from "tree-sitter-go";
 import PHP from "tree-sitter-php";
 import Python from "tree-sitter-python";
+import Rust from "tree-sitter-rust";
 import { parseSource } from "../../explorer/parse.js";
 import { parseConfigurationTree } from "./local-explore-config-context.js";
 import { moduleMetadata } from "./local-explore-provenance.js";
@@ -35,6 +36,7 @@ const PHP_SCOPES = new Set([
 ]);
 const PYTHON_SCOPES = new Set(["function_definition", "class_definition", "lambda"]);
 const GO_SCOPES = new Set(["function_declaration", "method_declaration", "type_spec", "type_alias", "func_literal"]);
+const RUST_SCOPES = new Set(["function_item", "function_signature_item", "struct_item", "enum_item", "trait_item", "impl_item", "type_item", "mod_item", "const_item", "static_item", "closure_expression"]);
 
 // Deterministic extras (Nest @Module, enclosing declaration, scalar sibling keys); not H's selection and not semantic proof.
 type Add = (file: string, row: number, reason: string, lines: string[]) => boolean;
@@ -75,9 +77,9 @@ function enclosingPhpScope(start: Parser.SyntaxNode | null, file: string, lines:
 }
 
 function parseSupportTree(source: string, file: string) {
-  if (!/\.(?:php|py|go)$/.test(file)) return parseConfigurationTree(source, file);
+  if (!/\.(?:php|py|go|rs)$/.test(file)) return parseConfigurationTree(source, file);
   const parser = new Parser();
-  parser.setLanguage(file.endsWith(".go") ? Go : file.endsWith(".py") ? Python : PHP.php);
+  parser.setLanguage(file.endsWith(".rs") ? Rust : file.endsWith(".go") ? Go : file.endsWith(".py") ? Python : PHP.php);
   return parseSource(parser, source);
 }
 
@@ -87,6 +89,19 @@ function enclosingGoScope(start: Parser.SyntaxNode | null, file: string, lines: 
     if (!GO_SCOPES.has(node.type)) continue;
     if (node.hasError) return;
     add(file, node.startPosition.row, `enclosing Go ${node.type.replace(/_/g, " ")} of selected line (source context)`, lines);
+    return;
+  }
+}
+
+function enclosingRustScope(start: Parser.SyntaxNode | null, row: number, file: string, lines: string[], add: Add) {
+  for (let node = start; node; node = node.parent) {
+    if (node.type === "ERROR" || node.isMissing) return;
+    if (!RUST_SCOPES.has(node.type)) continue;
+    if (node.hasError || node.startPosition.row === row) return;
+    add(file, node.startPosition.row, `enclosing Rust ${node.type.replace(/_/g, " ")} of selected line (source context)`, lines);
+    const owner = node.parent?.type === "declaration_list" ? node.parent.parent : null;
+    if (owner && !owner.hasError && ["impl_item", "trait_item"].includes(owner.type))
+      add(file, owner.startPosition.row, "lexical Rust impl/trait header of selected declaration (not binding resolution)", lines);
     return;
   }
 }
@@ -225,6 +240,7 @@ export function structuralSupport(
     phpHeaders: Set<number>;
     pythonHeaders: Map<number, Parser.SyntaxNode>;
     goHeaders: Map<number, Parser.SyntaxNode>;
+    rustHeaders: Map<number, Parser.SyntaxNode>;
   } | null>();
   const add: Add = (file, row, reason, lines) => {
     const key = `${file}:${row + 1}`;
@@ -235,7 +251,7 @@ export function structuralSupport(
     return true;
   };
   for (const item of evidence) {
-    if (!/\.(?:[cm]?[jt]sx?|php|py|go)$/.test(item.file)) continue;
+    if (!/\.(?:[cm]?[jt]sx?|php|py|go|rs)$/.test(item.file)) continue;
     if (!trees.has(item.file)) {
       try {
         const source = readFileSync(join(root, item.file), "utf8");
@@ -257,7 +273,12 @@ export function structuralSupport(
           for (const node of tree.rootNode.descendantsOfType([...GO_SCOPES]))
             if (node.isNamed) goHeaders.set(node.startPosition.row, node);
         }
-        trees.set(item.file, { tree, lines: source.split("\n"), phpHeaders, pythonHeaders, goHeaders });
+        const rustHeaders = new Map<number, Parser.SyntaxNode>();
+        if (item.file.endsWith(".rs")) {
+          for (const node of tree.rootNode.descendantsOfType([...RUST_SCOPES]))
+            if (node.isNamed) rustHeaders.set(node.startPosition.row, node);
+        }
+        trees.set(item.file, { tree, lines: source.split("\n"), phpHeaders, pythonHeaders, goHeaders, rustHeaders });
       } catch {
         trees.set(item.file, null);
       }
@@ -268,6 +289,13 @@ export function structuralSupport(
     if (!Number.isInteger(row) || row < 0 || row >= parsed.lines.length || !parsed.lines[row].trim()) continue;
     const column = Math.max(0, (parsed.lines[row] ?? "").search(/\S/));
     const start: Parser.SyntaxNode | null = parsed.tree.rootNode.descendantForPosition({ row, column });
+    if (item.file.endsWith(".rs")) {
+      let invalid = false;
+      for (let node: Parser.SyntaxNode | null = start; node; node = node.parent)
+        if (node.type === "ERROR" || node.isMissing) invalid = true;
+      if (!invalid) enclosingRustScope(parsed.rustHeaders.get(row) ?? start, row, item.file, parsed.lines, add);
+      continue;
+    }
     if (item.file.endsWith(".go")) {
       let invalid = false;
       for (let node: Parser.SyntaxNode | null = start; node; node = node.parent)

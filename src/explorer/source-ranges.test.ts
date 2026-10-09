@@ -17,6 +17,7 @@ const bodies = {
   "app.js": `function résumé() { const value = '${padding}'; return helper('needleinside'); }`,
   "app.ts": `function résumé() { const value = '${padding}'; return helper('needleinside'); }`,
   "app.go": `func Résumé() string { value := "${padding}"; return helper(value + "needleinside") }`,
+  "app.rs": `fn résumé() { let value = "${padding}"; helper(value, "needleinside"); }`,
 };
 const sources = {
   "app.php": `<?php\n// é😀\nrequire './helper.php';\nclass Base {}\nclass Café extends Base {\n    ${bodies["app.php"]}\n}\nfunction helper($value) { return $value; }\n`,
@@ -24,6 +25,7 @@ const sources = {
   "app.js": `// é😀\nimport { helper } from './helper.js';\nclass Base {}\nclass Café extends Base {}\n/* é😀 */ ${bodies["app.js"]}\n`,
   "app.ts": `// é😀\nimport { helper } from './helper.js';\nclass Base {}\nclass Café extends Base {}\n/* é😀 */ ${bodies["app.ts"]}\n`,
   "app.go": `package example\n// é😀\nimport "example.com/helper"\n${bodies["app.go"]}\n`,
+  "app.rs": `// é😀\nuse crate::helper;\n${bodies["app.rs"]}\n`,
   "helper.js": "export function helper(value) { return value; }\nexport function other() {}\n",
   "helper.php": "<?php function spare() {}\n",
   "helper.py": "def run(value):\n    return value\n",

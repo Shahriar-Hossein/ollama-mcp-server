@@ -140,13 +140,20 @@ output shape. The schema constrains shape, not factual accuracy.
 
 `local_explore_repo` returns `no_evidence` before any model call when the
 question names a tracked language the index cannot search (e.g. Ruby); the
-index covers TypeScript, JavaScript, PHP, Python and Go (symbols, calls, includes,
+index covers TypeScript, JavaScript, PHP, Python, Go and Rust (symbols, calls, includes,
 inheritance; no PHP namespace/`use` resolution; Python imports resolve to files,
 but `self.method()` calls and `import a.b` bindings stay unresolved). Go indexes
 functions, receiver methods, named types and top-level const/var declarations.
 Go calls, references and import paths are source-backed but unresolved: package
 resolution, receiver dispatch and local binding identity are not inferred.
 Go scout context adds only the nearest declaration or anonymous function header.
+Rust indexes functions, lexical impl/trait methods, structs, enums, traits, type
+aliases, modules, constants and statics. Method names preserve the literal impl
+header (for example `impl Sender for Invoice.send`); this identifies source
+context, not a trait or receiver binding. Calls, references, `use` declarations
+and external module names stay unresolved. Crate paths, macros, `cfg` conditions
+and dispatch are not evaluated. Rust scout context adds the nearest declaration
+or closure header and, for direct members, the lexical impl/trait header.
 
 The model has no tools or shell access in the scout route. The older
 `local_explorer_task` loop remains for historical comparisons.

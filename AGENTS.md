@@ -26,8 +26,12 @@ This is the canonical instructions file for this repo — other agent configs
   Public ranges use UTF-8 bytes and byte columns in every language. Keep
   UTF-16 parser coordinates during indexing; convert at the public boundary
   and back before parser lookups (see `src/explorer/source-offsets.ts`).
-  Tracked Go sources use a pinned grammar. Calls, references and imports stay
-  unresolved; do not apply JS name resolution or env guards to Go nodes.
+  Supported languages are TypeScript, JavaScript, PHP, Python, Go and Rust.
+  Tracked Go and Rust sources use pinned grammars. Calls, references and imports
+  stay unresolved; do not apply JS name resolution or env guards to their nodes.
+  Rust impl method names preserve the literal impl header as lexical context;
+  trait members retain their declaration parent. Neither establishes binding.
+  Crate paths, receiver/trait dispatch, macros and cfg conditions are not resolved.
 - `src/experimental/` — advanced Explorer pipelines, adapters, benchmarks,
   optional MCP tools, and autonomous workers. Default startup does not import
   this tree. Keep new work out unless an experimental feature is explicitly
@@ -182,6 +186,10 @@ This is the canonical instructions file for this repo — other agent configs
   Go adds the nearest function, receiver method, named type or anonymous function
   header. Selected headers never fall back to an outer scope; malformed nearest
   scopes add nothing. This is lexical source context, not package or receiver resolution.
+  Rust adds the nearest declaration or closure header; direct impl/trait members
+  also add their lexical owner header. Selected headers and nested closures never
+  fall back to an outer declaration; malformed nearest scopes add nothing. These
+  extras share the global twelve-line cap and do not establish runtime identity.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still

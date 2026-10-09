@@ -58,6 +58,50 @@ test("Go supporting headers stay bounded and malformed nearest scopes add nothin
   }, "m.go");
 });
 
+test("Rust context keeps lexical impl headers and stops at nested closures and selected headers", () => {
+  const source = [
+    "struct Café {",
+    "  amount: i32,",
+    "}",
+    "impl Sender for Café {",
+    "  fn send(&self) {",
+    "    emit(self.amount);",
+    "    let callback = || {",
+    "      emit(1);",
+    "    };",
+    "  }",
+    "}",
+    "trait Other {",
+    "  fn send(&self) {",
+    "    emit(2);",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+  withFile(source, (root) => {
+    const support = (line: number) => structuralSupport(root, [{ file: "m.rs", line }]);
+    assert.deepEqual(support(2).map((line) => line.line), [1]);
+    assert.deepEqual(support(6).map((line) => line.line), [5, 4]);
+    assert.deepEqual(support(8).map((line) => line.line), [7]);
+    assert.match(support(8)[0].reason, /Rust closure expression/);
+    assert.deepEqual(support(14).map((line) => line.line), [13, 12]);
+    for (const line of [1, 4, 5, 7, 12, 13, 0]) assert.deepEqual(support(line), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.rs", line: 8 }, { file: "m.rs", line: 7 }]), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.rs", line: 6 }, { file: "m.rs", line: 6 }]).map((line) => line.line), [5, 4]);
+  }, "m.rs");
+});
+
+test("Rust context shares the global cap and malformed nearest scopes add nothing", () => {
+  const source = Array.from({ length: 20 }, (_, i) => `fn f${i}() {\n  emit(${i});\n}`).join("\n");
+  withFile(source, (root) => {
+    assert.equal(structuralSupport(root, Array.from({ length: 20 }, (_, i) => ({ file: "m.rs", line: 2 + i * 3 }))).length, 12);
+  }, "m.rs");
+  withFile("fn outer() {\n  let callback = |oops {\n    emit(1);\n  };\n}\n", (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.rs", line: 3 }]), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "gone.rs", line: 1 }]), []);
+  }, "m.rs");
+});
+
 const nest = [
   "import { Module } from '@nestjs/common';",
   "",
