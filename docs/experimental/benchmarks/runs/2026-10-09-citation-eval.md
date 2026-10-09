@@ -37,3 +37,16 @@ The validator freezes exact source files and hashes, validates line text and
 safe paths, enforces unique citation locations and case/question IDs, checks
 header targets, and checks the fixed lexical rubric. It is intentionally limited
 to this source; it does not parse arbitrary Python or resolve bindings.
+
+## Pure foreign-owner helper
+
+The local H task supplied only a function body against an exact typed signature
+and a `body: string` response schema. Its body was applied without logic changes and passed
+three focused tests plus strict script typechecking. Tool elapsed time
+was 12,869 ms (about 13 seconds); this does not establish quota or cost savings.
+
+`foreignOwnerCitations` assumes validated, unambiguous owner records. It compares
+owner file and declaration line, skips null owners, deduplicates foreign citation
+locations in first-seen order, and returns copied locations. A null target yields
+an empty result. An empty result is no foreign-owner cue, never a semantic pass;
+module ownership and missing target resolution require separate review.
