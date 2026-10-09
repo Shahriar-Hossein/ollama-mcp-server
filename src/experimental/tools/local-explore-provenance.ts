@@ -122,7 +122,7 @@ function directMetadataFields(object: Parser.SyntaxNode): string[] | undefined {
   return new Set(keys).size === keys.length ? keys : undefined;
 }
 
-function moduleMetadata(object: Parser.SyntaxNode): boolean {
+export function moduleMetadata(object: Parser.SyntaxNode): boolean {
   if (!directMetadataFields(object)) return false;
   const args = object.parent;
   const call = args?.parent;

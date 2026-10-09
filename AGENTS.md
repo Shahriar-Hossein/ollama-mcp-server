@@ -155,6 +155,10 @@ This is the canonical instructions file for this repo — other agent configs
   Instance semantics always require parent review. Nest and dotenv loader context
   helps initialization-order review; source order never proves preload timing.
   Direct registration does not require a tool-registration guard.
+  `supporting_context` adds labeled extras for selected JS/TS lines: Nest `@Module` class/key/entries,
+  the enclosing declaration header, up to three scalar sibling properties and the first use of each
+  name from a selected import (max 12 total; text match, not binding resolution). It never
+  changes evidence, coverage or status; selected evidence is deduped by file:line.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still

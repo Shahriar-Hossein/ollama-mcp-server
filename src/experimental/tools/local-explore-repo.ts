@@ -36,7 +36,7 @@ import {
   type Candidate,
   type EvidenceBundle,
 } from "./local-explore-packing.js";
-
+import { structuralSupport } from "./local-explore-structure.js";
 export { buildCandidates, compileEvidenceBundles } from "./local-explore-packing.js";
 export type { Candidate, EvidenceBundle } from "./local-explore-packing.js";
 export { directEvidenceForPart } from "./local-explore-validation.js";
@@ -334,6 +334,12 @@ export function validateModelAnswer(
     }
     evidence.push({ id: reference.id, file: candidate!.file, line: reference.line!, quote });
   }
+  const seenLines = new Set<string>();
+  for (let i = 0; i < evidence.length; i++) {
+    const key = `${evidence[i].file}:${evidence[i].line}`;
+    if (seenLines.has(key)) evidence.splice(i--, 1);
+    else seenLines.add(key);
+  }
   if (!selected_ids.length)
     selected_ids = [...new Set(evidence.map((item) => item.id))].slice(0, 6);
   const rawCoverage = Array.isArray(answer.part_evidence) ? answer.part_evidence : [];
@@ -618,6 +624,7 @@ export async function runLocalExploreRepo(
         return {
           ...base(),
           ...answer,
+          supporting_context: structuralSupport(root, answer.evidence),
           status: "evidence_selected" as const,
           model_calls: attempt,
           verification:
@@ -681,6 +688,7 @@ export async function runLocalExploreRepo(
           ...base(),
           ...answer,
           ...(abstained ? { evidence: [], selected_ids: [] } : {}),
+          supporting_context: abstained ? [] : structuralSupport(root, answer.evidence),
           status: "needs_review" as const,
           model_confidence: "low" as const,
           model_calls: attempt,
