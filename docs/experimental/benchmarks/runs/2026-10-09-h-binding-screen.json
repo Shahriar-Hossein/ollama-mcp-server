@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "state": "frozen_before_generation",
+  "authorship": "Draft based on the lead-provided pinned upstream NestJS sample snapshot. The prior nest-auth-api candidate was rejected as reused because its jwtConstants case already appears in the frozen provenance fixture.",
+  "protocol": "Two-file public NestJS sample development screen for named configuration-property binding and contrast with module/class-provider metadata plus APP_GUARD token metadata. Same domain and symbol names as earlier source, so this is structural overlap, not independent generalization. Score required lines supplied and exact selected lines separately from parent completion. Generic packed lines do not establish semantic support; preserve needs_review pending parent interpretation. No runtime or DI resolution is measured.",
+  "source_repository": "https://github.com/nestjs/nest",
+  "source_commit": "0498c13a63239fdef2d964acee67b57a22f87c65",
+  "snapshot_commit": "d7c2d7095c857f3b8676f1883dbc9bb46d97ed87",
+  "source_slice": "sample/19-auth-jwt",
+  "source_origin_manifest": "benchmark-data/h-binding-screen-2026-10-09-source-origin.json",
+  "snapshot_root": "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-binding-screen-2026-10-09-source",
+  "frozen_at": "2026-10-09T09:36:57Z",
+  "files": {
+    "src/auth/constants.ts": "5006dd525960dc21aafaf06c10d7b732f08619166807fef30a3198794f1f7a59",
+    "src/auth/auth.module.ts": "23bcc19a2f4153207329995eb75a2b7e7872d17624d95340b41b7c5fdd69a879"
+  },
+  "questions": [
+    {
+      "id": "sample_jwt_constant_property",
+      "kind": "positive",
+      "query": "Which imported jwtConstants.secret configuration property is passed to JwtModule.register in AuthModule, and what literal expression is declared for that property?",
+      "required": [
+        {
+          "file": "src/auth/constants.ts",
+          "line": 1,
+          "text": "export const jwtConstants = {"
+        },
+        {
+          "file": "src/auth/constants.ts",
+          "line": 2,
+          "text": "secret:"
+        },
+        {
+          "file": "src/auth/constants.ts",
+          "line": 3,
+          "text": "'DO NOT USE THIS VALUE. INSTEAD, CREATE A COMPLEX SECRET AND KEEP IT SAFE OUTSIDE OF THE SOURCE CODE.',"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 8,
+          "text": "import { jwtConstants } from './constants.js';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 13,
+          "text": "JwtModule.register({"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 15,
+          "text": "secret: jwtConstants.secret,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 29,
+          "text": "export class AuthModule {}"
+        }
+      ],
+      "parent_caveat": "The sample source declares a warning placeholder literal. No JWT_SECRET environment key exists in these two files. Source does not establish runtime secret value, environment behavior, module evaluation outcome or provider resolution. Keep needs_review pending parent interpretation."
+    },
+    {
+      "id": "sample_module_and_guard_token_contrast",
+      "kind": "positive",
+      "query": "In AuthModule's configuration metadata, which imported module and class-provider bindings appear in imports/providers, which imported binding is the provide token paired with AuthGuard, and where is the imported jwtConstants.secret configuration property used?",
+      "required": [
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 1,
+          "text": "import { Module } from '@nestjs/common';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 2,
+          "text": "import { APP_GUARD } from '@nestjs/core';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 4,
+          "text": "import { UsersModule } from '../users/users.module.js';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 7,
+          "text": "import { AuthService } from './auth.service.js';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 8,
+          "text": "import { jwtConstants } from './constants.js';"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 10,
+          "text": "@Module({"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 11,
+          "text": "imports: ["
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 12,
+          "text": "UsersModule,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 13,
+          "text": "JwtModule.register({"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 15,
+          "text": "secret: jwtConstants.secret,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 19,
+          "text": "providers: ["
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 20,
+          "text": "AuthService,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 22,
+          "text": "provide: APP_GUARD,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 23,
+          "text": "useClass: AuthGuard,"
+        },
+        {
+          "file": "src/auth/auth.module.ts",
+          "line": 29,
+          "text": "export class AuthModule {}"
+        }
+      ],
+      "parent_caveat": "This describes source metadata: UsersModule in imports, AuthService in providers, APP_GUARD as the provide token paired with AuthGuard, and jwtConstants.secret as the JwtModule secret property. AuthGuard implementation/useClass semantics and AuthController behavior require files outside this two-file slice and remain unresolved. The source does not establish runtime dependency-injection resolution or guard behavior. Keep needs_review pending parent interpretation."
+    }
+  ],
+  "limitations": [
+    "The earlier proposed nest-auth-api source was rejected because the same jwtConstants property case already appears in 2026-10-09-h-config-provenance-queries.json.",
+    "The lead's bounded local scout found no fresh production pair for this screen; the replacement is the official NestJS public sample, not a production application.",
+    "The sample uses the same domain and symbol names as prior material. Structural overlap remains, so this is not independent generalization evidence.",
+    "No fresh real-source direct-default-import locally-constructed-instance positive was found or included.",
+    "No runtime environment, module initialization, provider resolution or guard behavior is asserted."
+  ]
+}
