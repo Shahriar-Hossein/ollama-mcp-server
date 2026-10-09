@@ -1,0 +1,371 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "go/main.go": "cd08e8bfc2b15ec857261ec514c6e648d9b8c5add97e9e3292bc58a69b9925ef",
+    "go/worker.go": "c7e653196ecceff3d91ca0aae0aa041c9d7f0651066337e708c163ca21cdd54d",
+    "php/config.php": "791bbed8f3f9f445b182f4f7e9207acd88f4d3cfe0c592aa3abbab318c9b6cb3",
+    "php/src/Worker.php": "0990719a9688d6ada8296abb79c4d5daf914ce3a94656ad76823418849156c86",
+    "php/src/bootstrap.php": "50ebd1de7beef369e8b68cb106bfaec06c526b9e6aec564f7cfe67daf0bbbe7e",
+    "python/package/__init__.py": "1b7a9bea9a33d6aef40cc6b2f506cbfcc5c1230b54a103c6c69c42e0bb0e4074",
+    "python/package/consumer.py": "1be94ebc538a84573bfc2923f9c6aaaf51977246434bdcec2b66554c3d293a42",
+    "python/package/runner.py": "2b54d8c7280f8e9840b2a3f2c24656a046e89c043e289e5a223a9224e52eee30",
+    "python/package/settings.py": "bc5dfa1011dcde4c90184d3045d2f066115931ede1b3651cca2ce5eae1b4feb3",
+    "rust/lib.rs": "59227f6bcd6ebe8588831315cc856109037de2aa61ab888e7de28d57cd57037f"
+  },
+  "questions": [
+    {
+      "id": "PHP-01",
+      "language": "php",
+      "query": "In bootstrap.php, which namespace alias names the worker class, and which exact path is included relative to this file?",
+      "required": [
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 2,
+          "text": "namespace Eval\\App;"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 3,
+          "text": "use Eval\\Worker\\Worker as ReportRunner;"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 5,
+          "text": "$settings = require __DIR__ . '/../config.php';"
+        }
+      ],
+      "answer": "The file declares namespace Eval\\App, aliases Eval\\Worker\\Worker as ReportRunner, and requires ../config.php relative to __DIR__. This is source-level import and path syntax; it does not establish that the include succeeds at runtime.",
+      "forbidden_claims": [
+        "The file includes config.php from the process working directory.",
+        "The alias is named Worker."
+      ]
+    },
+    {
+      "id": "PHP-02",
+      "language": "php",
+      "query": "Which two configuration keys guard the calls in bootstrap.php, what value does each compare against, and which call is inside each guard?",
+      "required": [
+        {
+          "file": "php/config.php",
+          "line": 3,
+          "text": "    'REPORTS_ENABLED' => '1',"
+        },
+        {
+          "file": "php/config.php",
+          "line": 4,
+          "text": "    'AUDIT_ENABLED' => '0',"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 7,
+          "text": "if (($settings['REPORTS_ENABLED'] ?? '0') === '1') {"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 8,
+          "text": "    $runner->run(['kind' => 'report']);"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 10,
+          "text": "if (($settings['AUDIT_ENABLED'] ?? '0') === '1') {"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 11,
+          "text": "    $runner->run(['kind' => 'audit']);"
+        }
+      ],
+      "answer": "REPORTS_ENABLED is configured as '1'; its strict '1' guard contains run(['kind' => 'report']). AUDIT_ENABLED is configured as '0'; its strict '1' guard contains run(['kind' => 'audit']). Both missing-key fallbacks are '0'.",
+      "forbidden_claims": [
+        "AUDIT_ENABLED enables the audit call in this fixture.",
+        "The guards use loose equality."
+      ]
+    },
+    {
+      "id": "PHP-03",
+      "language": "php",
+      "query": "Where is the ReportRunner instance constructed, and what call appears inside the enabled reports guard?",
+      "required": [
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 6,
+          "text": "$runner = new ReportRunner();"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 7,
+          "text": "if (($settings['REPORTS_ENABLED'] ?? '0') === '1') {"
+        },
+        {
+          "file": "php/src/bootstrap.php",
+          "line": 8,
+          "text": "    $runner->run(['kind' => 'report']);"
+        }
+      ],
+      "answer": "The source constructs ReportRunner on line 6. The REPORTS_ENABLED guard encloses a call to $runner->run with kind set to report. This source excerpt alone does not prove the included configuration's runtime value.",
+      "forbidden_claims": [
+        "The instance is constructed inside the guard.",
+        "The guard is always true at runtime."
+      ]
+    },
+    {
+      "id": "PHP-04",
+      "language": "php",
+      "query": "In Worker::run, what condition selects the ok=true response and what is returned otherwise?",
+      "required": [
+        {
+          "file": "php/src/Worker.php",
+          "line": 5,
+          "text": "    public function run(array $payload): array {"
+        },
+        {
+          "file": "php/src/Worker.php",
+          "line": 6,
+          "text": "        if (($payload['kind'] ?? '') === 'report') {"
+        },
+        {
+          "file": "php/src/Worker.php",
+          "line": 7,
+          "text": "            return ['ok' => true];"
+        },
+        {
+          "file": "php/src/Worker.php",
+          "line": 9,
+          "text": "        return ['ok' => false];"
+        }
+      ],
+      "answer": "Worker::run returns ['ok' => true] when kind is exactly report; otherwise it returns ['ok' => false].",
+      "forbidden_claims": [
+        "The fallback is null.",
+        "The comparison is case-insensitive."
+      ]
+    },
+    {
+      "id": "PY-01",
+      "language": "python",
+      "query": "What alias does runner.py import from its sibling settings module, and how can you distinguish its use in execute_async from execute's local same-name binding?",
+      "required": [
+        {
+          "file": "python/package/runner.py",
+          "line": 1,
+          "text": "from .settings import OPTIONS as DEFAULT_OPTIONS"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 4,
+          "text": "    DEFAULT_OPTIONS = {\"mode\": \"local\"}  # shadows the imported alias locally"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 9,
+          "text": "async def execute_async(options):"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 11,
+          "text": "        return {\"status\": \"async-ready\", \"mode\": DEFAULT_OPTIONS[\"mode\"]}"
+        }
+      ],
+      "answer": "runner.py imports sibling OPTIONS as DEFAULT_OPTIONS. execute assigns its own local DEFAULT_OPTIONS, which shadows that global name in that function; execute_async has no such local assignment and reads the imported alias in its async-ready return. The import uses package-relative source syntax.",
+      "forbidden_claims": [
+        "The import is absolute from a top-level settings module.",
+        "DEFAULT_OPTIONS is never used."
+      ]
+    },
+    {
+      "id": "PY-02",
+      "language": "python",
+      "query": "Does execute use the imported settings name or a local shadow, and what mode does the enabled return read?",
+      "required": [
+        {
+          "file": "python/package/runner.py",
+          "line": 3,
+          "text": "def execute(options):"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 4,
+          "text": "    DEFAULT_OPTIONS = {\"mode\": \"local\"}  # shadows the imported alias locally"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 6,
+          "text": "        return {\"status\": \"ready\", \"mode\": DEFAULT_OPTIONS[\"mode\"]}"
+        }
+      ],
+      "answer": "execute assigns a local DEFAULT_OPTIONS dictionary, shadowing the imported alias within the function. Its enabled return reads mode from that local dictionary, so the source expression uses 'local'; it does not read the module's imported value.",
+      "forbidden_claims": [
+        "execute reads the imported module's DEFAULT_OPTIONS value.",
+        "The local assignment changes the imported module object."
+      ]
+    },
+    {
+      "id": "PY-03",
+      "language": "python",
+      "query": "Which alias does consumer.py import, and what call does main make with it?",
+      "required": [
+        {
+          "file": "python/package/consumer.py",
+          "line": 1,
+          "text": "from .runner import execute as run_job"
+        },
+        {
+          "file": "python/package/consumer.py",
+          "line": 3,
+          "text": "def main(options):"
+        },
+        {
+          "file": "python/package/consumer.py",
+          "line": 4,
+          "text": "    return run_job(options)"
+        }
+      ],
+      "answer": "consumer.py imports runner.execute as run_job, and main returns the result of calling run_job(options). This records the named source import and call; no separate runtime test is part of the fixture.",
+      "forbidden_claims": [
+        "main calls execute by its original name.",
+        "The call passes no arguments."
+      ]
+    },
+    {
+      "id": "PY-04",
+      "language": "python",
+      "query": "What does execute_async return for enabled and disabled options, and which settings name supplies the enabled mode?",
+      "required": [
+        {
+          "file": "python/package/runner.py",
+          "line": 9,
+          "text": "async def execute_async(options):"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 10,
+          "text": "    if options.get(\"enabled\", False):"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 11,
+          "text": "        return {\"status\": \"async-ready\", \"mode\": DEFAULT_OPTIONS[\"mode\"]}"
+        },
+        {
+          "file": "python/package/runner.py",
+          "line": 12,
+          "text": "    return {\"status\": \"async-idle\"}"
+        }
+      ],
+      "answer": "When options.get('enabled', False) is truthy, execute_async returns async-ready and reads mode through DEFAULT_OPTIONS. Otherwise it returns async-idle. The function is declared async; the fixture does not exercise it.",
+      "forbidden_claims": [
+        "The disabled branch returns async-ready.",
+        "The function is invoked by consumer.py."
+      ]
+    },
+    {
+      "id": "GO-01",
+      "language": "go",
+      "query": "What is the literal receiver method declaration for Dispatch, and what conditions select its ready result?",
+      "required": [
+        {
+          "file": "go/worker.go",
+          "line": 7,
+          "text": "func (w *Worker) Dispatch(kind string) string {"
+        },
+        {
+          "file": "go/worker.go",
+          "line": 8,
+          "text": "\tif w.Enabled && kind == \"report\" {"
+        },
+        {
+          "file": "go/worker.go",
+          "line": 9,
+          "text": "\t\treturn \"ready\""
+        },
+        {
+          "file": "go/worker.go",
+          "line": 11,
+          "text": "\treturn \"idle\""
+        }
+      ],
+      "answer": "The literal declaration is a method on *Worker named Dispatch. Its ready branch requires both w.Enabled and kind == 'report'; the fallthrough returns idle. This describes the source condition without claiming how a caller's receiver is resolved.",
+      "forbidden_claims": [
+        "Dispatch is a package-level function.",
+        "Either condition alone selects ready."
+      ]
+    },
+    {
+      "id": "GO-02",
+      "language": "go",
+      "query": "What receiver value is initialized in main, and what method call expression follows?",
+      "required": [
+        {
+          "file": "go/main.go",
+          "line": 4,
+          "text": "\tworker := Worker{Enabled: true}"
+        },
+        {
+          "file": "go/main.go",
+          "line": 5,
+          "text": "\t_ = worker.Dispatch(\"report\")"
+        }
+      ],
+      "answer": "main initializes a Worker value with Enabled true and contains the expression worker.Dispatch('report'). The indexer's method and receiver relationship remains an unresolved source hint; this answer does not assert resolved dispatch or runtime execution.",
+      "forbidden_claims": [
+        "The call is proven to resolve to worker.go's method by the index.",
+        "main invokes Dispatch with an empty string."
+      ]
+    },
+    {
+      "id": "RS-01",
+      "language": "rust",
+      "query": "What literal impl header owns dispatch, and what source condition selects ready?",
+      "required": [
+        {
+          "file": "rust/lib.rs",
+          "line": 5,
+          "text": "impl Router {"
+        },
+        {
+          "file": "rust/lib.rs",
+          "line": 6,
+          "text": "    pub fn dispatch(&self, kind: &str) -> &'static str {"
+        },
+        {
+          "file": "rust/lib.rs",
+          "line": 7,
+          "text": "        if self.enabled && kind == \"report\" {"
+        },
+        {
+          "file": "rust/lib.rs",
+          "line": 8,
+          "text": "            \"ready\""
+        }
+      ],
+      "answer": "The literal lexical owner is impl Router. Its dispatch method returns ready when self.enabled is true and kind equals report. This is lexical source context, not proof of resolved receiver or trait dispatch.",
+      "forbidden_claims": [
+        "dispatch is declared in a trait impl.",
+        "The condition checks only kind."
+      ]
+    },
+    {
+      "id": "RS-02",
+      "language": "rust",
+      "query": "What receiver call expression appears in invoke, and what should be concluded about resolution from this fixture?",
+      "required": [
+        {
+          "file": "rust/lib.rs",
+          "line": 15,
+          "text": "pub fn invoke(router: &Router, kind: &str) -> &'static str {"
+        },
+        {
+          "file": "rust/lib.rs",
+          "line": 16,
+          "text": "    router.dispatch(kind)"
+        }
+      ],
+      "answer": "invoke contains router.dispatch(kind). The fixture supports reporting that call spelling and the nearby Router type annotation; the repository index does not establish general receiver or method resolution, so do not present it as a verified dispatch binding.",
+      "forbidden_claims": [
+        "The repository index proves router.dispatch resolves to the impl method.",
+        "The call is a trait dispatch."
+      ]
+    }
+  ]
+}
