@@ -8,6 +8,9 @@ import {
   emptyManualReview,
   evidenceAnswerRequest,
   scoreLanguageEvidence,
+  missingRowValues,
+  parameterShadowNotes,
+  missingShadowWords,
   validateEvidenceAnswer,
   validateManualReview,
 } from "./language-eval-score.js";
@@ -141,4 +144,27 @@ test("evidence answer flags unfinished prose under a valid JSON stop", () => {
   assert.equal(check("It returns the value of key `", "Done.").incomplete_text.length, 1);
   assert.equal(check("Reads CONFIG.", "Returns the mode (see line 7").audit_status, "incomplete_text");
   assert.equal(check("Reads `CONFIG`.", "Returns `CONFIG[\"mode\"]`.").audit_status, "pending_manual_review");
+});
+
+test("missingRowValues flags dictionary row values the answer never states", () => {
+  const required = [{ text: '    "mode": "idle",' }, { text: '    "attempts": 8,' }, { text: "def read_state():" }];
+  const say = (answer: string) => ({ answer, claims: [] });
+  assert.deepEqual(missingRowValues(say("Returns the 'mode' key; attempts is 8."), required), ["idle"]);
+  assert.deepEqual(missingRowValues(say("Returns idle with attempts 8."), required), []);
+});
+
+test("missingShadowWords flags answers that never mention the hiding scope", () => {
+  const key = "It reads its own parameter, not the module dictionary.";
+  const say = (answer: string) => ({ answer, claims: [] });
+  assert.equal(missingShadowWords(say("Returns the mode key."), key), true);
+  assert.equal(missingShadowWords(say("Reads its own parameter; module dict not read."), key), false);
+  assert.equal(missingShadowWords(say("Returns the mode key."), "Reads the module dict."), false);
+});
+
+test("parameterShadowNotes flags a read of the reader's own parameter only", () => {
+  const ev = (line: number, quote: string) => ({ file: "a.py", line, quote });
+  assert.equal(parameterShadowNotes([ev(1, "def f(*, POLICY):"), ev(2, '    return POLICY["mode"]')]).length, 1);
+  assert.equal(parameterShadowNotes([ev(1, "def g(CACHE: dict = None):"), ev(2, '    return CACHE["mode"]')]).length, 1);
+  assert.equal(parameterShadowNotes([ev(1, "def f():"), ev(2, '    return POLICY["mode"]')]).length, 0);
+  assert.equal(parameterShadowNotes([ev(1, "def f(x):"), ev(2, '    return x["a"]'), ev(3, "x = {")]).length, 0);
 });

@@ -30,6 +30,8 @@ import { validateLanguageFixture, type LanguageFixture } from "./language-eval-f
 import {
   emptyManualReview,
   evidenceAnswerRequest,
+  missingRowValues,
+  missingShadowWords,
   scoreLanguageEvidence,
   validateEvidenceAnswer,
   validateManualReview,
@@ -543,7 +545,12 @@ export async function runLanguageEval(options: {
             answerCallRecord.output = answer.raw_output;
             answerCallRecord.completion = answer.completion;
             answerCallRecord.queue_request_wall_ms ??= answer.elapsed_ms;
-            cell.answer = { ...answer.checked, input: answer.input };
+            cell.answer = {
+              ...answer.checked,
+              missing_row_values: missingRowValues(answer.checked, question.required),
+              missing_shadow_words: missingShadowWords(answer.checked, question.answer),
+              input: answer.input,
+            };
             (cell.timings_ms as Record<string, number | null>).answer_queue_request_wall ??=
               answer.elapsed_ms;
           } catch (error) {

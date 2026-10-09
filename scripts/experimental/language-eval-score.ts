@@ -116,6 +116,27 @@ export type AnswerRequest = {
   format: Record<string, unknown>;
 };
 
+// A selected def header whose parameter is then indexed means the reader uses its own value.
+export function parameterShadowNotes(selected: SelectedEvidence): string[] {
+  const notes: string[] = [];
+  for (const header of selected) {
+    const match = /^\s*(?:async\s+)?def\s+\w+\s*\((.*)\)\s*(?:->.*)?:\s*$/.exec(header.quote);
+    if (!match) continue;
+    const names = match[1].split(",").flatMap((part) => {
+      const name = /^\s*\*{0,2}([A-Za-z_]\w*)/.exec(part)?.[1];
+      return name ? [name] : [];
+    });
+    for (const name of new Set(names)) {
+      const index = new RegExp(`\\b${name}\\s*\\[`);
+      const read = selected.find((item) => item.file === header.file && item.line > header.line && index.test(item.quote));
+      const declared = selected.some((item) => item.file === header.file && new RegExp(`^\\s*${name}\\s*=`).test(item.quote));
+      if (read && !declared)
+        notes.push(`${name} at ${header.file}:${header.line} is the reader's own parameter, so the module ${name} dictionary is not read; the parameter's values are not shown.`);
+    }
+  }
+  return notes;
+}
+
 export function evidenceAnswerRequest(
   query: string,
   selected: SelectedEvidence,
@@ -154,7 +175,9 @@ export function evidenceAnswerRequest(
       "Answer using only the supplied checked evidence. Cite each factual claim with exact file and line values from that evidence. If evidence is insufficient, say so in uncertainty. State the exact value for every item the question asks for, not just the key. Write quoted source values with single quotes, never double quotes. Return only the requested JSON.",
     prompt: `Question: ${query}\nChecked evidence: ${JSON.stringify(
       selected.map(({ file, line, quote }) => ({ file, line, quote })),
-    )}\nReturn an answer, factual claims with citations, and any uncertainty.`,
+    )}\nReturn an answer, factual claims with citations, and any uncertainty.${
+      parameterShadowNotes(selected).map((note) => `\nScope note (checked from the evidence): ${note} Say this in the answer.`).join("")
+    }`,
     format,
   };
 }
@@ -170,6 +193,30 @@ export function unfinishedText(text: string): boolean {
     else if (")]}".includes(char)) depth--;
   }
   return depth !== 0;
+}
+
+// Values of `"key": value,` rows in the required lines that the answer never states.
+export function missingRowValues(
+  answer: { answer: string; claims: Array<{ text: string }> },
+  required: Array<{ text: string }>,
+): string[] {
+  const body = [answer.answer, ...answer.claims.map((claim) => claim.text)].join("\n");
+  const values = required.flatMap(({ text }) => {
+    const row = /^\s*["'][^"']+["']\s*:\s*(?:["']([^"']+)["']|(-?\d+(?:\.\d+)?))\s*,?\s*$/.exec(text);
+    return row ? [row[1] ?? row[2]] : [];
+  });
+  return [...new Set(values)].filter((value) => !body.includes(value));
+}
+
+const SHADOW_WORDS = /shadow|\bown\b|\blocal|enclosing|not (?:the )?module|not (?:read|in)\b/i;
+
+// True when the key says a scope hides a name but the answer never says so.
+export function missingShadowWords(
+  answer: { answer: string; claims: Array<{ text: string }> },
+  expected: string,
+): boolean {
+  if (!SHADOW_WORDS.test(expected)) return false;
+  return !SHADOW_WORDS.test([answer.answer, ...answer.claims.map((claim) => claim.text)].join("\n"));
 }
 
 export function validateEvidenceAnswer(raw: string, selected: SelectedEvidence) {
