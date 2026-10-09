@@ -702,6 +702,57 @@ test("requires configuration assignment and use separately", () => {
   );
 });
 
+test("flag packing keeps the local resolver and distant consumer guard together", () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-flags-"));
+  try {
+    const sources = {
+      "switches.ts": [
+        "function readSwitch(environment: Record<string, string>, name: string) {",
+        "  const value = environment[name];",
+        ...Array.from({ length: 35 }, (_, i) => `// resolver padding ${i}`),
+        "  if (value === '1') return true;",
+        "  if (value === '0' || value === undefined) return false;",
+        "  throw new Error('Expected 1 or 0');",
+        "}",
+        ...Array.from({ length: 60 }, (_, i) => `// configuration padding ${i}`),
+        "export function switches(environment: Record<string, string>) {",
+        "  return { runOnBoot: readSwitch(environment, 'BACKGROUND_JOB_ENABLED') };",
+        "}",
+      ].join("\n"),
+      "bootstrap.ts": [
+        "import { switches as resolveSwitches } from './switches.js';",
+        "const settings = resolveSwitches({});",
+        ...Array.from({ length: 80 }, (_, i) => `// bootstrap padding ${i}`),
+        "if (settings.runOnBoot) {",
+        "  attachRuntime();",
+        "}",
+        "function attachRuntime() {}",
+      ].join("\n"),
+    };
+    for (const [file, source] of Object.entries(sources)) writeFileSync(join(root, file), source);
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "."]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"]);
+    const query = "Which environment variable gates the background job, and how is its default resolved?";
+    const candidates = buildCandidates(root, [], indexRepository(root), query, decomposeQuestion(query)[0]);
+    const lines = candidates.flatMap((candidate) => candidate.lines);
+    for (const text of [
+      "runOnBoot: readSwitch",
+      "if (value === '1') return true",
+      "if (value === '0' || value === undefined) return false",
+      "throw new Error('Expected 1 or 0')",
+      "if (settings.runOnBoot)",
+      "attachRuntime();",
+    ]) assert.ok(lines.some((line) => line.text.includes(text)), `${text} must be packed`);
+    assert.ok(new Set(candidates.map((candidate) => candidate.file)).size <= 6);
+    for (const candidate of candidates)
+      for (const line of candidate.lines)
+        assert.equal(line.text, sources[candidate.file as keyof typeof sources].split("\n")[line.line - 1]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("turns ordinary image and query questions into explicit operation checklists", () => {
   const parts = decomposeQuestion(
     "How does POST /teams accept an image, validate it, upload it, and save its URL and ID?",

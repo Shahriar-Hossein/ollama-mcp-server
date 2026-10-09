@@ -112,6 +112,10 @@ This is the canonical instructions file for this repo — other agent configs
   review because semantic completeness remains unchecked; empty checklists
   must never establish support. Selection allows sixteen refs per part while
   retaining the six-part, character, output and two-call budgets.
+  Flag questions also pack statically resolved mapping helpers and use mapped
+  property names to anchor consumer windows. Named keys take priority over
+  unrelated flags. These windows provide context, not proof of provenance;
+  model selection can still omit resolver branches.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
   interprets behavior. The legacy

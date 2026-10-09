@@ -314,13 +314,70 @@ export function buildCandidates(
       add({ id: "", kind: "text_match", file, lines: selectedLines(source, 1, query, patterns) });
     }
   }
+  const configurationPatterns: RegExp[] = [];
+  if (/environment|\benv\b|\bflags?\b|gate|enabled|default|configur|setting/i.test(query)) {
+    const flagLines = candidates.flatMap((candidate) =>
+      candidate.lines
+        .filter((line) => /["'](?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)["']/.test(line.text))
+        .map((line) => ({ file: candidate.file, ...line })),
+    );
+    const mappingKeys = new Set(flagLines.flatMap((line) =>
+      [...line.text.matchAll(/\b([A-Za-z_$][\w$]*)\s*:\s*[A-Za-z_$][\w$]*\s*\(/g)]
+        .map((match) => match[1]),
+    ));
+    const normalizedQuery = query.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const namedKeys = [...mappingKeys].filter((key) =>
+      normalizedQuery.includes(key.toLowerCase()),
+    );
+    const keys = namedKeys.length ? namedKeys : [...mappingKeys].filter((key) =>
+      !/autonomous/i.test(query) || flagLines.some((line) =>
+        line.text.includes(`${key}:`) && /["'][A-Z0-9_]+_ENABLED["']/.test(line.text)),
+    );
+    for (const key of keys) {
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      configurationPatterns.push(new RegExp(`\\.\\s*${escaped}\\b|\\[['"]${escaped}['"]\\]`));
+    }
+    // Flag mappings often share a file with a resolver outside the ranked excerpt.
+    const helpers = new Set<string>();
+    for (const call of index.calls) {
+      if (
+        !call.callee_symbol_id ||
+        !["exact", "static"].includes(call.resolution) ||
+        !flagLines.some((line) => line.file === call.file &&
+          call.range.start.line <= line.line && line.line <= call.range.end.line)
+      ) continue;
+      helpers.add(call.callee_symbol_id);
+    }
+    for (const id of [...helpers].slice(0, MAX_FILES)) {
+      const symbol = index.symbols.find((item) => item.id === id);
+      if (!symbol || !["function", "method"].includes(symbol.kind)) continue;
+      const read = readSymbol(root, id, index);
+      add({
+        id: "",
+        kind: "configuration",
+        file: symbol.file,
+        symbol: symbol.qualified_name,
+        lines: selectedLines(read.source.text, read.source.range.start.line, query, [
+          /\breturn\b/, /\bthrow\b/, /\bif\s*\(/,
+        ]),
+      });
+    }
+    for (const file of [...files]) {
+      if (!configurationPatterns.length) break;
+      const source = readFileSync(checkedFile(root, file), "utf8");
+      if (configurationPatterns.some((pattern) => pattern.test(source)))
+        add({ id: "", kind: "configuration", file,
+          lines: selectedLines(source, 1, query, configurationPatterns) });
+    }
+  }
   expandCrossFileCandidates(
     root,
     index,
     candidates,
     query,
-    patterns,
+    [...configurationPatterns, ...patterns],
     Boolean(part?.operation),
+    configurationPatterns,
   ).forEach(add);
   for (const result of results) {
     if (candidates.length >= results.length) break;
@@ -386,6 +443,7 @@ function expandCrossFileCandidates(
   query: string,
   patterns: RegExp[],
   discoverProviders = false,
+  priorityPatterns: RegExp[] = [],
 ): Candidate[] {
   const expanded: Candidate[] = [];
   const visited = new Set(seeds.map((candidate) => candidate.file));
@@ -444,7 +502,8 @@ function expandCrossFileCandidates(
       .map(([file, edgeScore]) => {
         const source = sourceFor(file);
         const score =
-          edgeScore + new Set(terms.filter((term) => source.toLowerCase().includes(term))).size;
+          edgeScore + new Set(terms.filter((term) => source.toLowerCase().includes(term))).size +
+          priorityPatterns.filter((pattern) => source.match(pattern)).length * 4;
         return { file, source, score };
       })
       .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));

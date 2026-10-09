@@ -1,6 +1,6 @@
 # Local model context and MCP improvement checklist
 
-Updated: 2026-10-06. Active work focuses on H; I comparisons are paused.
+Updated: 2026-10-09. Active work focuses on H; I comparisons are paused.
 
 H now uses `qwen-context:h-q4_0-24k`, with saved 24576 context and 16000
 output tokens. The retained 50K tag is an explicit larger-context option.
@@ -57,12 +57,20 @@ remains incomplete; see the [operation-scoping checkpoint](experimental/benchmar
   condition/fallback windows and bind branch/error citations to the requested
   method. Reused development positives complete 1/2 minimum citation sets; the
   absent-file path still omits its guarded upload assignment.
+- [x] Pack statically resolved flag helpers and distant consumer windows using
+  mapped property names. Prioritize named flags to preserve fallback input
+  budgets. The new long-resolver/aliased-consumer regression and all 49 scout
+  tests pass. This fixes supplied context, not evidence-selection completeness.
+- [x] Add JSON Schema output, file-path summaries, shared generation queueing,
+  PHP/Python indexing and full-abstention citation cleanup. The field recheck
+  still finds counting and CSS/table confusion; schema controls shape only.
 - [ ] Freeze structurally different validation questions from another repository
   before further evidence-selection tuning.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current evidence work: [operation scoping](experimental/benchmarks/runs/2026-10-06-h-operation-scoping.md).
+Current evidence work: [flag helper and consumer packing](experimental/benchmarks/runs/2026-10-09-h-flag-packing.md).
+Earlier work: [operation scoping](experimental/benchmarks/runs/2026-10-06-h-operation-scoping.md).
 Earlier work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).
 Earlier improvement: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).
 Earlier results: [tokenizer, held-out evidence and sustained output](experimental/benchmarks/runs/2026-10-05-h-tokenizer-heldout.md).
