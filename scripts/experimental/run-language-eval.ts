@@ -35,6 +35,8 @@ import {
   validateManualReview,
 } from "./language-eval-score.js";
 
+import { checkedEvidenceScopes, scopeAnswerRequest, type ScopeAnnotation } from "./scope-answer-context.js";
+
 const manifestPath = resolve("docs/experimental/benchmarks/runs/2026-10-09-language-eval.json");
 const sourcePath = resolve("scripts/experimental/fixtures/language-eval/source");
 const DEFAULT_OUTPUT = "benchmark-data/language-eval/language-eval.json";
@@ -83,6 +85,7 @@ function implementationFiles(): string[] {
     "scripts/experimental/run-language-eval.ts",
     "scripts/experimental/language-eval-score.ts",
     "scripts/experimental/language-eval-fixture.ts",
+    "scripts/experimental/scope-answer-context.ts",
     ...scout,
     ...explorer,
     "src/ollama-client.ts",
@@ -181,8 +184,9 @@ async function answerFromEvidence(
     completion?: AnswerFromEvidenceResult["completion"];
     error?: string;
   }) => void,
+  annotations?: ScopeAnnotation[],
 ) {
-  const request = evidenceAnswerRequest(query, evidence);
+  const request = scopeAnswerRequest(query, evidence, annotations);
   const budget = await resolveModelBudget(
     model,
     { num_predict: 512 },
@@ -243,6 +247,7 @@ export async function runLanguageEval(options: {
   model: string;
   only?: string[];
   fixture?: EvalFixtureDescriptor;
+  answerContextMode?: "selected_only" | "lexical_scopes";
   generate?: typeof generateResult;
   scout?: typeof runLocalExploreRepo;
   answer?: (
@@ -251,11 +256,15 @@ export async function runLanguageEval(options: {
     model: string,
     onRequest?: (request: ReturnType<typeof evidenceAnswerRequest>, input: unknown, options: unknown) => void,
     onGeneration?: Parameters<typeof answerFromEvidence>[4],
+    annotations?: ScopeAnnotation[],
   ) => Promise<AnswerFromEvidenceResult>;
   showSettings?: typeof showModel;
   modelDigest?: string;
   ollamaVersion?: string;
 }) {
+  const answerContextMode = options.answerContextMode ?? "selected_only";
+  if (answerContextMode !== "selected_only" && answerContextMode !== "lexical_scopes")
+    throw new Error("Unknown answer context mode");
   const descriptor = options.fixture;
   const fixtureManifestPath = resolve(descriptor?.manifestPath ?? manifestPath);
   const fixtureSourcePath = resolve(descriptor?.sourcePath ?? sourcePath);
@@ -286,6 +295,7 @@ export async function runLanguageEval(options: {
   if (!requested.length) throw new Error("No questions selected");
 
   const preflight = {
+    answer_context_mode: answerContextMode,
     fixture_path: fixtureManifestPath,
     fixture_sha256: fixtureSha,
     source_hashes: fixture.source_hashes,
@@ -332,6 +342,7 @@ export async function runLanguageEval(options: {
     throw error;
   }
   const protocol = {
+    answer_context_mode: answerContextMode,
     fixture_path: fixtureManifestPath,
     fixture_sha256: fixtureSha,
     source_hashes: fixture.source_hashes,
@@ -484,6 +495,9 @@ export async function runLanguageEval(options: {
         cell.score = score;
         if (result.evidence.length) {
           const answerStarted = performance.now();
+          const annotations = answerContextMode === "lexical_scopes"
+            ? checkedEvidenceScopes(targetRoot, result.evidence) : undefined;
+          cell.answer_context = annotations ?? null;
           const answerCallRecord: Record<string, unknown> = {
             started_at: new Date().toISOString(),
             queue_request_wall_ms: null,
@@ -521,6 +535,7 @@ export async function runLanguageEval(options: {
                   generation.elapsed_ms;
                 save();
               },
+              annotations,
             );
             answerCallRecord.prompt ??= answer.request.prompt;
             answerCallRecord.system ??= answer.request.system;

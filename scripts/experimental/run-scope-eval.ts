@@ -16,10 +16,13 @@ export const SCOPE_FIXTURE: EvalFixtureDescriptor = {
 };
 
 export function parseScopeEvalArgs(args: string[]) {
-  const options = parseLanguageEvalArgs(args);
+  const scopeContext = args.includes("--scope-context");
+  if (args.filter((arg) => arg === "--scope-context").length > 1)
+    throw new Error("--scope-context must be supplied once");
+  const options = parseLanguageEvalArgs(args.filter((arg) => arg !== "--scope-context"));
   if (!args.includes("--output"))
-    options.output = resolve("benchmark-data/language-eval/scope-development/baseline.json");
-  return options;
+    options.output = resolve(`benchmark-data/language-eval/scope-development/${scopeContext ? "scope-context" : "baseline"}.json`);
+  return { ...options, answerContextMode: scopeContext ? "lexical_scopes" as const : "selected_only" as const };
 }
 
 export function runScopeEval(options: Omit<Parameters<typeof runLanguageEval>[0], "fixture">) {

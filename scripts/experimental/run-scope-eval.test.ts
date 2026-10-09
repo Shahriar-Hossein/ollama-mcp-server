@@ -133,3 +133,31 @@ test("answer setup mutation blocks generation and frozen paths cannot be outputs
     assert.match(artifact.results[0].answer_call.error, /Frozen source changed/);
   });
 });
+
+test("scope context opt-in persists lexical labels and includes them in the answer request", async () => {
+  const parsed = parseScopeEvalArgs(["--scope-context"]);
+  assert.equal(parsed.answerContextMode, "lexical_scopes");
+  assert.ok(parsed.output.endsWith("/scope-context.json"));
+  assert.equal(parseScopeEvalArgs([]).answerContextMode, "selected_only");
+  await withOutput(async (_root, output) => {
+    const { scopeAnswerRequest } = await import("./scope-answer-context.js");
+    const selectedReturn = { id: "C1", file: "python/scopes.py", line: 12, quote: 'return DEFAULTS["mode"]' };
+    const run = await runScopeEval({ ...mockOptions, output, answerContextMode: "lexical_scopes",
+      scout: async () => ({ ...scoutResult, evidence: [selectedReturn] }) as unknown as typeof scoutResult,
+      answer: async (query, evidence, _model, onRequest, onGeneration, annotations) => {
+        assert.equal(annotations?.[0].enclosing?.line, 7);
+        const request = scopeAnswerRequest(query, evidence, annotations);
+        assert.ok(request.prompt.includes('"quote":"def execute():"'));
+        assert.equal(request.prompt.includes(fixture.questions[0].answer), false);
+        onRequest?.(request, { fits: true, prompt_bytes: Buffer.byteLength(request.prompt) }, {});
+        onGeneration?.({ elapsed_ms: 1, raw_output: "{malformed" });
+        throw new Error("mock malformed output");
+      },
+    });
+    assert.equal(run.protocol.answer_context_mode, "lexical_scopes");
+    const cell = run.results[0] as { answer_context: Array<{ enclosing: { line: number } }>;
+      answer_call: { prompt: string; input: { prompt_bytes: number } } };
+    assert.equal(cell.answer_context[0].enclosing.line, 7);
+    assert.equal(cell.answer_call.input.prompt_bytes, Buffer.byteLength(cell.answer_call.prompt));
+  });
+});
