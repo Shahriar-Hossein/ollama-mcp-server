@@ -64,12 +64,22 @@ remains incomplete; see the [operation-scoping checkpoint](experimental/benchmar
 - [x] Add JSON Schema output, file-path summaries, shared generation queueing,
   PHP/Python indexing and full-abstention citation cleanup. The field recheck
   still finds counting and CSS/table confusion; schema controls shape only.
-- [ ] Freeze structurally different validation questions from another repository
-  before further evidence-selection tuning.
+- [x] Shortlist mapped flag resolver inputs, guards and return/throw outcomes.
+  Aliases, else branches, nested helpers, shadowing and missing flags have
+  regressions. The worker development case selects 9/9 required lines, up
+  from 6/9; flag semantics still require parent review.
+- [x] Freeze structurally different configuration questions before selection
+  tuning. The new storage-driver source slice supplies 15/16 positive lines
+  and selects 9/16; the negative selects 7/7 and safely requires review.
+  This repository was used for earlier image questions; it is not unseen-repo
+  accuracy. No tuning or rerun followed this validation.
+- [ ] Improve generic configuration packing and selection on separate
+  development cases, then freeze a new validation set before measuring again.
 - [ ] Capture sanitized representative Codex/Claude request shapes to extend
   calibration; synthetic inputs do not measure full caller/session overhead.
 
-Current evidence work: [flag helper and consumer packing](experimental/benchmarks/runs/2026-10-09-h-flag-packing.md).
+Current evidence work: [flag resolver selection](experimental/benchmarks/runs/2026-10-09-h-resolver-selection.md).
+Earlier work: [flag helper and consumer packing](experimental/benchmarks/runs/2026-10-09-h-flag-packing.md).
 Earlier work: [operation scoping](experimental/benchmarks/runs/2026-10-06-h-operation-scoping.md).
 Earlier work: [caller/provider checks and real-source screen](experimental/benchmarks/runs/2026-10-06-h-relationships.md).
 Earlier improvement: [cross-file retrieval and selection](experimental/benchmarks/runs/2026-10-06-h-cross-file-evidence.md).

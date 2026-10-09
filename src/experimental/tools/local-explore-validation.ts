@@ -11,6 +11,17 @@ export type ValidEvidence = { id: string; file: string; line: number; quote: str
 
 type Requirement = { name: string; pattern: RegExp; minimum: number };
 
+export function flagResolutionRequested(question: string): boolean {
+  return (
+    /environment variables?|\bflags?\b|\bENABLE_[A-Z0-9_]+\b|\b[A-Z0-9_]+_ENABLED\b/i.test(
+      question,
+    ) &&
+    /\bresolv\w*\b|\bdefaults?\b|\bvalid\w*\b|\baccept\w*\b|\bindependent\w*\b|\bvalues?\b|\binvalid\b/i.test(
+      question,
+    )
+  );
+}
+
 function requirements(part: QuestionPart, query: string): Requirement[] {
   if (part.operation)
     return operationChecks(part).map((item) => ({
@@ -88,9 +99,15 @@ function requirements(part: QuestionPart, query: string): Requirement[] {
     ];
   if (/environment variables?/i.test(part.question))
     return [
-      require("both environment variable mappings", /autonomous/i.test(query)
+      require(/environment variables\b/i.test(part.question)
+        ? "both environment variable mappings"
+        : "environment variable mapping", /autonomous/i.test(query)
         ? /\b[A-Z0-9_]+_ENABLED\b/g
-        : /\b(?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)\b/g, 2),
+        : /\b(?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)\b/g, /environment variables\b/i.test(
+        part.question,
+      )
+        ? 2
+        : 1),
     ];
   if (/which tool|what tool/i.test(part.question) && /gate|environment/i.test(query))
     return [

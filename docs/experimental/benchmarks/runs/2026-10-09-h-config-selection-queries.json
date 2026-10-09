@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "authorship": "Fresh-context read-only Luna source review; lead verified windows and selected sixteen substantive positive rubric lines before implementation or generation.",
+  "protocol": "Freeze before selection tuning. Run once after changes on this exact five-file source snapshot; do not tune or rerun based on its answers. Score packing, exact selected lines and review status separately. Structurally different configuration case from a repository previously used for image-operation slices; not unseen-repository accuracy.",
+  "source_commit": "b22ec006e2b44aa94b5edd7263ccdefee85899fb",
+  "snapshot_root": "/tmp/h-config-selection-2026-10-09",
+  "files": {
+    "src/storage/storage.module.ts": "da1dd54c337fab12adb433a43e6a1a55250b77f8e482500c02b849552eaba2b1",
+    "src/main.ts": "ce273a0befd6a5b0382bb5d7987fb4219bef4876e2553c8627dd3b5e59e700cc",
+    "src/storage/cloudflare-r2.service.ts": "ffea45cf9b5792f0436f5288b2360342d8146e771875575e5504d74e8fa458d7",
+    "src/storage/local-disk.service.ts": "9ce4dea865fe8e1bb6bd2d91353ed457aa0d45c32ddbfbe51d532a75f7ee3615",
+    "src/app.module.ts": "de4d81556cab90138e6683b6136a177f219edabfe16a6d0a44aecee33324c159"
+  },
+  "frozen_at": "2026-10-09T06:42:34.506468+00:00",
+  "questions": [
+    {
+      "id": "storage_driver_startup",
+      "kind": "positive",
+      "query": "How does STORAGE_DRIVER affect the backend\u2019s storage implementation and startup? Explain what happens when it is unset, set to r2, or set to another value in development versus production, including any required R2 configuration.",
+      "required": [
+        {
+          "file": "src/storage/storage.module.ts",
+          "line": 17,
+          "text": "if (config.get<string>('STORAGE_DRIVER') === 'r2') {"
+        },
+        {
+          "file": "src/storage/storage.module.ts",
+          "line": 18,
+          "text": "return new CloudflareR2Service(config);"
+        },
+        {
+          "file": "src/storage/storage.module.ts",
+          "line": 20,
+          "text": "return localDisk;"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 22,
+          "text": "if (configService.get<string>('STORAGE_DRIVER') !== 'r2') {"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 25,
+          "text": "configService.get<string>('UPLOAD_DIR', 'uploads'),"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 36,
+          "text": "app.use('/uploads', express.static(uploadsDir));"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 90,
+          "text": "configService.get<string>('NODE_ENV') === 'production' &&"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 91,
+          "text": "configService.get<string>('STORAGE_DRIVER') !== 'r2'"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 93,
+          "text": "throw new Error("
+        },
+        {
+          "file": "src/main.ts",
+          "line": 94,
+          "text": "'Cannot boot in production without R2 storage driver (STORAGE_DRIVER=r2)',"
+        },
+        {
+          "file": "src/storage/cloudflare-r2.service.ts",
+          "line": 23,
+          "text": "const accountId = config.getOrThrow<string>('R2_ACCOUNT_ID');"
+        },
+        {
+          "file": "src/storage/cloudflare-r2.service.ts",
+          "line": 24,
+          "text": "this.bucket = config.getOrThrow<string>('R2_BUCKET_NAME');"
+        },
+        {
+          "file": "src/storage/cloudflare-r2.service.ts",
+          "line": 26,
+          "text": ".getOrThrow<string>('R2_PUBLIC_URL')"
+        },
+        {
+          "file": "src/storage/cloudflare-r2.service.ts",
+          "line": 33,
+          "text": "accessKeyId: config.getOrThrow<string>('R2_ACCESS_KEY_ID'),"
+        },
+        {
+          "file": "src/storage/cloudflare-r2.service.ts",
+          "line": 34,
+          "text": "secretAccessKey: config.getOrThrow<string>('R2_SECRET_ACCESS_KEY'),"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 26,
+          "text": "ConfigModule.forRoot({ isGlobal: true }),"
+        }
+      ]
+    },
+    {
+      "id": "absent_s3_driver",
+      "kind": "negative",
+      "query": "Does setting STORAGE_DRIVER=s3 select an S3 storage adapter, or is s3 a documented supported driver?",
+      "required": [
+        {
+          "file": "src/storage/storage.module.ts",
+          "line": 17,
+          "text": "if (config.get<string>('STORAGE_DRIVER') === 'r2') {"
+        },
+        {
+          "file": "src/storage/storage.module.ts",
+          "line": 18,
+          "text": "return new CloudflareR2Service(config);"
+        },
+        {
+          "file": "src/storage/storage.module.ts",
+          "line": 20,
+          "text": "return localDisk;"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 90,
+          "text": "configService.get<string>('NODE_ENV') === 'production' &&"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 91,
+          "text": "configService.get<string>('STORAGE_DRIVER') !== 'r2'"
+        },
+        {
+          "file": "src/main.ts",
+          "line": 93,
+          "text": "throw new Error("
+        },
+        {
+          "file": "src/main.ts",
+          "line": 94,
+          "text": "'Cannot boot in production without R2 storage driver (STORAGE_DRIVER=r2)',"
+        }
+      ],
+      "absence": "The inspected factory has only r2 and local fallback branches; production rejects non-r2. Parent source review is required for absence; an S3 client inside the R2 provider does not establish an s3 driver."
+    }
+  ]
+}

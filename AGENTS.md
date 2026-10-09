@@ -116,6 +116,14 @@ This is the canonical instructions file for this repo — other agent configs
   property names to anchor consumer windows. Named keys take priority over
   unrelated flags. These windows provide context, not proof of provenance;
   model selection can still omit resolver branches.
+  Flag-resolution questions shortlist the mapped helper's declaration, local
+  inputs and direct return/throw outcomes with enclosing if/else guards.
+  Aliases are supported; shadowed or missing helpers remain unresolved, and
+  nested callables cannot supply outcomes. Flag semantics still require parent
+  review; these source relationships do not prove runtime configuration.
+  Resolver recognition covers literal `ENABLE_*`/`*_ENABLED` arguments to
+  direct JS/TS helper calls; injected providers and arbitrary configuration
+  APIs remain outside that check.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
   interprets behavior. The legacy

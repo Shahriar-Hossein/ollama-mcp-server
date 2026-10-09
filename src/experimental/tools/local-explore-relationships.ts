@@ -5,7 +5,11 @@ import JavaScript from "tree-sitter-javascript";
 import TypeScript from "tree-sitter-typescript";
 import type { RepositoryIndex, SymbolRecord } from "../../explorer/indexer.js";
 import { checkedFile } from "./local-explore-packing.js";
-import type { QuestionPart, ValidEvidence } from "./local-explore-validation.js";
+import {
+  flagResolutionRequested,
+  type QuestionPart,
+  type ValidEvidence,
+} from "./local-explore-validation.js";
 import { operationChecks, operationTarget } from "./local-explore-operations.js";
 
 type Location = { file: string; line: number };
@@ -197,6 +201,159 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
     return pairs;
   }
 
+  function flagResolverPlan(part: QuestionPart): Relationship[] {
+    if (!flagResolutionRequested(part.question)) return [];
+    const mappings = index.calls.flatMap((call) => {
+      if (
+        !/\.[cm]?[jt]sx?$/.test(call.file) ||
+        /(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(call.file)
+      )
+        return [];
+      const name = treeFor(call.file).rootNode.descendantForPosition(
+        { row: call.range.start.line - 1, column: call.range.start.column - 1 },
+        { row: call.range.end.line - 1, column: call.range.end.column - 1 },
+      );
+      const node = name.parent;
+      if (
+        node?.type !== "call_expression" ||
+        node.childForFieldName("function")?.type !== "identifier"
+      )
+        return [];
+      const flags =
+        node
+          .childForFieldName("arguments")
+          ?.namedChildren.filter(
+            (argument) =>
+              argument.type === "string" &&
+              /^['"](?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)['"]$/.test(argument.text),
+          )
+          .map((argument) => argument.text.slice(1, -1)) ?? [];
+      const pair = node.parent?.type === "pair" ? node.parent : undefined;
+      const key = pair?.childForFieldName("key")?.text;
+      return flags.map((flag) => ({ call, node, flag, key }));
+    });
+    const normalized = part.question.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const namedKeys = mappings.filter(
+      (mapping) => mapping.key && normalized.includes(mapping.key.toLowerCase()),
+    );
+    const requestedFlags: string[] =
+      part.question.match(/\b(?:ENABLE_[A-Z0-9_]+|[A-Z0-9_]+_ENABLED)\b/g) ?? [];
+    const selected = namedKeys.length
+      ? namedKeys
+      : requestedFlags.length
+        ? mappings.filter((mapping) => requestedFlags.includes(mapping.flag))
+        : mappings;
+    const checks: Relationship[] = namedKeys.length
+      ? []
+      : requestedFlags
+          .filter((flag) => !selected.some((mapping) => mapping.flag === flag))
+          .map((flag) => ({ requirement: `${flag} resolved helper`, alternatives: [] }));
+    if (!selected.length)
+      return checks.length
+        ? checks
+        : [{ requirement: "requested flag resolver binding", alternatives: [] }];
+    for (const { call, node, flag } of selected) {
+      const helper = call.callee_symbol_id ? symbols.get(call.callee_symbol_id) : undefined;
+      const resolved =
+        helper &&
+        callableKinds.has(helper.kind) &&
+        ["exact", "static"].includes(call.resolution) &&
+        !isShadowed(node, call.file, call.callee_name, helper.id);
+      if (!resolved || !/\.[cm]?[jt]sx?$/.test(helper.file)) {
+        checks.push({ requirement: `${flag} resolved helper`, alternatives: [] });
+        continue;
+      }
+      const helperName = treeFor(helper.file).rootNode.descendantForPosition(
+        {
+          row: helper.selection_range.start.line - 1,
+          column: helper.selection_range.start.column - 1,
+        },
+        { row: helper.selection_range.end.line - 1, column: helper.selection_range.end.column - 1 },
+      );
+      const declaration = helperName.parent;
+      const implementation =
+        declaration?.type === "variable_declarator"
+          ? declaration.childForFieldName("value")
+          : declaration;
+      const body = implementation?.childForFieldName("body");
+      const base = [
+        location(call.file, node),
+        { file: helper.file, line: helper.selection_range.start.line },
+      ];
+      checks.push({ requirement: `${flag} resolved helper`, alternatives: body ? [base] : [] });
+      if (!body) continue;
+      const direct = (child: Parser.SyntaxNode) => {
+        for (
+          let ancestor = child.parent;
+          ancestor && ancestor.id !== implementation?.id;
+          ancestor = ancestor.parent
+        )
+          if (
+            [
+              "function_declaration",
+              "function_expression",
+              "arrow_function",
+              "method_definition",
+              "generator_function",
+              "generator_function_declaration",
+            ].includes(ancestor.type)
+          )
+            return false;
+        return true;
+      };
+      const source = treeFor(helper.file).rootNode.text.split("\n");
+      const substantive = (child: Parser.SyntaxNode): Location[] => {
+        const lines: Location[] = [];
+        for (let row = child.startPosition.row; row <= child.endPosition.row; row++) {
+          const text = source[row]?.trim();
+          if (text && text.length >= 6 && !/^(?:\/\/|\*|\/\*)/.test(text))
+            lines.push({ file: helper.file, line: row + 1 });
+        }
+        return lines;
+      };
+      const inputs = body
+        .descendantsOfType("variable_declarator")
+        .filter(
+          (input) =>
+            direct(input) &&
+            !["arrow_function", "function_expression", "class"].includes(
+              input.childForFieldName("value")?.type ?? "",
+            ),
+        );
+      for (const input of inputs) {
+        checks.push({
+          requirement: `${flag} resolver input at ${helper.file}:${input.startPosition.row + 1}`,
+          alternatives: [[...base, ...substantive(input)]],
+        });
+      }
+      const outcomes = body
+        .descendantsOfType(["return_statement", "throw_statement"])
+        .filter(direct);
+      if (body.type !== "statement_block") outcomes.push(body);
+      for (const outcome of outcomes) {
+        const locations = [...base, ...substantive(outcome)];
+        for (
+          let ancestor = outcome.parent;
+          ancestor && ancestor.id !== implementation?.id;
+          ancestor = ancestor.parent
+        ) {
+          if (ancestor.type === "else_clause") locations.push(location(helper.file, ancestor));
+          if (ancestor.type === "if_statement") {
+            const condition = ancestor.childForFieldName("condition");
+            if (condition) locations.push(...substantive(condition));
+          }
+        }
+        checks.push({
+          requirement: `${flag} resolver outcome at ${helper.file}:${outcome.startPosition.row + 1}`,
+          alternatives: [locations],
+        });
+      }
+      if (!outcomes.length)
+        checks.push({ requirement: `${flag} resolver outcomes`, alternatives: [] });
+    }
+    return checks;
+  }
+
   function plan(part: QuestionPart): Relationship[] {
     const key = `${part.operation ?? ""}:${part.question}`;
     const cached = plans.get(key);
@@ -206,7 +363,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
       plans.set(key, checks);
       return checks;
     }
-    const checks: Relationship[] = [];
+    const checks: Relationship[] = flagResolverPlan(part);
     for (const { callerName, calleeName } of part.operation ? [] : callRequests(part)) {
       const callers = index.symbols.filter(
         (symbol) => callableKinds.has(symbol.kind) && matchesName(symbol, callerName),

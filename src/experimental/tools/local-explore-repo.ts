@@ -7,6 +7,7 @@ import {
   evidenceChecklist,
   missingEvidenceRequirements,
   directEvidenceForPart,
+  flagResolutionRequested,
   type QuestionPart,
   type ValidEvidence,
 } from "./local-explore-validation.js";
@@ -101,6 +102,11 @@ export function decomposeQuestion(query: string): QuestionPart[] {
         evidence_needed =
           "The transaction wrapper call, its exclusive BEGIN statement, the lock insertion, rejection condition, and a caller using the lock.";
       const part: QuestionPart = { id: "", question, evidence_needed };
+      if (flagResolutionRequested(question)) {
+        part.completeness = "unchecked";
+        part.evidence_needed +=
+          " Include the mapped resolver's input, branch conditions, returns and validation errors; parent review is required for flag semantics.";
+      }
       const uncheckedTail = question.replace(
         /\band\s+(?:return|issue)\s+[a-z][\w$]*[A-Z][\w$]*|\band\s+call(?:s)?\s+[A-Za-z_$][\w$.]*|\band\s+its\s+implementation\b/g,
         "",

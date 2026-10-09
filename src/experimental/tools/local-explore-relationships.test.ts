@@ -49,6 +49,200 @@ const cite = (root: string, file: string, line: number) => ({
   quote: readFileSync(join(root, file), "utf8").split("\n")[line - 1].trim(),
 });
 
+const flagSource = [
+  "function readSwitch(environment, name) {",
+  "  const value = environment[name]?.trim();",
+  "  if (value === undefined || value === 'off') {",
+  "    return false;",
+  "  }",
+  "  if (value === 'on') return true;",
+  "  throw new Error('Expected on or off');",
+  "}",
+  "export function switches(environment) {",
+  "  return { runOnBoot: readSwitch(environment, 'BACKGROUND_JOB_ENABLED') };",
+  "}",
+  "function exampleSwitch() {",
+  "  const value = 'on';",
+  "  if (value === undefined || value === 'off') return false;",
+  "  if (value === 'on') return true;",
+  "  throw new Error('Expected on or off');",
+  "}",
+].join("\n");
+const flagQuestion =
+  "How is the environment variable controlling runOnBoot resolved, including its default and invalid-input rejection?";
+
+test("flag resolver shortlist requires the mapped helper's input, guards and outcomes", () =>
+  fixture((root) => {
+    writeFileSync(join(root, "flags.ts"), flagSource);
+    execFileSync("git", ["-C", root, "add", "flags.ts"]);
+    const checks = createRelationshipChecks(root, indexRepository(root));
+    const part = decomposeQuestion(flagQuestion)[0];
+    const good = [1, 2, 3, 4, 6, 7, 10].map((line) => cite(root, "flags.ts", line));
+    assert.deepEqual(checks.missing(part, good), []);
+    const mappingOnly = [cite(root, "flags.ts", 10)];
+    assert.ok(checks.missing(part, mappingOnly).length >= 4);
+    assert.ok(
+      checks.missing(
+        part,
+        good.filter((item) => item.line !== 3),
+      ).length > 0,
+    );
+    assert.ok(
+      checks.missing(part, [
+        good[0],
+        good[6],
+        ...[13, 14, 15, 16].map((line) => cite(root, "flags.ts", line)),
+      ]).length > 0,
+    );
+    const shortlist = checks.checklist(
+      part,
+      good.map((item) => ({ ...item, ref: `E${item.line}` })),
+    );
+    assert.ok(
+      shortlist.some((check) =>
+        check.alternative_ref_sets.some((refs) => refs.includes("E3") && refs.includes("E4")),
+      ),
+    );
+    assert.ok(
+      shortlist.some((check) => check.alternative_ref_sets.some((refs) => refs.includes("E7"))),
+    );
+  }));
+
+test("a shadowed flag resolver and a nonexistent requested flag remain unresolved", () =>
+  fixture((root) => {
+    writeFileSync(
+      join(root, "flags.ts"),
+      flagSource.replace("switches(environment)", "switches(environment, readSwitch)"),
+    );
+    execFileSync("git", ["-C", root, "add", "flags.ts"]);
+    const checks = createRelationshipChecks(root, indexRepository(root));
+    const evidence = [1, 2, 3, 4, 6, 7, 10].map((line) => cite(root, "flags.ts", line));
+    for (const query of [
+      flagQuestion,
+      "How is the MISSING_FEATURE_ENABLED flag resolved by default?",
+    ]) {
+      const part = decomposeQuestion(query)[0];
+      assert.ok(checks.missing(part, evidence).length > 0);
+      assert.ok(
+        checks
+          .checklist(
+            part,
+            evidence.map((item) => ({ ...item, ref: `E${item.line}` })),
+          )
+          .some((check) => !check.alternative_ref_sets.length),
+      );
+    }
+  }));
+
+test("aliased arrow resolvers keep else guards and exclude nested callable outcomes", () =>
+  fixture((root) => {
+    writeFileSync(
+      join(root, "parse.ts"),
+      [
+        "export const parseSwitch = (environment, name) => {",
+        "  const value = environment[name];",
+        "  function example() { throw new Error('nested outcome'); }",
+        "  const unrelated = () => { return 'nested value'; };",
+        "  if (value === 'on') {",
+        "    return true;",
+        "  } else {",
+        "    return false;",
+        "  }",
+        "};",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(root, "flags.ts"),
+      "import { parseSwitch as readSwitch } from './parse.js';\nexport const switches = { runOnBoot: readSwitch({}, 'BACKGROUND_JOB_ENABLED') };\n",
+    );
+    execFileSync("git", ["-C", root, "add", "parse.ts", "flags.ts"]);
+    const checks = createRelationshipChecks(root, indexRepository(root));
+    const part = decomposeQuestion(flagQuestion)[0];
+    const good = [
+      cite(root, "flags.ts", 2),
+      ...[1, 2, 5, 6, 7, 8].map((line) => cite(root, "parse.ts", line)),
+    ];
+    assert.deepEqual(checks.missing(part, good), []);
+    assert.ok(
+      checks.missing(
+        part,
+        good.filter((item) => item.file !== "parse.ts" || item.line !== 7),
+      ).length > 0,
+    );
+    const all = [...good, ...[3, 4].map((line) => cite(root, "parse.ts", line))];
+    const shortlist = checks.checklist(
+      part,
+      all.map((item) => ({ ...item, ref: `${item.file}:${item.line}` })),
+    );
+    assert.ok(
+      shortlist.every((check) =>
+        check.alternative_ref_sets.every(
+          (refs) => !refs.includes("parse.ts:3") && !refs.includes("parse.ts:4"),
+        ),
+      ),
+    );
+    const missing = decomposeQuestion(
+      "How are BACKGROUND_JOB_ENABLED and MISSING_FEATURE_ENABLED flags resolved by default?",
+    )[0];
+    assert.ok(
+      checks.missing(missing, good).some((name) => name.includes("MISSING_FEATURE_ENABLED")),
+    );
+  }));
+
+test("the scout exposes resolver shortlists and keeps complete flag semantics under review", () =>
+  fixture(async (root) => {
+    writeFileSync(join(root, "flags.ts"), flagSource);
+    execFileSync("git", ["-C", root, "add", "flags.ts"]);
+    for (const mappingOnly of [true, false]) {
+      let calls = 0;
+      const result = await runLocalExploreRepo(
+        { repository_root: root, query: flagQuestion },
+        async (_model, prompt) => {
+          calls++;
+          const parts = JSON.parse(
+            prompt.split("Question parts: ")[1].split("\nRelevant repo map:")[0],
+          );
+          const groups = parts[0].relationships as {
+            requirement: string;
+            alternative_ref_sets: string[][];
+          }[];
+          assert.ok(groups.some((group) => group.requirement.includes("resolver outcome")));
+          const bundles = JSON.parse(
+            prompt.split("Evidence bundles: ")[1].split("\nReturn JSON")[0],
+          );
+          const lines = bundles.flatMap(
+            (bundle: { sources: { lines: { ref: string; text: string }[] }[] }) =>
+              bundle.sources.flatMap((source) => source.lines),
+          );
+          const refs = mappingOnly
+            ? lines
+                .filter((line: { text: string }) => line.text.includes("runOnBoot: readSwitch"))
+                .map((line: { ref: string }) => line.ref)
+            : [...new Set(groups.flatMap((group) => group.alternative_ref_sets[0] ?? []))];
+          return JSON.stringify({
+            part_evidence: [{ part_id: "P1", evidence_refs: refs }],
+            confidence: "high",
+            unresolved: [],
+            next_action: { ref: "" },
+          });
+        },
+        (model, overrides) =>
+          resolveModelBudget(model, overrides, async () => ({
+            parameters: "num_ctx 50000\nnum_predict 2048",
+          })),
+      );
+      assert.equal(calls, 2);
+      assert.equal(result.status, "needs_review");
+      assert.ok(result.unresolved.some((item) => item.includes("semantic completeness")));
+      assert.equal(
+        result.unresolved.some((item) => item.includes("resolver outcome")),
+        mappingOnly,
+      );
+      if (!mappingOnly)
+        assert.ok(result.evidence.some((item) => item.quote.includes("Expected on or off")));
+    }
+  }));
+
 test("caller identity follows aliases and local bindings but rejects another or nested caller", () =>
   fixture((root) => {
     const checks = createRelationshipChecks(root, indexRepository(root));
