@@ -719,6 +719,18 @@ export async function runLocalExploreRepo(
         for (const coverage of answer.coverage)
           coverage.evidence_locations = coverage.evidence_locations.filter((location) => !excluded.has(location));
       }
+      for (const part of parts) {
+        const coverage = answer.coverage.find((item) => item.part_id === part.id);
+        if (!coverage) continue;
+        for (const location of relationships.fill(part)) {
+          const key = `${location.file}:${location.line}`;
+          const found = [...refs.values()].find(({ candidate, line }) => candidate.file === location.file && line.line === location.line);
+          if (!found || excluded.has(key)) continue;
+          if (!answer.evidence.some((item) => item.file === location.file && item.line === location.line))
+            answer.evidence.push({ id: found.candidate.id, file: location.file, line: location.line, quote: found.line.text.trim() });
+          if (!coverage.evidence_locations.includes(key)) coverage.evidence_locations.push(key);
+        }
+      }
       answer.coverage = answer.coverage.map((coverage) => {
         const part = parts.find((item) => item.id === coverage.part_id)!;
         const cited = answer.evidence.filter((item) =>

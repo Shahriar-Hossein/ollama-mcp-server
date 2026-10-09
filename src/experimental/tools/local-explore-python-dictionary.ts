@@ -45,8 +45,10 @@ export function pythonDictionaryPlanForTree(
     if (name?.type !== "identifier" || name.text === request.dictionary || names.has(name.text) || parameters?.type !== "parameters" || parameters.namedChildren.length || !body || body.type !== "block") return null;
     if (parameters.startPosition.row !== child.startPosition.row || parameters.endPosition.row !== child.startPosition.row || !/^(?:async[\t ]+)?def[\t ]+[A-Za-z_][A-Za-z0-9_]*[\t ]*\([\t ]*\)[\t ]*:/.test(child.text.split(/\r?\n/, 1)[0])) return null;
     names.add(name.text);
-    const parts = statements(body);
-    if (parts.length < 1 || parts.length > 2) return null;
+    const declared = statements(body);
+    const isGlobal = declared[0]?.type === "global_statement" && declared[0].namedChildren.length === 1 && declared[0].namedChildren[0].text === request.dictionary;
+    const parts = isGlobal ? declared.slice(1) : declared;
+    if (parts.length < 1 || parts.length > 2 || (isGlobal && parts.length !== 1)) return null;
     const local = parts.length === 2 ? initializer(parts[0]) : null;
     if (parts.length === 2 && !local) return null;
     const returned = parts[parts.length - 1];

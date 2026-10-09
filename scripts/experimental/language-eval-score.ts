@@ -151,7 +151,7 @@ export function evidenceAnswerRequest(
   };
   return {
     system:
-      "Answer using only the supplied checked evidence. Cite each factual claim with exact file and line values from that evidence. If evidence is insufficient, say so in uncertainty. Return only the requested JSON.",
+      "Answer using only the supplied checked evidence. Cite each factual claim with exact file and line values from that evidence. If evidence is insufficient, say so in uncertainty. State the exact value for every item the question asks for, not just the key. Write quoted source values with single quotes, never double quotes. Return only the requested JSON.",
     prompt: `Question: ${query}\nChecked evidence: ${JSON.stringify(
       selected.map(({ file, line, quote }) => ({ file, line, quote })),
     )}\nReturn an answer, factual claims with citations, and any uncertainty.`,

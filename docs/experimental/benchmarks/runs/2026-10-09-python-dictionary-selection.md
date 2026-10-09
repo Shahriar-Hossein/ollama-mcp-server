@@ -167,3 +167,16 @@ and return, and strip the class attribute's rows from selected evidence. Rerun o
 HO-CLASS only: the false claim (`log`, 3) is gone, but the answer still omits the
 values (`linear`, 5) and says the module dictionary is unknown. The held-out set is
 now development data; the omitted-value case is next.
+
+### Fill planned rows and answer prompt (development data)
+
+- Planned rows that were packed but unselected are now added to the evidence for
+  Python dictionary plans (class scope, parameter shadow, module/local), and a
+  `global NAME` line before a pure read is planned as a module read.
+- Answer prompt now asks for exact values and single quotes. Without the quote rule,
+  HO-GLOBAL was cut at an unescaped `"` in prose, twice, deterministically.
+- Held-out set rerun (development data now, one run, non-blind): no false claims
+  (was 1/5). Complete: HO-CLOSURE, HO-CLASS (2/5). HO-GLOBAL still says
+  'the value of the mode key' without `idle`; HO-KWONLY and HO-TYPEDDEFAULT still
+  omit values and never state the shadow. The model ignores the 'state the exact
+  value' instruction, so omitted values need a scorer flag or a fresh set to judge.

@@ -26,7 +26,7 @@ import {
 } from "./local-explore-provenance.js";
 
 type Location = { file: string; line: number };
-type Relationship = { requirement: string; alternatives: Location[][]; excluded?: Location[] };
+type Relationship = { requirement: string; alternatives: Location[][]; excluded?: Location[]; fill?: boolean };
 const callableKinds = new Set(["function", "method", "constructor"]);
 const identifier = "[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*";
 const scopedOperations = new Set([
@@ -448,10 +448,10 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex, q
     if (!pythonDictionaryRequest(query)) return [];
     const locations = pythonDictionaryLocations(root, index.symbols, query);
     const classScope = locations ? null : pythonClassScopeLocations(root, index.symbols, query);
-    if (classScope) return [{ requirement: "Python dictionary read by method, class attribute out of scope", alternatives: [classScope.locations], excluded: classScope.excluded }];
+    if (classScope) return [{ requirement: "Python dictionary read by method, class attribute out of scope", alternatives: [classScope.locations], excluded: classScope.excluded, fill: true }];
     const shadow = locations ? null : pythonParameterShadowLocations(root, index.symbols, query);
-    if (shadow) return [{ requirement: "Python dictionary shadowed by reader parameter", alternatives: [shadow.locations], excluded: shadow.excluded }];
-    return [{ requirement: "Python dictionary source rows", alternatives: locations ? [locations] : [] }];
+    if (shadow) return [{ requirement: "Python dictionary shadowed by reader parameter", alternatives: [shadow.locations], excluded: shadow.excluded, fill: true }];
+    return [{ requirement: "Python dictionary source rows", alternatives: locations ? [locations] : [], fill: true }];
   }
 
   function plan(part: QuestionPart): Relationship[] {
@@ -580,6 +580,10 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex, q
       return callRequests(part).map(({ calleeName }) => `${calleeName} call`);
     },
     // Source rows a requirement proves are not read; the model must not cite them.
+    // Rows a complete deterministic Python plan names; added to evidence when packed but unselected.
+    fill(part: QuestionPart): Location[] {
+      return plan(part).flatMap((check) => (check.fill ? (check.alternatives[0] ?? []) : []));
+    },
     excluded(part: QuestionPart): Location[] {
       return plan(part).flatMap((check) => check.excluded ?? []);
     },

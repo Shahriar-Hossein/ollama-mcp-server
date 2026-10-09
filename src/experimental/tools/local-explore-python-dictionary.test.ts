@@ -86,7 +86,6 @@ test("Python dictionary tree plan rejects unsupported module and function shapes
     `${moduleLiteral}\ndef worker() \\\n:\n    return OPTIONS['mode']`,
     `${moduleLiteral}\n${reader.replace("worker():", "worker() -> str:")}`,
     `${moduleLiteral}\ndef worker():\n    def nested(): return OPTIONS['mode']\n    return OPTIONS['mode']`,
-    `${moduleLiteral}\ndef worker():\n    global OPTIONS\n    return OPTIONS['mode']`,
     `${moduleLiteral}\ndef worker():\n    nonlocal OPTIONS\n    return OPTIONS['mode']`,
     `${moduleLiteral}\ndef worker():\n    OPTIONS['mode'] = 'changed'\n    return OPTIONS['mode']`,
     `${moduleLiteral}\ndef worker():\n    OPTIONS.update({})\n    return OPTIONS['mode']`,
@@ -361,4 +360,12 @@ test("class attribute is out of method scope: module rows are planned and class 
   const source = 'CFG = {\n    "mode": "m",\n}\n\nclass C:\n    CFG = {\n        "mode": "c",\n    }\n\n    def r(self):\n        CFG = {"mode": "x"}\n        return CFG["mode"]\n';
   repoWith({ "a.py": source }, (root, index) =>
     assert.equal(pythonClassScopeLocations(root, index.symbols, "Which CFG dictionary does C.r read?"), null));
+});
+
+test("global declaration reads the module dictionary and unrelated globals are rejected", () => {
+  const module = 'CFG = {\n    "mode": "m",\n}\n\ndef r():\n    global CFG\n    return CFG["mode"]\n';
+  repoWith({ "a.py": module }, (root, index) =>
+    assert.deepEqual(pythonDictionaryLocations(root, index.symbols, ask("CFG", "r"))?.map((item) => item.line), [1, 2, 5, 7]));
+  repoWith({ "a.py": module.replace("global CFG", "global OTHER") }, (root, index) =>
+    assert.equal(pythonDictionaryLocations(root, index.symbols, ask("CFG", "r")), null));
 });
