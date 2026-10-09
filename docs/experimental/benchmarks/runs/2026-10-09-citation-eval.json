@@ -1,0 +1,329 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "python/scopes.py": "2539ec6ad17a45cb99eaafe47f9407fc802a5f9414c61997b5c2b7e5df4a3a55"
+  },
+  "rubric": "Lexical owner review cues only. Foreign-owner flags do not mean false claims; absence does not prove binding. Declaration headers own themselves. Module citations have no callable owner and remain unresolved.",
+  "cases": [
+    {
+      "id": "BAD-BINDING",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 15,
+        "text": "async def process_background():"
+      },
+      "claim": "process_background uses the inline-local OPTIONS with mode inline and attempts 4.",
+      "citations": [
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"inline\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"attempts\": 4,"
+        }
+      ],
+      "expected_foreign": [
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"inline\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"attempts\": 4,"
+        }
+      ],
+      "expected_unresolved": [],
+      "claim_truth": "incorrect"
+    },
+    {
+      "id": "BAD-RETURN",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 7,
+        "text": "def process_inline():"
+      },
+      "claim": "The return used by process_inline is declared in process_background.",
+      "citations": [
+        {
+          "file": "python/scopes.py",
+          "line": 15,
+          "text": "async def process_background():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 16,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "expected_foreign": [
+        {
+          "file": "python/scopes.py",
+          "line": 15,
+          "text": "async def process_background():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 16,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "expected_unresolved": [],
+      "claim_truth": "incorrect"
+    },
+    {
+      "id": "CLEAN-LOCAL",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 7,
+        "text": "def process_inline():"
+      },
+      "claim": "process_inline returns inline from its local OPTIONS dictionary, whose attempts value is 4.",
+      "citations": [
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"inline\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"attempts\": 4,"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 12,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "expected_foreign": [],
+      "expected_unresolved": [],
+      "claim_truth": "correct"
+    },
+    {
+      "id": "CLEAN-MODULE",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 15,
+        "text": "async def process_background():"
+      },
+      "claim": "process_background reads module OPTIONS mode batch; that dictionary has attempts 11.",
+      "citations": [
+        {
+          "file": "python/scopes.py",
+          "line": 1,
+          "text": "OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 2,
+          "text": "    \"mode\": \"batch\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 3,
+          "text": "    \"attempts\": 11,"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 16,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "expected_foreign": [],
+      "expected_unresolved": [
+        {
+          "file": "python/scopes.py",
+          "line": 1,
+          "text": "OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 2,
+          "text": "    \"mode\": \"batch\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 3,
+          "text": "    \"attempts\": 11,"
+        }
+      ],
+      "claim_truth": "correct"
+    },
+    {
+      "id": "CLEAN-CONTRAST",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 15,
+        "text": "async def process_background():"
+      },
+      "claim": "process_inline has its own OPTIONS dictionary with mode inline and attempts 4.",
+      "citations": [
+        {
+          "file": "python/scopes.py",
+          "line": 7,
+          "text": "def process_inline():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"inline\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"attempts\": 4,"
+        }
+      ],
+      "expected_foreign": [
+        {
+          "file": "python/scopes.py",
+          "line": 7,
+          "text": "def process_inline():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"inline\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"attempts\": 4,"
+        }
+      ],
+      "expected_unresolved": [],
+      "claim_truth": "correct"
+    },
+    {
+      "id": "UNKNOWN",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 15,
+        "text": "async def process_background():"
+      },
+      "claim": "The unavailable caller configures process_background mode to priority.",
+      "citations": [],
+      "expected_foreign": [],
+      "expected_unresolved": [],
+      "claim_truth": "unknown"
+    }
+  ],
+  "questions": [
+    {
+      "id": "PY-INLINE",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 7,
+        "text": "def process_inline():"
+      },
+      "query": "Which OPTIONS dictionary does process_inline read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/scopes.py",
+          "line": 7,
+          "text": "def process_inline():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"inline\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"attempts\": 4,"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 12,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "answer": "Reads local OPTIONS, returns inline; attempts is 4.",
+      "forbidden_claims": [
+        "Reads module OPTIONS",
+        "Returns batch",
+        "Attempts 11"
+      ],
+      "language": "python"
+    },
+    {
+      "id": "PY-BACKGROUND",
+      "target": {
+        "file": "python/scopes.py",
+        "line": 15,
+        "text": "async def process_background():"
+      },
+      "query": "Which OPTIONS dictionary does process_background read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/scopes.py",
+          "line": 1,
+          "text": "OPTIONS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 2,
+          "text": "    \"mode\": \"batch\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 3,
+          "text": "    \"attempts\": 11,"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 15,
+          "text": "async def process_background():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 16,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "answer": "Reads module OPTIONS, returns batch; attempts is 11.",
+      "forbidden_claims": [
+        "Reads process_inline local OPTIONS",
+        "Returns inline",
+        "Attempts 4"
+      ],
+      "language": "python"
+    }
+  ]
+}
