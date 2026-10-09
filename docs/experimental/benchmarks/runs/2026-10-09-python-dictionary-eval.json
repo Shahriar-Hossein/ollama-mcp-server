@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "python/async.py": "9ea0d3bbcbd442b740275c4a949a4f5a840fa658382874c51ff6df620f66229a",
+    "python/local.py": "bf69d19bb884bd55f81d339615c18d035a07a998e2767744336d9504820d865a",
+    "python/module.py": "a8bd04f34c91489d8ce66406a7453a658d1812d8e681ba8ff6c1b4c74b286609",
+    "python/parameter.py": "7c3d444e2e4df694cc4cd3d61a0769eca2563ec227359858f617b0dc9339e91e"
+  },
+  "questions": [
+    {
+      "id": "PD-MODULE",
+      "language": "python",
+      "query": "Which POLICY dictionary does module_policy read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/module.py",
+          "line": 1,
+          "text": "POLICY = {"
+        },
+        {
+          "file": "python/module.py",
+          "line": 2,
+          "text": "    \"mode\": \"queued\","
+        },
+        {
+          "file": "python/module.py",
+          "line": 3,
+          "text": "    \"attempts\": 13,"
+        },
+        {
+          "file": "python/module.py",
+          "line": 13,
+          "text": "def module_policy():"
+        },
+        {
+          "file": "python/module.py",
+          "line": 14,
+          "text": "    return POLICY[\"mode\"]"
+        }
+      ],
+      "answer": "module_policy reads the module POLICY dictionary, returns queued, and that dictionary has attempts 13. direct_policy has a separate local POLICY.",
+      "forbidden_claims": [
+        "module_policy reads direct_policy local POLICY",
+        "module_policy returns direct",
+        "module_policy dictionary attempts is 2"
+      ]
+    },
+    {
+      "id": "PD-LOCAL",
+      "language": "python",
+      "query": "Which SETTINGS dictionary does local_setting read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/local.py",
+          "line": 6,
+          "text": "def local_setting():"
+        },
+        {
+          "file": "python/local.py",
+          "line": 7,
+          "text": "    SETTINGS = {"
+        },
+        {
+          "file": "python/local.py",
+          "line": 8,
+          "text": "        \"mode\": \"ephemeral\","
+        },
+        {
+          "file": "python/local.py",
+          "line": 9,
+          "text": "        \"attempts\": 5,"
+        },
+        {
+          "file": "python/local.py",
+          "line": 11,
+          "text": "    return SETTINGS[\"mode\"]"
+        }
+      ],
+      "answer": "local_setting reads its local SETTINGS dictionary, returns ephemeral, and that dictionary has attempts 5. The module SETTINGS is shadowed in local_setting.",
+      "forbidden_claims": [
+        "local_setting reads module SETTINGS",
+        "local_setting returns stored",
+        "local_setting dictionary attempts is 21"
+      ]
+    },
+    {
+      "id": "PD-ASYNC",
+      "language": "python",
+      "query": "Which OPTIONS dictionary does async_choice read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/async.py",
+          "line": 1,
+          "text": "OPTIONS = {"
+        },
+        {
+          "file": "python/async.py",
+          "line": 2,
+          "text": "    \"mode\": \"deferred\","
+        },
+        {
+          "file": "python/async.py",
+          "line": 3,
+          "text": "    \"attempts\": 8,"
+        },
+        {
+          "file": "python/async.py",
+          "line": 13,
+          "text": "async def async_choice():"
+        },
+        {
+          "file": "python/async.py",
+          "line": 14,
+          "text": "    return OPTIONS[\"mode\"]"
+        }
+      ],
+      "answer": "async_choice reads the module OPTIONS dictionary, returns deferred, and that dictionary has attempts 8. inline_choice has a separate local OPTIONS.",
+      "forbidden_claims": [
+        "async_choice reads inline_choice local OPTIONS",
+        "async_choice returns immediate",
+        "async_choice dictionary attempts is 3"
+      ]
+    },
+    {
+      "id": "PD-PARAM",
+      "language": "python",
+      "query": "Which CONFIG dictionary does parameter_choice read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/parameter.py",
+          "line": 6,
+          "text": "def parameter_choice(CONFIG):"
+        },
+        {
+          "file": "python/parameter.py",
+          "line": 7,
+          "text": "    return CONFIG[\"mode\"]"
+        }
+      ],
+      "answer": "parameter_choice reads its CONFIG parameter, which shadows the module CONFIG. No caller is supplied, so the returned mode and the parameter dictionary attempts value are unknown. The module unused/99 values do not determine these results.",
+      "forbidden_claims": [
+        "parameter_choice reads module CONFIG",
+        "parameter_choice returns unused",
+        "parameter_choice dictionary attempts is 99",
+        "The caller provides a known mode or attempts value"
+      ]
+    }
+  ]
+}

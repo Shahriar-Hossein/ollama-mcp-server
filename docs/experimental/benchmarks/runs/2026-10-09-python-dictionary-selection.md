@@ -58,7 +58,41 @@ beside the earlier drafts. Sol repaired the helper. Nine named tests, TypeScript
 scoped Biome lint and `git diff --check` passed. Parser fixtures are development
 unit inputs; no frozen model evaluation was rerun for this piece.
 
-Next bounded step: freeze fresh questions and run the baseline with these helpers
-unused before integrating source shortlists into the selection harness. Preserve
-generic semantic review; a source plan must never auto-add selected evidence.
+Fourth bounded piece: four new source-only files and four questions are frozen
+in `2026-10-09-python-dictionary-eval.json`. Answer keys and required rows were
+checked directly against source, without the tree planner:
+
+| ID | Source | Required rows | Checked answer |
+|---|---|---|---|
+| PD-MODULE | python/module.py | 1, 2, 3, 13, 14 | Module POLICY; queued; 13 |
+| PD-LOCAL | python/local.py | 6, 7, 8, 9, 11 | Local SETTINGS; ephemeral; 5 |
+| PD-ASYNC | python/async.py | 1, 2, 3, 13, 14 | Module OPTIONS; deferred; 8 |
+| PD-PARAM | python/parameter.py | 6, 7 | CONFIG parameter shadows module; caller mode/attempts unknown |
+
+Manifest SHA-256:
+`23d07f4887ce460e4cf0ae8a3e634b61680c4248a626ab47ebad70e8b0a203fd`.
+The manifest also pins all four source hashes. No prior frozen fixture changed.
+H supplied the source-only draft in 12,523 ms tool wall time. Names, values,
+shadowing and async shape were retained; Sol repaired only dictionary layout
+and final newlines because the draft ignored those explicit format requirements.
+
+The new fixture validator checks exact files/IDs, Python language, hashes and
+literal source references independently of planner semantics. Symlink sources
+and nested Git directories fail; only root Git metadata is excluded. The thin
+wrapper reuses the existing source-only Git runner with selected-only answers.
+Golden answers and required/forbidden fields stay outside model prompts.
+Four validator tests and three mocked runner tests passed, including setup-time
+pin failures and malformed raw preservation. Strict script TypeScript, repository
+TypeScript, scoped Biome lint and diff checks passed. No real generation ran;
+manual review metrics remain pending/null. This small freeze does not establish
+general binding coverage, routing performance or selection improvement.
+
+Next bounded step: commit the freeze, then run the baseline while the three
+helpers remain unused:
+`node --env-file-if-exists=.env --import tsx scripts/experimental/run-python-dictionary-eval.ts`.
+The ignored default is
+`benchmark-data/language-eval/python-dictionary-development/baseline.json`.
+Only after that baseline, integrate source shortlists and run the same frozen
+queries with `--output benchmark-data/language-eval/python-dictionary-development/enhanced.json`.
+Preserve generic semantic review; a source plan must never auto-add evidence.
 Frozen evaluation manifests and raw results remain unchanged.
