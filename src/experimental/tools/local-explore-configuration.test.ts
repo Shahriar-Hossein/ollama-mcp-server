@@ -205,7 +205,7 @@ test("configuration value provenance excludes module arrays and provider tokens"
       join(root, "signer.ts"),
       source.replace(
         "@Module({ imports: [",
-        "import { unknownModule, providerToken } from './tokens.js';\n@Module({ providers: [{ provide: providerToken, inject: [providerToken], useValue: token }], exports: [unknownModule], imports: [unknownModule,",
+        "import { Module } from '@nestjs/common';\nimport { unknownModule, providerToken } from './tokens.js';\n@Module({ providers: [{ provide: providerToken, inject: [providerToken], useValue: token }], exports: [unknownModule], imports: [unknownModule,",
       ),
     );
     const { part, evidence, checks } = packedEvidence(

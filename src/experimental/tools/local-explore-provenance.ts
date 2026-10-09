@@ -83,13 +83,105 @@ export function provenanceLines(file: string, node: Parser.SyntaxNode): Location
 function metadataToken(use: Parser.SyntaxNode): boolean {
   const value = use.parent?.type === "array" ? use.parent : use;
   const pair = value.parent;
+  if (pair?.type !== "pair" || pair.childForFieldName("value")?.id !== value.id)
+    return false;
+  const key = (pair.childForFieldName("key")?.text ?? "").replace(/^['"]|['"]$/g, "");
+  const object = pair.parent;
+  if (object?.type !== "object") return false;
+  const fields = directMetadataFields(object);
+  if (!fields) return false;
+  if (["imports", "providers", "exports"].includes(key))
+    return value.type === "array" && moduleMetadata(object);
+  if (!["provide", "inject"].includes(key)) return false;
+  const providers = object.parent;
+  const providersPair = providers?.parent;
+  if (
+    providers?.type !== "array" ||
+    providersPair?.type !== "pair" ||
+    providersPair.childForFieldName("key")?.text.replace(/^['"]|['"]$/g, "") !== "providers" ||
+    providersPair.childForFieldName("value")?.id !== providers.id ||
+    !providersPair.parent ||
+    !moduleMetadata(providersPair.parent)
+  )
+    return false;
   return (
-    pair?.type === "pair" &&
-    pair.childForFieldName("value")?.id === value.id &&
-    /^(?:imports|providers|exports|inject|provide)$/.test(
-      (pair.childForFieldName("key")?.text ?? "").replace(/^['"]|['"]$/g, ""),
-    )
+    fields.includes("provide") &&
+    fields.filter((field) => ["useValue", "useClass", "useExisting", "useFactory"].includes(field))
+      .length === 1 &&
+    (key === "provide" || value.type === "array")
   );
+}
+
+function directMetadataFields(object: Parser.SyntaxNode): string[] | undefined {
+  if (object.type !== "object") return undefined;
+  const fields = object.namedChildren.filter((node) => node.type !== "comment");
+  if (!fields.every((node) => node.type === "pair")) return undefined;
+  const keys = fields.map((node) =>
+    (node.childForFieldName("key")?.text ?? "").replace(/^['"]|['"]$/g, ""),
+  );
+  return new Set(keys).size === keys.length ? keys : undefined;
+}
+
+function moduleMetadata(object: Parser.SyntaxNode): boolean {
+  if (!directMetadataFields(object)) return false;
+  const args = object.parent;
+  const call = args?.parent;
+  const callee = call?.childForFieldName("function");
+  if (
+    args?.type !== "arguments" ||
+    args.namedChildren.length !== 1 ||
+    call?.type !== "call_expression" ||
+    call.parent?.type !== "decorator" ||
+    callee?.type !== "identifier"
+  )
+    return false;
+  const name = callee.text;
+  const imported = object.tree.rootNode.descendantsOfType("import_statement").some(
+    (statement) =>
+      statement.childForFieldName("source")?.text.slice(1, -1) === "@nestjs/common" &&
+      !/^import\s+type\b/.test(statement.text) &&
+      statement.descendantsOfType("import_specifier").some(
+        (specifier) =>
+          !/^type\s/.test(specifier.text) &&
+          specifier.childForFieldName("name")?.text === "Module" &&
+          (specifier.childForFieldName("alias") ?? specifier.childForFieldName("name"))?.text ===
+            name,
+      ),
+  );
+  if (!imported) return false;
+  // Ambiguous bindings must retain value obligations instead of hiding evidence.
+  return !object.tree.rootNode
+    .descendantsOfType([
+      "variable_declarator",
+      "required_parameter",
+      "optional_parameter",
+      "formal_parameters",
+      "arrow_function",
+      "function_declaration",
+      "function_expression",
+      "generator_function",
+      "generator_function_declaration",
+      "class_declaration",
+      "catch_clause",
+      "assignment_expression",
+      "augmented_assignment_expression",
+      "update_expression",
+    ])
+    .some((node) => {
+      const binding =
+        node.childForFieldName("name") ??
+        node.childForFieldName("pattern") ??
+        node.childForFieldName("parameter") ??
+        node.childForFieldName("left") ??
+        node.childForFieldName("argument") ??
+        (node.type === "formal_parameters" ? node : undefined);
+      return (
+        binding?.text === name ||
+        binding
+          ?.descendantsOfType(["identifier", "shorthand_property_identifier_pattern"])
+          .some((identifier) => identifier.text === name)
+      );
+    });
 }
 
 // One direct import and initializer only; the source chain does not prove runtime values.
