@@ -1,0 +1,24 @@
+{
+  "reviewer": "lead (Claude Sonnet 5.5), non-blind: all raws read together, answers checked against source",
+  "manifest_sha256": "af09af0fffab1334c4256e815fb52349a0d4c1456cdd7bb5c93ac12e1da97ee1",
+  "runs": {
+    "baseline": {"file": "benchmark-data/language-eval/python-dictionary-fresh/baseline.json", "sha256": "bc4116e7e722878d7291f1529fe65c2c5dcbf5504aa04b6418424f6edb8bdabb", "code": "4fec7ab plus eval scripts from 2593acf"},
+    "current": {"file": "benchmark-data/language-eval/python-dictionary-fresh/current.json", "sha256": "de2f4cf1101865cc559ee41b6ac54ff3702626c72e27af0e5dab0e55e27f177f", "code": "2593acf (source rows and shadow plan, run before exclusion)"},
+    "postfix": {"file": "benchmark-data/language-eval/python-dictionary-fresh/postfix.json", "sha256": "7d4bd0af00a0ee08f333ba64e0e456fdc32119385fbdc1e2f53d28af8e324805", "code": "cf3cad4 (adds default/typed parameters and shadow-row exclusion)"}
+  },
+  "cases": {
+    "FR-PLAIN":   {"baseline": "false claim: attempts 41", "current": "false claim: attempts 41", "postfix": "no false claim; shadowing not stated; vague unsupported closing clause"},
+    "FR-DEFAULT": {"baseline": "false claim: fixed, 17", "current": "false claim: fixed, 17", "postfix": "no false claim; says attempts not in evidence"},
+    "FR-TYPED":   {"baseline": "false claim: attempts 6; truncated", "current": "false claim: attempts 6; truncated", "postfix": "no false claim; truncated, flagged incomplete_text"},
+    "FR-ASYNC":   {"baseline": "correct, complete", "current": "correct, complete", "postfix": "correct, complete"},
+    "FR-MODULE":  {"baseline": "false claim: loud, 7", "current": "no false claim; mode value verbose and declaration omitted", "postfix": "same as current (4/5 required rows)"}
+  },
+  "totals": {
+    "required_rows_selected": {"baseline": "16/16", "current": "15/16", "postfix": "15/16"},
+    "answers_with_false_claim": {"baseline": 4, "current": 3, "postfix": 0},
+    "correct_and_complete": {"baseline": "1/5", "current": "1/5", "postfix": "1/5"},
+    "incomplete_text_flagged": {"baseline": 1, "current": 1, "postfix": 1},
+    "question_ms": {"baseline": 118020, "current": 130575, "postfix": 117856}
+  },
+  "limits": "5 questions, one run each, one model, non-blind lead review. The fresh set became development data once the postfix changes were built from its results, so the postfix row is not held-out. Row coverage counts are not answer quality: shadow questions require only 2 rows, and baseline selected all of them while still asserting the module values."
+}

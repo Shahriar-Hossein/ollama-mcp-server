@@ -120,3 +120,24 @@ MODULE and ASYNC became correct (queued/13, deferred/8). PARAM still fails: the
 answer is cut off, it selected module line 3, and it never names the parameter
 shadowing. Review was lead-only and not blind. Four cases, one run each: this shows
 the checklist helps these shapes, nothing broader.
+
+## Fresh set (five questions) and parameter shadowing
+
+Frozen before any run (`2593acf`, manifest SHA `af09af0f…7ee1`): three
+shadow shapes (plain, default, annotated parameter), an async local dictionary
+and a module dictionary beside two local ones. Review: [sidecar](2026-10-10-python-dictionary-fresh-review.json).
+
+| | Baseline | Source rows + shadow plan | Post-fix |
+|---|---|---|---|
+| Answers with a false claim | 4 | 3 | 0 |
+| Correct and complete | 1/5 | 1/5 | 1/5 |
+
+- The shadow plan alone anchored the header and return rows, but H still selected
+  the module `attempts` row and the answer asserted the module value.
+- Post-fix (`cf3cad4`) accepts default/annotated parameters and strips the module
+  dictionary's rows from selected evidence when a parameter shadows it. No answer
+  asserted a module value afterwards.
+- Still not complete: shadowing is never stated in words, FR-TYPED is cut off
+  (now flagged `incomplete_text`) and FR-MODULE omits the mode value.
+- The fixes were built from this set's results, so post-fix is development data.
+  Held-out evidence needs a new frozen set. One run each, non-blind.

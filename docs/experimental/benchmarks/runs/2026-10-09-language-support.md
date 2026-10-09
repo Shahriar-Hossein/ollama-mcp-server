@@ -61,3 +61,10 @@ required rows (baseline 14/17) and 3/4 answers were correct and complete
 (baseline 1/4). The parameter-shadow case still fails with a truncated answer.
 Small, lead-reviewed, one run; see the selection report. Incomplete-answer
 detection and the other Next items above remain open.
+
+Update 2026-10-10: incomplete-answer detection (`incomplete_text`), parameter
+shadowing (plain, default, annotated) with module-row exclusion, and a five-question
+fresh set are done. Answers with a false claim fell 4 → 0 on that set, but only 1/5
+are correct and complete, and it is now development data. Still open: a new frozen
+held-out set, stating the shadow explicitly in answers, and the omitted-value case
+(FR-MODULE). See the selection report.
