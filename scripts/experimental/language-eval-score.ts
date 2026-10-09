@@ -134,6 +134,15 @@ export function parameterShadowNotes(selected: SelectedEvidence): string[] {
         notes.push(`${name} at ${header.file}:${header.line} is the reader's own parameter, so the module ${name} dictionary is not read; the parameter's values are not shown.`);
     }
   }
+  for (const nonlocal of selected) {
+    const name = /^\s*nonlocal\s+([A-Za-z_]\w*)\s*$/.exec(nonlocal.quote)?.[1];
+    if (!name) continue;
+    const declaration = selected
+      .filter((item) => item.file === nonlocal.file && item.line < nonlocal.line && new RegExp(`^\\s*${name}\\s*=`).test(item.quote))
+      .sort((a, b) => b.line - a.line)[0];
+    if (declaration)
+      notes.push(`nonlocal ${name} at ${nonlocal.file}:${nonlocal.line} makes the reader use the ${name} of its enclosing function, declared at ${declaration.file}:${declaration.line}, so a module ${name} dictionary is shadowed and not read.`);
+  }
   return notes;
 }
 

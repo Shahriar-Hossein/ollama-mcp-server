@@ -168,3 +168,12 @@ test("parameterShadowNotes flags a read of the reader's own parameter only", () 
   assert.equal(parameterShadowNotes([ev(1, "def f():"), ev(2, '    return POLICY["mode"]')]).length, 0);
   assert.equal(parameterShadowNotes([ev(1, "def f(x):"), ev(2, '    return x["a"]'), ev(3, "x = {")]).length, 0);
 });
+
+test("parameterShadowNotes covers **kwargs parameters and nonlocal reads", () => {
+  const ev = (line: number, quote: string) => ({ file: "a.py", line, quote });
+  assert.equal(parameterShadowNotes([ev(1, "def f(**ROUTE):"), ev(2, '    return ROUTE["mode"]')]).length, 1);
+  const notes = parameterShadowNotes([ev(1, "LEVEL = {"), ev(7, "LEVEL = {"), ev(13, "nonlocal LEVEL")]);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /a\.py:7/);
+  assert.equal(parameterShadowNotes([ev(13, "        nonlocal LEVEL")]).length, 0);
+});
