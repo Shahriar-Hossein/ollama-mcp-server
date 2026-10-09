@@ -15,6 +15,49 @@ function withFile(source: string, run: (root: string) => void, file = "m.ts") {
   }
 }
 
+test("Go context stops at receiver, type and anonymous function headers", () => {
+  const source = [
+    "package billing",
+    "type Invoice struct {",
+    "  Amount int",
+    "}",
+    "func (i *Invoice) Send() {",
+    "  if i.Amount > 0 {",
+    "    emit(i.Amount)",
+    "  }",
+    "  callback := func() {",
+    "    emit(1)",
+    "  }",
+    "  callback()",
+    "}",
+    "",
+  ].join("\n");
+  withFile(source, (root) => {
+    const support = (line: number) => structuralSupport(root, [{ file: "m.go", line }]);
+    assert.deepEqual(support(3).map((line) => line.line), [2]);
+    assert.deepEqual(support(7).map((line) => line.line), [5]);
+    assert.deepEqual(support(10).map((line) => line.line), [9]);
+    assert.match(support(10)[0].reason, /Go func literal/);
+    assert.deepEqual(support(9), []);
+    assert.deepEqual(support(5), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "m.go", line: 10 }, { file: "m.go", line: 9 }]), []);
+    assert.deepEqual(support(0), []);
+  }, "m.go");
+});
+
+test("Go supporting headers stay bounded and malformed nearest scopes add nothing", () => {
+  const declarations = Array.from({ length: 20 }, (_, i) => `func F${i}() {\n  emit(${i})\n}`).join("\n");
+  const source = `package billing\n${declarations}\n`;
+  withFile(source, (root) => {
+    const evidence = Array.from({ length: 20 }, (_, i) => ({ file: "m.go", line: 3 + i * 3 }));
+    assert.equal(structuralSupport(root, evidence).length, 12);
+  }, "m.go");
+  withFile("package billing\nfunc Outer() {\n  broken := func( {\n    emit(1)\n  }\n}\n", (root) => {
+    assert.deepEqual(structuralSupport(root, [{ file: "m.go", line: 4 }]), []);
+    assert.deepEqual(structuralSupport(root, [{ file: "gone.go", line: 1 }]), []);
+  }, "m.go");
+});
+
 const nest = [
   "import { Module } from '@nestjs/common';",
   "",

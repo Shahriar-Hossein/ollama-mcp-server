@@ -23,6 +23,8 @@ This is the canonical instructions file for this repo — other agent configs
   master flag.
 - `src/explorer/` — the supported deterministic repository index, outlines,
   symbol reads, structural queries, basic retrieval, and their CLIs.
+  Tracked Go sources use a pinned grammar. Calls, references and imports stay
+  unresolved; do not apply JS name resolution or env guards to Go nodes.
 - `src/experimental/` — advanced Explorer pipelines, adapters, benchmarks,
   optional MCP tools, and autonomous workers. Default startup does not import
   this tree. Keep new work out unless an experimental feature is explicitly
@@ -174,6 +176,9 @@ This is the canonical instructions file for this repo — other agent configs
   identifier occurrence for up to three names/aliases, excluding wildcard imports,
   comments, strings and other import declarations. These are text context;
   shadowing, reassignment, attribute names and binding identity are not resolved.
+  Go adds the nearest function, receiver method, named type or anonymous function
+  header. Selected headers never fall back to an outer scope; malformed nearest
+  scopes add nothing. This is lexical source context, not package or receiver resolution.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still

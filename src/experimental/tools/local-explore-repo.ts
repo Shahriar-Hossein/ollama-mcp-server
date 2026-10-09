@@ -44,13 +44,12 @@ export type { QuestionPart } from "./local-explore-validation.js";
 
 const UNINDEXED_LANGUAGES: [string, RegExp, string][] = [
   ["Ruby", /\bruby\b|\brails\b|\.rb\b/i, ".rb"],
-  ["Go", /\bgolang\b|\.go\b/i, ".go"],
   ["Java", /\bjava\b|\.java\b/i, ".java"],
   ["Rust", /\brust\b|\.rs\b/i, ".rs"],
   ["C#", /\bc#|\.cs\b/i, ".cs"],
 ];
 
-// The index covers TS/JS/PHP/Python only; flag questions about tracked sources it cannot search.
+// Flag questions about tracked sources the index cannot search.
 export function unindexedLanguages(root: string, query: string): string[] {
   const named = UNINDEXED_LANGUAGES.filter(([, pattern]) => pattern.test(query));
   if (!named.length) return [];
@@ -504,7 +503,7 @@ export async function runLocalExploreRepo(
     return emptyResult(
       "no_evidence",
       [
-        `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript/PHP/Python only; read those files directly.`,
+        `Unsupported language: ${unindexed.join(", ")}. The index covers TypeScript/JavaScript/PHP/Python/Go only; read those files directly.`,
       ],
       undefined,
       true,

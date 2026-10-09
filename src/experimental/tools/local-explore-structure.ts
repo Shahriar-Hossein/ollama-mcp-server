@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Parser from "tree-sitter";
+import Go from "tree-sitter-go";
 import PHP from "tree-sitter-php";
 import Python from "tree-sitter-python";
 import { parseSource } from "../../explorer/parse.js";
@@ -33,6 +34,7 @@ const PHP_SCOPES = new Set([
   "anonymous_class",
 ]);
 const PYTHON_SCOPES = new Set(["function_definition", "class_definition", "lambda"]);
+const GO_SCOPES = new Set(["function_declaration", "method_declaration", "type_spec", "type_alias", "func_literal"]);
 
 // Deterministic extras (Nest @Module, enclosing declaration, scalar sibling keys); not H's selection and not semantic proof.
 type Add = (file: string, row: number, reason: string, lines: string[]) => boolean;
@@ -73,10 +75,20 @@ function enclosingPhpScope(start: Parser.SyntaxNode | null, file: string, lines:
 }
 
 function parseSupportTree(source: string, file: string) {
-  if (!/\.(?:php|py)$/.test(file)) return parseConfigurationTree(source, file);
+  if (!/\.(?:php|py|go)$/.test(file)) return parseConfigurationTree(source, file);
   const parser = new Parser();
-  parser.setLanguage(file.endsWith(".py") ? Python : PHP.php);
+  parser.setLanguage(file.endsWith(".go") ? Go : file.endsWith(".py") ? Python : PHP.php);
   return parseSource(parser, source);
+}
+
+function enclosingGoScope(start: Parser.SyntaxNode | null, file: string, lines: string[], add: Add) {
+  for (let node = start; node; node = node.parent) {
+    if (node.type === "ERROR" || node.isMissing) return;
+    if (!GO_SCOPES.has(node.type)) continue;
+    if (node.hasError) return;
+    add(file, node.startPosition.row, `enclosing Go ${node.type.replace(/_/g, " ")} of selected line (source context)`, lines);
+    return;
+  }
 }
 
 function enclosingPythonScope(start: Parser.SyntaxNode | null, file: string, lines: string[], add: Add) {
@@ -212,6 +224,7 @@ export function structuralSupport(
     lines: string[];
     phpHeaders: Set<number>;
     pythonHeaders: Map<number, Parser.SyntaxNode>;
+    goHeaders: Map<number, Parser.SyntaxNode>;
   } | null>();
   const add: Add = (file, row, reason, lines) => {
     const key = `${file}:${row + 1}`;
@@ -222,7 +235,7 @@ export function structuralSupport(
     return true;
   };
   for (const item of evidence) {
-    if (!/\.(?:[cm]?[jt]sx?|php|py)$/.test(item.file)) continue;
+    if (!/\.(?:[cm]?[jt]sx?|php|py|go)$/.test(item.file)) continue;
     if (!trees.has(item.file)) {
       try {
         const source = readFileSync(join(root, item.file), "utf8");
@@ -239,7 +252,12 @@ export function structuralSupport(
           for (const node of tree.rootNode.descendantsOfType([...PYTHON_SCOPES]))
             if (node.isNamed) pythonHeaders.set(node.startPosition.row, node);
         }
-        trees.set(item.file, { tree, lines: source.split("\n"), phpHeaders, pythonHeaders });
+        const goHeaders = new Map<number, Parser.SyntaxNode>();
+        if (item.file.endsWith(".go")) {
+          for (const node of tree.rootNode.descendantsOfType([...GO_SCOPES]))
+            if (node.isNamed) goHeaders.set(node.startPosition.row, node);
+        }
+        trees.set(item.file, { tree, lines: source.split("\n"), phpHeaders, pythonHeaders, goHeaders });
       } catch {
         trees.set(item.file, null);
       }
@@ -250,6 +268,13 @@ export function structuralSupport(
     if (!Number.isInteger(row) || row < 0 || row >= parsed.lines.length || !parsed.lines[row].trim()) continue;
     const column = Math.max(0, (parsed.lines[row] ?? "").search(/\S/));
     const start: Parser.SyntaxNode | null = parsed.tree.rootNode.descendantForPosition({ row, column });
+    if (item.file.endsWith(".go")) {
+      let invalid = false;
+      for (let node: Parser.SyntaxNode | null = start; node; node = node.parent)
+        if (node.type === "ERROR" || node.isMissing) invalid = true;
+      if (!invalid) enclosingGoScope(parsed.goHeaders.get(row) ?? start, item.file, parsed.lines, add);
+      continue;
+    }
     if (item.file.endsWith(".php")) {
       // A line can start before its closure header (for example, "$fn = function ...").
       if (!parsed.phpHeaders.has(row)) enclosingPhpScope(start, item.file, parsed.lines, add);

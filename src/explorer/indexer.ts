@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import Parser from "tree-sitter";
+import Go from "tree-sitter-go";
 import JavaScript from "tree-sitter-javascript";
 import PHP from "tree-sitter-php";
 import Python from "tree-sitter-python";
@@ -47,7 +48,7 @@ export interface SymbolRecord {
   repository_root: ".";
   commit_hash: string;
   file: string;
-  language: "typescript" | "javascript" | "php" | "python";
+  language: "typescript" | "javascript" | "php" | "python" | "go";
   kind: SymbolKind;
   name: string;
   qualified_name: string;
@@ -130,6 +131,7 @@ interface Declaration {
   kind: SymbolKind;
   name: string;
   nameNode: Parser.SyntaxNode;
+  qualifiedPrefix?: string;
 }
 
 const LANGUAGE_BY_EXTENSION: Record<string, SupportedLanguage> = {
@@ -140,6 +142,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, SupportedLanguage> = {
   ".cjs": "javascript",
   ".php": "php",
   ".py": "python",
+  ".go": "go",
 };
 
 function command(root: string, args: string[]): string {
@@ -163,15 +166,17 @@ function languageForPath(path: string): SupportedLanguage | null {
 function parserFor(language: SupportedLanguage, file: string): Parser {
   const parser = new Parser();
   parser.setLanguage(
-    language === "python"
-      ? Python
-      : language === "php"
-        ? PHP.php
-        : language === "typescript"
-          ? file.endsWith(".tsx")
-            ? TypeScript.tsx
-            : TypeScript.typescript
-          : JavaScript,
+    language === "go"
+      ? Go
+      : language === "python"
+        ? Python
+        : language === "php"
+          ? PHP.php
+          : language === "typescript"
+            ? file.endsWith(".tsx")
+              ? TypeScript.tsx
+              : TypeScript.typescript
+            : JavaScript,
   );
   return parser;
 }
@@ -187,6 +192,25 @@ function position(node: Parser.SyntaxNode, edge: "start" | "end"): SourcePositio
 
 function range(node: Parser.SyntaxNode): SourceRange {
   return { start: position(node, "start"), end: position(node, "end") };
+}
+
+function normalizeUtf8Ranges(source: string, ranges: SourceRange[]): void {
+  // The Node parser uses UTF-16 indices; public source slices use UTF-8 bytes.
+  const offsets: number[] = [];
+  let index = 0;
+  let byte = 0;
+  for (const character of source) {
+    for (let part = 0; part < character.length; part++) offsets[index + part] = byte;
+    index += character.length;
+    byte += Buffer.byteLength(character);
+  }
+  offsets[index] = byte;
+  for (const range of ranges) {
+    for (const position of [range.start, range.end]) {
+      position.column = offsets[position.byte] - offsets[position.byte - position.column + 1] + 1;
+      position.byte = offsets[position.byte];
+    }
+  }
 }
 
 function nameFrom(node: Parser.SyntaxNode | null): string | null {
@@ -288,6 +312,44 @@ function declarationFor(node: Parser.SyntaxNode, language: SupportedLanguage): D
     default:
       return null;
   }
+}
+
+function goDeclarationsFor(node: Parser.SyntaxNode): Declaration[] {
+  if (node.hasError) return [];
+  const nameNode = node.childForFieldName("name");
+  if (node.type === "function_declaration" || node.type === "method_declaration") {
+    if (!nameNode) return [];
+    const receiver = node.childForFieldName("receiver")?.namedChildren[0]?.childForFieldName("type");
+    return [
+      {
+        kind: receiver ? "method" : "function",
+        name: nameNode.text,
+        nameNode,
+        qualifiedPrefix: receiver?.text.replace(/^\*/, ""),
+      },
+    ];
+  }
+  if (node.type === "type_spec" || node.type === "type_alias") {
+    if (!nameNode || node.parent?.parent?.type !== "source_file") return [];
+    return [
+      {
+        kind: node.childForFieldName("type")?.type === "interface_type" ? "interface" : "type",
+        name: nameNode.text,
+        nameNode,
+      },
+    ];
+  }
+  const holder = node.parent?.type === "var_spec_list" ? node.parent.parent : node.parent;
+  if (["const_spec", "var_spec"].includes(node.type) && holder?.parent?.type === "source_file") {
+    return node.childrenForFieldName("name")
+      .filter((name) => name.text !== "_")
+      .map((name) => ({
+        kind: node.type === "const_spec" ? "constant" : "variable",
+        name: name.text,
+        nameNode: name,
+      }));
+  }
+  return [];
 }
 
 function normalizedSignature(source: string, node: Parser.SyntaxNode): string {
@@ -494,6 +556,7 @@ function collectTests(
   tests: TestRecord[],
   testSymbols: TestSymbolEdge[],
 ): void {
+  if (language === "go") return;
   if (!isTestFile(file)) return;
   const framework = testFramework(source);
   const fileTests: TestRecord[] = [];
@@ -586,6 +649,60 @@ function collectStructuralRecords(
 ): void {
   const tree = parseSource(parserFor(language, file), source);
   const declarationRanges = new Set(records.map((record) => record.selection_range.start.byte));
+  if (language === "go") {
+    const visitGo = (node: Parser.SyntaxNode): void => {
+      if (node.type === "import_spec") {
+        const path = node.childForFieldName("path");
+        if (path && !path.hasError) {
+          dependencies.push({
+            file,
+            range: range(path),
+            module_specifier: path.text.slice(1, -1),
+            target_file: null,
+            resolution: "unresolved",
+          });
+        }
+      }
+      if (node.type === "call_expression") {
+        const callee = node.childForFieldName("function");
+        if (callee && !callee.hasError) {
+          let anonymous = false;
+          for (let scope = node.parent; scope; scope = scope.parent) {
+            if (scope.type === "func_literal") {
+              anonymous = true;
+              break;
+            }
+            if (["function_declaration", "method_declaration"].includes(scope.type)) break;
+          }
+          calls.push({
+            caller_symbol_id: anonymous ? null : sourceSymbolFor(records, node)?.id ?? null,
+            callee_name: callee.text,
+            callee_symbol_id: null,
+            file,
+            range: range(callee),
+            resolution: "unresolved",
+            guard_condition: null,
+          });
+        }
+      }
+      if (
+        ["identifier", "type_identifier", "field_identifier"].includes(node.type) &&
+        !declarationRanges.has(node.startIndex)
+      ) {
+        references.push({
+          file,
+          range: range(node),
+          name: node.text,
+          source_symbol_id: sourceSymbolFor(records, node)?.id ?? null,
+          target_symbol_id: null,
+          resolution: "unresolved",
+        });
+      }
+      for (const child of node.namedChildren) visitGo(child);
+    };
+    visitGo(tree.rootNode);
+    return;
+  }
   const imports = new Map<string, ImportBinding>();
   const symbolsByName = new Map<string, SymbolRecord[]>();
   const localSymbolsByName = new Map<string, SymbolRecord[]>();
@@ -882,14 +999,17 @@ function collectSymbols(
   records: SymbolRecord[],
   qualifiedNameCounts: Map<string, number>,
 ): void {
-  const declaration = declarationFor(node, language);
+  const declaration = language === "go" ? null : declarationFor(node, language);
+  const declarations = language === "go" ? goDeclarationsFor(node) : declaration ? [declaration] : [];
   let currentParent = parent;
 
-  if (declaration) {
+  for (const declaration of declarations) {
     const parentQualifiedName = parent?.qualified_name ?? "";
-    const baseQualifiedName = parentQualifiedName
-      ? `${parentQualifiedName}.${escapeQualifiedNamePart(declaration.name)}`
-      : escapeQualifiedNamePart(declaration.name);
+    const baseQualifiedName = declaration.qualifiedPrefix
+      ? `${escapeQualifiedNamePart(declaration.qualifiedPrefix)}.${escapeQualifiedNamePart(declaration.name)}`
+      : parentQualifiedName
+        ? `${parentQualifiedName}.${escapeQualifiedNamePart(declaration.name)}`
+        : escapeQualifiedNamePart(declaration.name);
     const occurrence = (qualifiedNameCounts.get(baseQualifiedName) ?? 0) + 1;
     qualifiedNameCounts.set(baseQualifiedName, occurrence);
     const qualifiedName =
@@ -982,6 +1102,15 @@ export function indexRepository(repositoryRoot: string): RepositoryIndex {
   const testSymbols: TestSymbolEdge[] = [];
   for (const [file, source] of sources) {
     collectTests(file, source.language, source.source, references, calls, tests, testSymbols);
+  }
+
+  for (const [file, { language, source }] of sources) {
+    if (language !== "go") continue;
+    const ranges = [
+      ...records.filter((record) => record.file === file).flatMap((record) => [record.range, record.selection_range]),
+      ...[...references, ...dependencies, ...calls].filter((record) => record.file === file).map((record) => record.range),
+    ];
+    normalizeUtf8Ranges(source, ranges);
   }
 
   return {

@@ -172,7 +172,7 @@ test("unsupported-language no_evidence carries no unrelated retrieval", async ()
   try {
     mkdirSync(join(root, "src"));
     writeFileSync(join(root, "src/pricing.ts"), "export function calculateTotal() {}\n");
-    writeFileSync(join(root, "main.go"), "package main\n");
+    writeFileSync(join(root, "main.rb"), "def calculateTotal; end\n");
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "add", "."]);
     execFileSync("git", [
@@ -187,13 +187,45 @@ test("unsupported-language no_evidence carries no unrelated retrieval", async ()
       "f",
     ]);
     const result = await runLocalExploreRepo(
-      { repository_root: root, query: "Where is calculateTotal defined in the golang code?" },
+      { repository_root: root, query: "Where is calculateTotal defined in the Ruby code?" },
       async () => assert.fail("model must not be called"),
     );
     assert.equal(result.status, "no_evidence");
     assert.deepEqual(result.bundles, []);
     assert.deepEqual(result.candidates, []);
     assert.equal(result.retrieved_count, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Go scout retrieves tracked source and supplies lexical closure context", async () => {
+  const root = mkdtempSync(join(tmpdir(), "local-explore-go-"));
+  const source = "package billing\nfunc Total(amount int) int {\n  callback := func() int {\n    return amount * 5\n  }\n  return callback()\n}\n";
+  try {
+    writeFileSync(join(root, "billing.go"), source);
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["add", "."], { cwd: root });
+    execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", "commit", "-qm", "fixture"], { cwd: root });
+    let calls = 0;
+    const result = await runLocalExploreRepo({ repository_root: root, query: "Where is Total defined in billing.go?" }, async (_model, prompt) => {
+      calls++;
+      const sources = promptBundles(prompt).flatMap((bundle) => bundle.sources);
+      const file = sources.find((item) => item.file === "billing.go")!;
+      assert.ok(file);
+      const selected = file.lines.find((line) => line.text.includes("return amount * 5"))!;
+      assert.ok(selected);
+      const header = file.lines.find((line) => line.text.includes("func Total"))!;
+      assert.ok(header);
+      return JSON.stringify({ part_evidence: [{ part_id: "P1", evidence_refs: [header.ref, selected.ref] }], confidence: "medium", unresolved: [], next_action: { ref: "" } });
+    });
+    assert.ok(calls > 0 && calls <= 2);
+    assert.equal(result.status, "needs_review");
+    assert.equal(result.evidence[0].file, "billing.go");
+    assert.ok(result.evidence.some((line) => line.quote.trim() === "return amount * 5"));
+    assert.ok("supporting_context" in result);
+    assert.ok(result.supporting_context.some((line) => line.file === "billing.go" && line.line === 3));
+    assert.equal(readFileSync(join(root, "billing.go"), "utf8"), source);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
