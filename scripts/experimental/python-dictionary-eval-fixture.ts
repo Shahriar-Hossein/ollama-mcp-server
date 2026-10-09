@@ -25,6 +25,15 @@ export const FRESH_SPEC: PythonDictionarySpec = {
   requiredLines: { "FR-PLAIN": 2, "FR-DEFAULT": 2, "FR-TYPED": 2, "FR-ASYNC": 5, "FR-MODULE": 5 },
 };
 
+export const HELDOUT_SPEC: PythonDictionarySpec = {
+  questions: {
+    "HO-KWONLY": "python/kwonly.py", "HO-TYPEDDEFAULT": "python/typed_default.py",
+    "HO-CLOSURE": "python/closure.py", "HO-GLOBAL": "python/global_read.py",
+    "HO-CLASS": "python/class_scope.py",
+  },
+  requiredLines: { "HO-KWONLY": 2, "HO-TYPEDDEFAULT": 2, "HO-CLOSURE": 6, "HO-GLOBAL": 5, "HO-CLASS": 5 },
+};
+
 export function validatePythonDictionaryFixture(
   fixture: LanguageFixture,
   sourceRoot: string,

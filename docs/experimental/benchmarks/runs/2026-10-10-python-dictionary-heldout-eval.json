@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "python/kwonly.py": "24b830c9542561584b214ff9f5e84d652e84f51c41e17e91d70cd3abbc6bc3ff",
+    "python/typed_default.py": "a1662a300f9782a797c41636eaf848207285dda93fc3052f936099cb91765d74",
+    "python/closure.py": "c24a3ca9c69eed319bf7fe971e332621c4a50e3a1886b3386f9f3943a01251f8",
+    "python/global_read.py": "13879907420c61711f1735c10468c592944f9b6b13658b47c8d9ff8603629b61",
+    "python/class_scope.py": "3c1937bb1669ab05f8d444580fd347692c96bffb0899d95ddbd4e44f5c2b123b"
+  },
+  "questions": [
+    {
+      "id": "HO-KWONLY",
+      "language": "python",
+      "query": "Which POLICY dictionary does policy_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/kwonly.py",
+          "line": 6,
+          "text": "def policy_mode(*, POLICY):"
+        },
+        {
+          "file": "python/kwonly.py",
+          "line": 7,
+          "text": "    return POLICY[\"mode\"]"
+        }
+      ],
+      "answer": "policy_mode reads its own keyword-only POLICY parameter, not the module POLICY dictionary. The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "policy_mode returns open",
+        "policy_mode dictionary attempts is 12",
+        "policy_mode reads the module POLICY dictionary"
+      ]
+    },
+    {
+      "id": "HO-TYPEDDEFAULT",
+      "language": "python",
+      "query": "Which CACHE dictionary does cache_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/typed_default.py",
+          "line": 6,
+          "text": "def cache_mode(CACHE: dict = None):"
+        },
+        {
+          "file": "python/typed_default.py",
+          "line": 7,
+          "text": "    return CACHE[\"mode\"]"
+        }
+      ],
+      "answer": "cache_mode reads its own CACHE parameter (annotated, with a default of None), not the module CACHE dictionary. The parameter value is not shown here, so its mode and attempts cannot be stated; the module dictionary values are not read.",
+      "forbidden_claims": [
+        "cache_mode returns warm",
+        "cache_mode dictionary attempts is 23",
+        "cache_mode reads the module CACHE dictionary"
+      ]
+    },
+    {
+      "id": "HO-CLOSURE",
+      "language": "python",
+      "query": "Which QUEUE dictionary does read_mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/closure.py",
+          "line": 6,
+          "text": "def make_reader():"
+        },
+        {
+          "file": "python/closure.py",
+          "line": 7,
+          "text": "    QUEUE = {"
+        },
+        {
+          "file": "python/closure.py",
+          "line": 8,
+          "text": "        \"mode\": \"lifo\","
+        },
+        {
+          "file": "python/closure.py",
+          "line": 9,
+          "text": "        \"attempts\": 2,"
+        },
+        {
+          "file": "python/closure.py",
+          "line": 12,
+          "text": "    def read_mode():"
+        },
+        {
+          "file": "python/closure.py",
+          "line": 13,
+          "text": "        return QUEUE[\"mode\"]"
+        }
+      ],
+      "answer": "read_mode reads the QUEUE dictionary local to the enclosing make_reader, returns lifo, and that dictionary has attempts 2. The module QUEUE (fifo, 15) is shadowed.",
+      "forbidden_claims": [
+        "read_mode returns fifo",
+        "read_mode dictionary attempts is 15",
+        "read_mode reads the module QUEUE dictionary"
+      ]
+    },
+    {
+      "id": "HO-GLOBAL",
+      "language": "python",
+      "query": "Which STATE dictionary does read_state read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/global_read.py",
+          "line": 1,
+          "text": "STATE = {"
+        },
+        {
+          "file": "python/global_read.py",
+          "line": 2,
+          "text": "    \"mode\": \"idle\","
+        },
+        {
+          "file": "python/global_read.py",
+          "line": 3,
+          "text": "    \"attempts\": 8,"
+        },
+        {
+          "file": "python/global_read.py",
+          "line": 6,
+          "text": "def read_state():"
+        },
+        {
+          "file": "python/global_read.py",
+          "line": 8,
+          "text": "    return STATE[\"mode\"]"
+        }
+      ],
+      "answer": "read_state reads the module STATE dictionary (declared global), returns idle, and that dictionary has attempts 8.",
+      "forbidden_claims": [
+        "read_state returns reset",
+        "read_state dictionary attempts is 0"
+      ]
+    },
+    {
+      "id": "HO-CLASS",
+      "language": "python",
+      "query": "Which SCALE dictionary does Meter.mode read, what mode does it return, and what attempts value is in that dictionary? Cite declaration, values and return.",
+      "required": [
+        {
+          "file": "python/class_scope.py",
+          "line": 1,
+          "text": "SCALE = {"
+        },
+        {
+          "file": "python/class_scope.py",
+          "line": 2,
+          "text": "    \"mode\": \"linear\","
+        },
+        {
+          "file": "python/class_scope.py",
+          "line": 3,
+          "text": "    \"attempts\": 5,"
+        },
+        {
+          "file": "python/class_scope.py",
+          "line": 12,
+          "text": "    def mode(self):"
+        },
+        {
+          "file": "python/class_scope.py",
+          "line": 13,
+          "text": "        return SCALE[\"mode\"]"
+        }
+      ],
+      "answer": "Meter.mode reads the module SCALE dictionary, returns linear, and that dictionary has attempts 5. The class attribute SCALE (log, 3) is not in method scope.",
+      "forbidden_claims": [
+        "Meter.mode returns log",
+        "Meter.mode dictionary attempts is 3",
+        "Meter.mode reads the class SCALE dictionary"
+      ]
+    }
+  ]
+}

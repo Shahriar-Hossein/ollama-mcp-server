@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import type { LanguageFixture } from "./language-eval-fixture.js";
-import { validatePythonDictionaryFixture } from "./python-dictionary-eval-fixture.js";
+import { HELDOUT_SPEC, validatePythonDictionaryFixture } from "./python-dictionary-eval-fixture.js";
 
 const source = resolve("scripts/experimental/fixtures/python-dictionary-eval/source");
 const load = (): LanguageFixture => JSON.parse(readFileSync("docs/experimental/benchmarks/runs/2026-10-09-python-dictionary-eval.json", "utf8"));
@@ -76,4 +76,9 @@ test("fresh Python dictionary fixture validates against its frozen sources", asy
   const { PYTHON_DICTIONARY_FRESH_FIXTURE: fresh } = await import("./run-python-dictionary-fresh-eval.js");
   const manifest = JSON.parse(readFileSync(fresh.manifestPath, "utf8"));
   fresh.validate(manifest, fresh.sourcePath);
+});
+
+test("held-out Python dictionary set validates against its frozen sources", () => {
+  const fixture: LanguageFixture = JSON.parse(readFileSync("docs/experimental/benchmarks/runs/2026-10-10-python-dictionary-heldout-eval.json", "utf8"));
+  validatePythonDictionaryFixture(fixture, resolve("scripts/experimental/fixtures/python-dictionary-heldout/source"), HELDOUT_SPEC);
 });
