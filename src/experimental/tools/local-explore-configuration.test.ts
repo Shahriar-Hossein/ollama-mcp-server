@@ -14,7 +14,7 @@ import {
   validateModelAnswer,
 } from "./local-explore-repo.js";
 import { parseConfigurationContexts } from "./local-explore-config-context.js";
-import { configurationKeys } from "./local-explore-validation.js";
+import { configurationKeys, missingEvidenceRequirements } from "./local-explore-validation.js";
 
 const query = "How does DELIVERY_CHANNEL affect startup, defaults and validation?";
 const sources = {
@@ -155,6 +155,319 @@ test("ranked variable excerpts preserve complete source lines at both boundaries
           sources[candidate.file as keyof typeof sources].split("\n")[line.line - 1],
         );
   }));
+
+async function provenanceFixture(run: (root: string) => unknown | Promise<unknown>) {
+  return fixture(async (root) => {
+    const files = {
+      "constants.ts":
+        "export const SIGNING_TOKEN = process.env.SIGNING_TOKEN;\nexport const unused = 'unused';\nexport const options = {\n  signingToken: process.env.SIGNING_TOKEN,\n  other: 'unrelated',\n};\n",
+      "signer.ts": [
+        "import { SIGNING_TOKEN as token, unused, options } from './constants.js';",
+        "import { JwtModule } from '@nestjs/jwt';",
+        "@Module({ imports: [",
+        "  JwtModule.register({",
+        "    secret: token,",
+        "  }),",
+        "] })",
+        "export class SignerModule {}",
+        "export class OtherReader {",
+        "  read() { return options.signingToken; }",
+        "}",
+      ].join("\n"),
+      "startup.ts":
+        "import { config as load } from 'dotenv';\nimport { SignerModule } from './signer.js';\nload({\n  path: '.env.runtime',\n});\nexport function bootstrap() { return SignerModule; }\n",
+    };
+    for (const [file, source] of Object.entries(files)) writeFileSync(join(root, file), source);
+    execFileSync("git", ["-C", root, "add", ...Object.keys(files)]);
+    await run(root);
+  });
+}
+
+function packedEvidence(root: string, query: string) {
+  const index = indexRepository(root);
+  const part = decomposeQuestion(query)[0];
+  const candidates = buildCandidates(root, [], index, query, part);
+  const evidence = candidates.flatMap((candidate) =>
+    candidate.lines.map((line) => ({
+      id: candidate.id,
+      file: candidate.file,
+      line: line.line,
+      quote: line.text,
+    })),
+  );
+  return { index, part, candidates, evidence, checks: createRelationshipChecks(root, index) };
+}
+
+test("imported scalar provenance binds the alias, initializer, registration and named reader", () =>
+  provenanceFixture((root) => {
+    const query = "Which imported constant supplies configuration to SignerModule registration?";
+    const { part, evidence, checks } = packedEvidence(root, query);
+    const requirements = checks.checklist(
+      part,
+      evidence.map((item, i) => ({ ...item, ref: `E${i}` })),
+    );
+    const provenance = requirements.filter((item) =>
+      item.requirement.startsWith("imported configuration"),
+    );
+    assert.equal(provenance.length, 1);
+    assert.match(provenance[0].requirement, /token provenance/);
+    assert.equal(provenance[0].alternative_ref_sets.length, 1);
+    assert.ok(
+      !checks.missing(part, evidence).some((name) => name.startsWith("imported configuration")),
+    );
+    for (const text of [
+      "SIGNING_TOKEN =",
+      "import { SIGNING_TOKEN",
+      "class SignerModule",
+      "secret: token",
+      "JwtModule.register",
+    ])
+      assert.ok(
+        checks
+          .missing(
+            part,
+            evidence.filter((item) => !item.quote.includes(text)),
+          )
+          .some((name) => name.startsWith("imported configuration")),
+        text,
+      );
+    assert.ok(!provenance.some((item) => /unused|options/.test(item.requirement)));
+    assert.equal(part.completeness, "unchecked");
+    const missingOwner = packedEvidence(
+      root,
+      "Which imported constant supplies configuration in MissingReader?",
+    );
+    assert.ok(
+      missingOwner.checks
+        .missing(missingOwner.part, missingOwner.evidence)
+        .includes("imported configuration constant/property provenance"),
+    );
+  }));
+
+test("imported property provenance retains its object declaration and excludes duplicate or spread fields", () =>
+  provenanceFixture((root) => {
+    const query = "Which imported configuration property is read in OtherReader?";
+    const first = packedEvidence(root, query);
+    assert.ok(
+      !first.checks
+        .missing(first.part, first.evidence)
+        .some((name) => name.startsWith("imported configuration")),
+    );
+    for (const text of [
+      "options =",
+      "signingToken: process.env",
+      "class OtherReader",
+      "return options.signingToken",
+    ])
+      assert.ok(
+        first.checks
+          .missing(
+            first.part,
+            first.evidence.filter((item) => !item.quote.includes(text)),
+          )
+          .some((name) => name.startsWith("imported configuration")),
+        text,
+      );
+    const base = readFileSync(join(root, "constants.ts"), "utf8");
+    for (const extra of ["...overrides,", "signingToken: 'replacement',"]) {
+      writeFileSync(join(root, "constants.ts"), base.replace("  other:", `  ${extra}\n  other:`));
+      const next = packedEvidence(root, query);
+      assert.ok(
+        next.checks
+          .missing(next.part, next.evidence)
+          .some((name) => name.startsWith("imported configuration")),
+      );
+    }
+  }));
+
+test("shadowed imports, mutable declarations and reexports cannot establish constant provenance", () =>
+  provenanceFixture((root) => {
+    const query = "Which imported configuration property is read in OtherReader?";
+    const base = readFileSync(join(root, "signer.ts"), "utf8");
+    writeFileSync(join(root, "signer.ts"), base.replace("read()", "read(options)"));
+    let next = packedEvidence(root, query);
+    assert.ok(
+      next.checks
+        .missing(next.part, next.evidence)
+        .some((name) => name.startsWith("imported configuration")),
+    );
+    writeFileSync(join(root, "signer.ts"), base);
+    const constants = readFileSync(join(root, "constants.ts"), "utf8");
+    for (const source of [
+      constants.replace("const options", "let options"),
+      "export { options } from './other.js';\n",
+    ]) {
+      writeFileSync(join(root, "constants.ts"), source);
+      next = packedEvidence(root, query);
+      assert.ok(
+        next.checks
+          .missing(next.part, next.evidence)
+          .some((name) => name.startsWith("imported configuration")),
+      );
+    }
+  }));
+
+test("named constructor readers cannot borrow another class's configuration injection", () =>
+  provenanceFixture((root) => {
+    writeFileSync(
+      join(root, "reader.ts"),
+      [
+        "export class DesiredReader {",
+        "  read() { return this.settings.get('SIGNING_TOKEN'); }",
+        "}",
+        "export class NearbyReader {",
+        "  constructor(private settings: SettingsService) {}",
+        "  read() { return this.settings.get('SIGNING_TOKEN'); }",
+        "}",
+      ].join("\n"),
+    );
+    execFileSync("git", ["-C", root, "add", "reader.ts"]);
+    const { part, evidence, checks } = packedEvidence(
+      root,
+      "Which injected configuration provider supplies SIGNING_TOKEN in DesiredReader?",
+    );
+    const requirements = checks.checklist(
+      part,
+      evidence.map((item, i) => ({ ...item, ref: `E${i}` })),
+    );
+    const injections = requirements.filter((item) =>
+      /constructor injection/.test(item.requirement),
+    );
+    assert.equal(injections.length, 1);
+    assert.deepEqual(injections[0].alternative_ref_sets, []);
+    assert.ok(!requirements.some((item) => /reader.ts:6/.test(item.requirement)));
+  }));
+
+test("initialization-order packing preserves loader options and import-time capture but requires review", () =>
+  provenanceFixture((root) => {
+    const query =
+      "Does SignerModule use its imported configuration constant before environment initialization?";
+    const { part, evidence, candidates, checks } = packedEvidence(root, query);
+    for (const text of [
+      "config as load",
+      "load({",
+      "path: '.env.runtime'",
+      "SIGNING_TOKEN =",
+      "JwtModule.register",
+      "class SignerModule",
+    ])
+      assert.ok(
+        evidence.some((item) => item.quote.includes(text)),
+        text,
+      );
+    assert.ok(new Set(candidates.map((item) => item.file)).size <= 6);
+    const missing = checks.missing(part, evidence);
+    assert.ok(missing.includes("configuration initialization order requires parent review"));
+    assert.ok(!missing.some((name) => /configuration initialization loader/.test(name)));
+    assert.equal(part.completeness, "unchecked");
+  }));
+
+test("dotenv imports and aliases are loader context, while unrelated or shadowed loaders stay unresolved", () => {
+  const query = "Explain configuration initialization order before environment reads.";
+  for (const source of [
+    "import 'dotenv/config';",
+    "import dotenv from 'dotenv';\ndotenv.config({ path: '.env.test' });",
+    "import * as env from 'dotenv';\nenv.config();",
+    "import { config as load } from 'dotenv';\nload();",
+  ])
+    assert.ok(
+      parseConfigurationContexts(source, "boot.ts", query).some(
+        (context) => context.lines.length > 0,
+      ),
+    );
+  assert.deepEqual(
+    parseConfigurationContexts(
+      "import { config as load } from './custom';\nload();",
+      "boot.ts",
+      query,
+    ),
+    [],
+  );
+  assert.ok(
+    parseConfigurationContexts(
+      "import { config as load } from 'dotenv';\nfunction demo(load) { load(); }",
+      "boot.ts",
+      query,
+    ).every((context) => !context.lines.length),
+  );
+});
+
+test("complete constant and loader selection remains under review and oversized initializers refuse generation", () =>
+  provenanceFixture(async (root) => {
+    const query =
+      "Does SignerModule use its imported configuration constant before environment initialization?";
+    let calls = 0;
+    const generate = async (_model: string, prompt: string) => {
+      calls++;
+      const parts = JSON.parse(
+        prompt.split("Question parts: ")[1].split("\nRelevant repo map:")[0],
+      ) as { relationships: { alternative_ref_sets: string[][] }[] }[];
+      const refs = [
+        ...new Set(parts[0].relationships.flatMap((group) => group.alternative_ref_sets[0] ?? [])),
+      ];
+      return JSON.stringify({
+        part_evidence: [{ part_id: "P1", evidence_refs: refs }],
+        confidence: "high",
+        unresolved: [],
+        next_action: { ref: "" },
+      });
+    };
+    const budget: typeof resolveModelBudget = (model, overrides) =>
+      resolveModelBudget(model, overrides, async () => ({
+        parameters: "num_ctx 50000\nnum_predict 2048",
+      }));
+    const result = await runLocalExploreRepo(
+      { repository_root: root, query, model: "fixture:constant" },
+      generate,
+      budget,
+    );
+    assert.equal(result.status, "needs_review");
+    assert.ok(result.evidence.some((item) => item.quote.includes("SIGNING_TOKEN =")));
+    assert.ok(result.evidence.some((item) => item.quote.includes("path: '.env.runtime'")));
+    assert.ok(
+      result.unresolved.some((item) =>
+        item.includes("initialization order requires parent review"),
+      ),
+    );
+    const before = calls;
+    writeFileSync(
+      join(root, "constants.ts"),
+      `export const SIGNING_TOKEN = [\n${Array.from({ length: 500 }, (_, i) => `  '${i}${"x".repeat(100)}',`).join("\n")}\n];\n`,
+    );
+    const oversized = await runLocalExploreRepo(
+      { repository_root: root, query, model: "fixture:constant" },
+      generate,
+      budget,
+    );
+    assert.equal(oversized.packing_overflow, true);
+    assert.equal(calls, before);
+  }));
+
+test("direct registration requires the call while guarded tool registration still requires its guard", () => {
+  const evidence = [
+    {
+      id: "C1",
+      file: "module.ts",
+      line: 1,
+      quote: "const signer = JwtModule.register({ secret: token });",
+    },
+  ];
+  assert.deepEqual(
+    missingEvidenceRequirements(
+      decomposeQuestion("Where is the signer registered?")[0],
+      evidence,
+      "",
+    ),
+    [],
+  );
+  assert.ok(
+    missingEvidenceRequirements(
+      decomposeQuestion("Where is the worker tool registered?")[0],
+      [{ ...evidence[0], quote: "registerWorker(server);" }],
+      "",
+    ).includes("registration guard"),
+  );
+});
 
 test("expression arrow readers retain short numeric defaults and implicit outcomes", () =>
   fixture((root) => {

@@ -96,6 +96,7 @@ const protocol = {
       "src/experimental/tools/local-explore-operations.ts",
       "src/experimental/tools/local-explore-prompt.ts",
       "src/experimental/tools/local-explore-config-context.ts",
+      "src/experimental/tools/local-explore-provenance.ts",
       "src/ollama-client.ts",
       "src/qwen-tokenizer.ts",
     ].map((file) => [
@@ -135,6 +136,9 @@ const protocol = {
     direct_object_provider_pairs: true,
     configuration_initialization_context: true,
     configuration_injection_context: true,
+    configuration_imported_constant_context: true,
+    configuration_named_reader_context: true,
+    configuration_loader_order_requires_review: true,
     bundled_context_dedup: true,
     evidence_line_refs: true,
     bounded_expansion_rounds: 1,

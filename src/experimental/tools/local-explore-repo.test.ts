@@ -205,7 +205,7 @@ test("decomposes independent evidence requirements", () => {
       id: "P1",
       question: "Where is x registered",
       evidence_needed:
-        "The call that registers the named tool and its guard; an import or function definition alone is insufficient.",
+        "The direct registration call and its inputs; include the guard when a tool or conditional registration is requested.",
     },
     {
       id: "P2",

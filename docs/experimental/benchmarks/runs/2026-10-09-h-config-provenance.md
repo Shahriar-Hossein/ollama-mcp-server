@@ -91,3 +91,5 @@ direct registration from guarded tool registration. Preserve useful partial
 citations, but do not treat a nearby constructor or unused import as provenance.
 Then freeze different real-source questions before measuring again; do not rerun
 or tune the screen above. Keep parent completion separate from model selection.
+
+Continued in [imported values and initialization order](2026-10-09-h-config-order.md).

@@ -136,6 +136,12 @@ This is the canonical instructions file for this repo — other agent configs
   bindings and recognized shadowing stay unresolved. These are source-context
   checks, not dependency-container or environment-load resolution. Module scope,
   provider overrides and runtime provenance still require parent review.
+  Imported configuration constants pair direct named imports/aliases with an
+  exported top-level const initializer, actual value use and named reader.
+  Direct object properties reject spreads and duplicate keys. Default exports,
+  reexports and deeper chains remain unresolved. Nest and dotenv loader context
+  helps initialization-order review; source order never proves preload timing.
+  Direct registration does not require a tool-registration guard.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still

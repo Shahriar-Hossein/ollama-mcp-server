@@ -35,6 +35,7 @@ numbers behind one specific series.
 | [2026-10-06-h-operation-scoping.md](runs/2026-10-06-h-operation-scoping.md) | Negated operation planning, method-bound conditions/errors and H development regression |
 | [2026-10-06-h-desktop-gpu.md](runs/2026-10-06-h-desktop-gpu.md) | H/24K GPU default, desktop-pressure fit, fixed-input timing and capacity tradeoffs |
 | [2026-10-09-h-config-provenance.md](runs/2026-10-09-h-config-provenance.md) | Configuration initialization/injection context, checkpoint-before-audit runner and fresh source screen |
+| [2026-10-09-h-config-order.md](runs/2026-10-09-h-config-order.md) | Imported-constant/reader checks, loader-order review and fresh default-instance boundary screen |
 
 ## The rule for benchmark work
 

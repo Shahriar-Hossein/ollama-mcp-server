@@ -102,8 +102,10 @@ function requirements(part: QuestionPart, query: string): Requirement[] {
     }));
   if (/register/i.test(part.question))
     return [
-      require("registration call", /^(?!.*\b(?:function|import|const)\b).*\bregister[A-Za-z0-9_]+\s*\(/),
-      require("registration guard", /if\s*\(/),
+      require("registration call", /^(?!\s*(?:import|(?:export\s+)?(?:async\s+)?function)\b).*\bregister(?:[A-Za-z0-9_]+)?\s*\(/),
+      ...(/\btools?\b|\bguard\w*\b|\bconditional\w*\b|\bgat\w*\b/i.test(part.question)
+        ? [require("registration guard", /if\s*\(/)]
+        : []),
     ];
   if (/enabled by default|default state/i.test(part.question))
     return [

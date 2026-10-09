@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "authorship": "Bounded fresh-context Luna source search; lead verified and froze exact source lines after implementation tests, before generation.",
+  "protocol": "Run once after freeze. Separate supplied lines, selected exact lines and parent completion. Two-file real-source slice; default-exported instances are outside the new direct named-constant check. This screen measures loader/order context and unsupported provider boundaries, not positive named-constant accuracy. Earlier screens are unchanged.",
+  "source_repository": "/home/shahriar/projects/codesyard-backend",
+  "source_commit": "e61c7d1d9e5666d7bff544a9a0c7162621c45f64",
+  "source_working_tree_modified_files": [],
+  "snapshot_root": "/home/shahriar/projects/ollama-mcp-server/benchmark-data/h-config-order-2026-10-09-source",
+  "files": {
+    "src/app.module.ts": "910bb297388fe83554720c3a4d675ad9f8b0850dd96caf6866a07f331b27f6d2",
+    "src/config/database.config.ts": "d87d4714933fd033921e052d059f7c088556be1091a684de6e2f28113238c99d"
+  },
+  "frozen_at": "2026-10-09T08:31:17.451589+00:00",
+  "questions": [
+    {
+      "id": "database_initialization_order",
+      "kind": "order_context",
+      "query": "How is database configuration initialized in DatabaseConfigService before AppModule setup, including dotenv loading and the process.env instance passed to its reader?",
+      "required": [
+        {
+          "file": "src/config/database.config.ts",
+          "line": 2,
+          "text": "import * as dotenv from 'dotenv';"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 4,
+          "text": "dotenv.config();"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 6,
+          "text": "class DatabaseConfigService {"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 7,
+          "text": "constructor(private env: { [k: string]: string | undefined }) {}"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 24,
+          "text": "const dbConfigService = new DatabaseConfigService(process.env);"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 4,
+          "text": "import dbConfigService from './config/database.config';"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 14,
+          "text": "ConfigModule.forRoot({"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 15,
+          "text": "isGlobal: true,"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 17,
+          "text": "TypeOrmModule.forRoot(dbConfigService.getTypeOrmConfig()),"
+        }
+      ],
+      "parent_caveat": "process.env is passed as an object reference, not copied as scalar values. Imports and loader calls supply evaluation context; external preloads, dotenv success and dependency lifecycle are not established."
+    },
+    {
+      "id": "default_instance_provider_boundary",
+      "kind": "unsupported_provider_contrast",
+      "query": "Does AppModule supply DB_HOST through an injected configuration factory, or through its imported dbConfigService instance and DatabaseConfigService reader?",
+      "required": [
+        {
+          "file": "src/app.module.ts",
+          "line": 4,
+          "text": "import dbConfigService from './config/database.config';"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 17,
+          "text": "TypeOrmModule.forRoot(dbConfigService.getTypeOrmConfig()),"
+        },
+        {
+          "file": "src/app.module.ts",
+          "line": 48,
+          "text": "export class AppModule {"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 6,
+          "text": "class DatabaseConfigService {"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 7,
+          "text": "constructor(private env: { [k: string]: string | undefined }) {}"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 9,
+          "text": "public getTypeOrmConfig(): TypeOrmModuleOptions {"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 12,
+          "text": "host: this.env.DB_HOST,"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 24,
+          "text": "const dbConfigService = new DatabaseConfigService(process.env);"
+        },
+        {
+          "file": "src/config/database.config.ts",
+          "line": 26,
+          "text": "export default dbConfigService;"
+        }
+      ],
+      "absence": "The inspected AppModule uses a default-exported DatabaseConfigService instance. It does not show a DB_HOST factory injection binding. This is bounded source review, not repository-wide absence or runtime DI resolution."
+    }
+  ]
+}

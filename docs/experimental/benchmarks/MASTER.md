@@ -31,10 +31,11 @@ observations, not plugin quality or sustained-output evidence.
 | Final placement | 119 loaded samples at 16% CPU / 84% GPU | No GPU-only fidelity or comparable timing claim |
 | Named-operation scoping, reused provider-condition questions | 1/2 complete minimum positive citation sets; negative selects 13/13 and avoids its frozen distractor | Development gains; absent-file selection still omits the guarded upload assignment |
 | Operation-scoping placement | 83 loaded samples at 22% CPU / 78% GPU | Mixed placement; no GPU-only fidelity or speedup claim |
+| Configuration loader/order and default-instance boundary, fresh source slice (2026-10-09) | Both supply 9/9 rubric lines; select 7/9 and 8/9 in 37.246s and 26.243s; both require review | Default-instance resolution and unrelated provenance requirements remain limitations; no real-source named-constant accuracy claim |
 
 See the [multi-step evidence report](runs/2026-10-06-h-multistep-evidence.md).
 The latest H-only implementation and regression are in the
-[operation-scoping checkpoint](runs/2026-10-06-h-operation-scoping.md).
+[configuration-order checkpoint](runs/2026-10-09-h-config-order.md).
 Ordinary-question completeness remains the priority before caller-input calibration
 and sustained GPU-only output work. Current work focuses on H.
 

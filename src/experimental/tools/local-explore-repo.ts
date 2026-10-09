@@ -88,7 +88,7 @@ export function decomposeQuestion(query: string): QuestionPart[] {
       let evidence_needed = "Direct implementation lines that establish the requested behavior.";
       if (/register/i.test(question))
         evidence_needed =
-          "The call that registers the named tool and its guard; an import or function definition alone is insufficient.";
+          "The direct registration call and its inputs; include the guard when a tool or conditional registration is requested.";
       else if (/enabled by default|default state/i.test(question))
         evidence_needed =
           "The named flag mapping, the helper resolving that mapping, and the expression establishing the master flag default.";
@@ -116,10 +116,18 @@ export function decomposeQuestion(query: string): QuestionPart[] {
           " Include named configuration reads, defaults, enclosing conditions and direct outcomes; parent review is required for configuration semantics.";
       }
       const contextRequests = configurationContextRequests(question);
-      if (contextRequests.initialization || contextRequests.provider) {
+      if (
+        contextRequests.initialization ||
+        contextRequests.provider ||
+        contextRequests.constant ||
+        contextRequests.order
+      ) {
         part.completeness = "unchecked";
         part.evidence_needed +=
           " Include configuration initialization options and the reader's factory token/inject/parameters or constructor injection when requested. These are source context; parent review must establish provider provenance and initialization semantics.";
+        if (contextRequests.constant || contextRequests.order)
+          part.evidence_needed +=
+            " Bind the actual imported constant/property use to its import, initializer and named reader declaration. Include direct registration and setup calls; source order does not prove environment preload or runtime evaluation order.";
       }
       const uncheckedTail = question.replace(
         /\band\s+(?:return|issue)\s+[a-z][\w$]*[A-Z][\w$]*|\band\s+call(?:s)?\s+[A-Za-z_$][\w$.]*|\band\s+its\s+implementation\b/g,

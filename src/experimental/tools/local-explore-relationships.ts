@@ -17,6 +17,11 @@ import {
   configurationContextRequests,
   configurationContexts,
 } from "./local-explore-config-context.js";
+import {
+  configurationOwnerNames,
+  configurationReaderOwner,
+  configurationProvenanceContexts,
+} from "./local-explore-provenance.js";
 
 type Location = { file: string; line: number };
 type Relationship = { requirement: string; alternatives: Location[][] };
@@ -364,6 +369,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
     const keys = configurationKeys(part.question);
     if (!keys.length) return [];
     const checks: Relationship[] = [];
+    const ownerNames = configurationOwnerNames(part.question, index);
     const seenOwners = new Set<string>();
     const callableTypes = [
       "function_declaration",
@@ -390,6 +396,8 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
         while (node && node.type !== "call_expression") node = node.parent;
         const argument = node?.childForFieldName("arguments")?.namedChildren[0];
         if (!node || argument?.type !== "string" || argument.text.slice(1, -1) !== key) continue;
+        const reader = configurationReaderOwner(node, ownerNames);
+        if (!reader.matches) continue;
         found = true;
         const source = tree.rootNode.text.split("\n");
         const substantive = (item: Parser.SyntaxNode) => {
@@ -418,7 +426,7 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
           }
           return locations;
         };
-        const base = guarded(node);
+        const base = [...reader.lines.map((line) => ({ file: call.file, line })), ...guarded(node)];
         checks.push({
           requirement: `${key} configuration read at ${call.file}:${node.startPosition.row + 1}`,
           alternatives: [base],
@@ -441,7 +449,9 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
           });
         }
       }
-      if (!found) checks.push({ requirement: `${key} configuration read`, alternatives: [] });
+      const request = configurationContextRequests(part.question);
+      if (!found && !request.constant && !request.order)
+        checks.push({ requirement: `${key} configuration read`, alternatives: [] });
     }
     return checks;
   }
@@ -455,7 +465,14 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
       plans.set(key, checks);
       return checks;
     }
-    const checks: Relationship[] = [...flagResolverPlan(part), ...configurationReadPlan(part)];
+    const checks: Relationship[] = [
+      ...flagResolverPlan(part),
+      ...configurationReadPlan(part),
+      ...configurationProvenanceContexts(index, part.question, treeFor).map((context) => ({
+        requirement: context.requirement,
+        alternatives: context.locations.length ? [context.locations] : [],
+      })),
+    ];
     const contextRequests = configurationContextRequests(part.question);
     if (contextRequests.initialization || contextRequests.provider) {
       const contexts = [...new Set(index.symbols.map((symbol) => symbol.file))]
@@ -465,7 +482,12 @@ export function createRelationshipChecks(root: string, index: RepositoryIndex) {
             !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file),
         )
         .flatMap((file) =>
-          configurationContexts(treeFor(file), file, part.question).map((context) => ({
+          configurationContexts(
+            treeFor(file),
+            file,
+            part.question,
+            configurationOwnerNames(part.question, index),
+          ).map((context) => ({
             requirement: context.requirement,
             alternatives: context.lines.length
               ? [context.lines.map((line) => ({ file, line }))]

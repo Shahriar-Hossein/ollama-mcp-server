@@ -5,7 +5,13 @@ import type { HybridRetrievalResult } from "../../explorer/retrieval.js";
 import {
   configurationContextRequests,
   parseConfigurationContexts,
+  parseConfigurationTree,
+  configurationContexts,
 } from "./local-explore-config-context.js";
+import {
+  configurationOwnerNames,
+  configurationProvenanceContexts,
+} from "./local-explore-provenance.js";
 import {
   configurationKeys,
   packingPatterns,
@@ -202,10 +208,41 @@ export function buildCandidates(
     (file) => !/(?:^|\/)(?:benchmarks|__tests__|tests)\/|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file),
   );
   const contextRequests = configurationContextRequests(part?.question ?? query);
+  if (contextRequests.constant || contextRequests.order) {
+    const trees = new Map<string, ReturnType<typeof parseConfigurationTree>>();
+    const contexts = configurationProvenanceContexts(index, part?.question ?? query, (file) => {
+      let tree = trees.get(file);
+      if (!tree) {
+        tree = parseConfigurationTree(readFileSync(checkedFile(root, file), "utf8"), file);
+        trees.set(file, tree);
+      }
+      return tree;
+    });
+    for (const context of contexts) {
+      for (const file of [...new Set(context.locations.map((item) => item.file))]) {
+        const source = readFileSync(checkedFile(root, file), "utf8").split("\n");
+        add({
+          id: "",
+          kind: "configuration",
+          file,
+          lines: context.locations
+            .filter((item) => item.file === file)
+            .map(({ line }) => ({
+              line,
+              text: source[line - 1].slice(0, MAX_LINE_CHARS).trimEnd(),
+            })),
+        });
+      }
+    }
+  }
   if (contextRequests.initialization) {
     for (const file of sourceFiles.filter((file) => /\.[cm]?[jt]sx?$/.test(file))) {
       const source = readFileSync(checkedFile(root, file), "utf8");
-      if (!source.includes("@nestjs/config") || !/\.forRoot(?:Async)?\s*\(/.test(source)) continue;
+      if (
+        !(source.includes("@nestjs/config") && /\.forRoot(?:Async)?\s*\(/.test(source)) &&
+        !source.includes("dotenv")
+      )
+        continue;
       const contexts = parseConfigurationContexts(source, file, part?.question ?? query);
       const rows = [
         ...new Set(
@@ -224,7 +261,7 @@ export function buildCandidates(
             text: source.split("\n")[line - 1].slice(0, MAX_LINE_CHARS).trimEnd(),
           })),
         });
-      if (files.size >= 2) break;
+      if (files.size >= MAX_FILES) break;
     }
   }
   const matches = terms.length
@@ -459,7 +496,12 @@ export function buildCandidates(
   if (contextRequests.initialization || contextRequests.provider) {
     for (const file of [...files].filter((file) => /\.[cm]?[jt]sx?$/.test(file))) {
       const source = readFileSync(checkedFile(root, file), "utf8");
-      const contexts = parseConfigurationContexts(source, file, part?.question ?? query);
+      const contexts = configurationContexts(
+        parseConfigurationTree(source, file),
+        file,
+        part?.question ?? query,
+        configurationOwnerNames(part?.question ?? query, index),
+      );
       for (const context of contexts) {
         add({
           id: "",
