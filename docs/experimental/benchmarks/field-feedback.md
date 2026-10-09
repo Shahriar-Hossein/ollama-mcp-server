@@ -121,3 +121,7 @@ not exact repeats.
 
 Decided 2026-10-08: keep nearby citations when a part is missing. Only full
 abstention drops evidence; two tests assert this. Schema fixes shape, not counts.
+
+| Date | Task type | Tool/model | Gap | Fallback result | Possible improvement |
+|---|---|---|---|---|---|
+| 2026-10-09 | Scope fixture | H (`qwen-context:h-q4_0-24k`) | Draft missed DEFAULTS shadow, async declaration and scalar return; PHP entries were multiline | Scoped Sol fallback produced two frozen files and four source-checked questions | Require explicit declaration, binding and complete-line checks before accepting a fixture draft |

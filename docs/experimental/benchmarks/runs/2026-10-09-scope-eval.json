@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "source_hashes": {
+    "php/scopes.php": "367815782f41f8c3db791af85de51a8e6090c2405f1c9243b65c1a9d3f8d627f",
+    "python/scopes.py": "9eaeda49211e51500f9c7bf535ab8ad66dbf0c43a223906f90b9eec4d66d7631"
+  },
+  "questions": [
+    {
+      "id": "PY-S1",
+      "language": "python",
+      "query": "In python/scopes.py, which declaration encloses the mode return in execute, which DEFAULTS supplies it, and what mode is returned with its paired retries value?",
+      "required": [
+        {
+          "file": "python/scopes.py",
+          "line": 7,
+          "text": "def execute():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 8,
+          "text": "    DEFAULTS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 9,
+          "text": "        \"mode\": \"local\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 10,
+          "text": "        \"retries\": 2,"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 12,
+          "text": "    return DEFAULTS[\"mode\"]"
+        }
+      ],
+      "answer": "execute returns local from its local DEFAULTS dictionary, paired with retries 2.",
+      "forbidden_claims": [
+        "execute returns shared or uses module DEFAULTS with retries 9."
+      ]
+    },
+    {
+      "id": "PY-S2",
+      "language": "python",
+      "query": "In python/scopes.py, which declaration encloses the mode return in execute_async, which DEFAULTS supplies it, and what mode is returned with its paired retries value?",
+      "required": [
+        {
+          "file": "python/scopes.py",
+          "line": 1,
+          "text": "DEFAULTS = {"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 2,
+          "text": "    \"mode\": \"shared\","
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 3,
+          "text": "    \"retries\": 9,"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 15,
+          "text": "async def execute_async():"
+        },
+        {
+          "file": "python/scopes.py",
+          "line": 16,
+          "text": "    return DEFAULTS[\"mode\"]"
+        }
+      ],
+      "answer": "execute_async returns shared from module DEFAULTS, paired with retries 9.",
+      "forbidden_claims": [
+        "execute_async uses execute local DEFAULTS or returns local with retries 2."
+      ]
+    },
+    {
+      "id": "PHP-S1",
+      "language": "php",
+      "query": "In php/scopes.php, which declaration encloses the mode return in execute_primary, which options array supplies it, and what mode is returned with its paired retries value?",
+      "required": [
+        {
+          "file": "php/scopes.php",
+          "line": 2,
+          "text": "function execute_primary() {"
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 3,
+          "text": "    $options = ["
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 4,
+          "text": "        'mode' => 'primary',"
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 5,
+          "text": "        'retries' => 3,"
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 7,
+          "text": "    return $options['mode'];"
+        }
+      ],
+      "answer": "execute_primary returns primary from its local options array, paired with retries 3.",
+      "forbidden_claims": [
+        "execute_primary uses execute_secondary options or returns secondary with retries 7."
+      ]
+    },
+    {
+      "id": "PHP-S2",
+      "language": "php",
+      "query": "In php/scopes.php, which declaration encloses the mode return in execute_secondary, which options array supplies it, and what mode is returned with its paired retries value?",
+      "required": [
+        {
+          "file": "php/scopes.php",
+          "line": 10,
+          "text": "function execute_secondary() {"
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 11,
+          "text": "    $options = ["
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 12,
+          "text": "        'mode' => 'secondary',"
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 13,
+          "text": "        'retries' => 7,"
+        },
+        {
+          "file": "php/scopes.php",
+          "line": 15,
+          "text": "    return $options['mode'];"
+        }
+      ],
+      "answer": "execute_secondary returns secondary from its local options array, paired with retries 7.",
+      "forbidden_claims": [
+        "execute_secondary uses execute_primary options or returns primary with retries 3."
+      ]
+    }
+  ]
+}
