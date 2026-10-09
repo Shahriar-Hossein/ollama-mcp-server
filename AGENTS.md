@@ -139,14 +139,19 @@ This is the canonical instructions file for this repo — other agent configs
   Imported configuration constants pair direct named imports/aliases with an
   exported top-level const initializer, actual value use and named reader.
   Direct object properties reject spreads and duplicate keys. Imported constant
-  default exports, reexports and deeper chains remain unresolved. Module arrays
-  and provider/injection tokens do not create configuration-value requirements.
+  default exports, reexports and deeper chains remain unresolved. Direct module
+  arrays and provider/injection tokens in an unambiguous imported Nest Module
+  decorator do not create configuration-value requirements. Ordinary objects,
+  indirect or ambiguous metadata and provider values retain value obligations.
   Direct default-import instance calls pair a local default-exported construction
   (or top-level const instance), constructor arguments/body and named reader
   declaration/use. Literal named reads exclude comments and nested examples.
   Environment object references, scalar reads and copies retain their source
   arguments; these checks do not infer capture or runtime identity. Shadowing,
   reassignment, factory exports, reexports and spread arguments stay unresolved.
+  Destructured binding targets, direct constructor reassignment and called-member
+  writes invalidate instance context; static/accessor readers remain unresolved.
+  Dynamic/prototype mutations remain outside this bounded check.
   Instance semantics always require parent review. Nest and dotenv loader context
   helps initialization-order review; source order never proves preload timing.
   Direct registration does not require a tool-registration guard.
