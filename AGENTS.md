@@ -194,6 +194,8 @@ This is the canonical instructions file for this repo — other agent configs
   also add their lexical owner header. Selected headers and nested closures never
   fall back to an outer declaration; malformed nearest scopes add nothing. These
   extras share the global twelve-line cap and do not establish runtime identity.
+  `withFeatureConsumers` keeps the `if (features.x)` consumer for a flag named in
+  the question when the file cap is full. It is a text match, not data flow.
   Short literal citations must match the complete checked source line.
   Unresolved requirements must return `needs_review` even when nearby citations
   pass generic coverage checks. These checks are heuristic; the parent still
@@ -212,6 +214,8 @@ This is the canonical instructions file for this repo — other agent configs
   escalate," never as a result to act on directly — that's the one signal
   the pilot showed actually tracked correctness. It is experimental and
   registered only with `ENABLE_LOCAL_EXPLORER_TASK=1` (or the master flag).
+  `gemma4:12b` also drove the loop correctly in one 2026-10-11 probe (2 calls,
+  high confidence, ~87 s); see the small-models run doc.
 - `docs/` — start with [docs/project-map.md](docs/project-map.md) when you
   need repository orientation. Then use [docs/README.md](docs/README.md) for
   the full index; it says what each doc answers so you only read the one you

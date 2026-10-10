@@ -588,7 +588,57 @@ export function buildCandidates(
       add({ id: "", kind: "configuration", file: property.file, symbol: key, lines });
     }
   }
-  return candidates;
+  return withFeatureConsumers(root, candidates, sourceFiles, query);
+}
+
+// Flags named in the question keep their `if (features.x)` consumers even when the file cap is full.
+export function withFeatureConsumers(
+  root: string,
+  candidates: Candidate[],
+  sourceFiles: string[],
+  query: string,
+): Candidate[] {
+  const lowered = query.toLowerCase();
+  const keys = new Set<string>();
+  for (const candidate of candidates.filter((item) => item.kind === "configuration")) {
+    for (const { text } of candidate.lines) {
+      const key = text.match(/^\s*([A-Za-z]\w*):\s*\w+\(/)?.[1];
+      const words = key?.match(/[A-Z]?[a-z]+/g)?.map((word) => word.toLowerCase());
+      if (key && words && words.length > 1 && words.every((word) => lowered.includes(word)))
+        keys.add(key);
+    }
+  }
+  const consumers: Candidate[] = [];
+  for (const key of keys) {
+    const guard = new RegExp(`if\\s*\\(\\s*features\\.${key}\\b`);
+    for (const file of sourceFiles) {
+      if (candidates.some((item) => item.file === file) || !/\.[cm]?[jt]sx?$/.test(file)) continue;
+      const lines = readFileSync(checkedFile(root, file), "utf8").split("\n");
+      const at = lines.findIndex((line) => guard.test(line));
+      if (at < 0) continue;
+      consumers.push({
+        id: "",
+        kind: "callsite",
+        file,
+        symbol: key,
+        lines: lines.slice(at, at + 4).map((text, offset) => ({
+          line: at + offset + 1,
+          text: text.slice(0, MAX_LINE_CHARS).trimEnd(),
+        })),
+      });
+      break;
+    }
+  }
+  if (!consumers.length) return candidates;
+  const kept = [...candidates];
+  const files = new Set(kept.map((item) => item.file));
+  while (files.size + consumers.length > MAX_FILES) {
+    const drop = kept.map((item) => item.kind).lastIndexOf("text_match");
+    const index = drop >= 0 ? drop : kept.length - 1;
+    const [removed] = kept.splice(index, 1);
+    if (!kept.some((item) => item.file === removed.file)) files.delete(removed.file);
+  }
+  return [...kept, ...consumers].map((item, i) => ({ ...item, id: `C${i + 1}` }));
 }
 
 function expandCrossFileCandidates(
