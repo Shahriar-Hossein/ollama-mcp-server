@@ -43,6 +43,50 @@ Latency is mostly 2–20 s on code tests and 35–65 s on T1/T2, in line with H.
 
 Ties H on clean passes and on T1, and is the only small model besides H to reach 5/9 on T1. Better than H on T3 (8/9 vs 7/9, and its valid inputs work), but T2 is the noisiest of all (26 junk lines). Not a replacement for H.
 
+## gemma4:12b (added 2026-10-11, same harness, before the T1 packing fix)
+
+Q4_K_M, 11.9B, 8 GB on a 6 GB GPU, so it partly runs on CPU. Single run.
+
+| T1 | T2 | T3 | T4 | T5 | T6 | T7 | Clean passes |
+|---|---|---|---|---|---|---|---|
+| 5/9, +3 junk, 168 s | abstain, 0 junk, 83 s | **9/9**, 30 s | 6/7 (`badlater`), 66 s | 5/5 | pass | 5/5 | 5 |
+
+- Best small model so far: the only one to abstain on T2 with no junk lines, and the best local T4 (6/7; others 3/7 or less).
+- T4 miss: it filters children to `pair` nodes, so a `**x` splat is skipped instead of rejected.
+- T1 is capped at 5/9 by packing, not the model.
+- Slow: ~66 tok/s prefill (9k tokens in 136 s) because of CPU spill. T1 took 168 s vs 35–65 s for H.
+- The `strict_compile: false` on T3/T4 is a harness bug (tsc TS5112, needs `--ignoreConfig`), not the model. The behavioral checks ran normally.
+- Ollama defaults it to thinking on and temp 1. Use `think: false` and the saved `gemma-context:12b-24k` settings (temp 0.2).
+
+## After the T1 packing fix, plus granite4.2:8b (2026-10-11)
+
+Fix: `withFeatureConsumers` in `local-explore-packing.ts`. When a selected config flag (like `cloudClaudeWorker`) is named in the question, the `if (features.x)` consumer in `src/index.ts` now gets a slot, replacing the last text match. Same harness, now saved as `scripts/experimental/run-small-models-2026-10-10.mts` (tsc `--ignoreConfig` fixed; both gemma outputs compile strict).
+
+| Test | H | gemma4:12b | granite4.2:8b |
+|---|---|---|---|
+| T1 | 4/9, 14 junk, 52 s | **7/9**, 7 junk, 144 s | **7/9**, 7 junk, 166 s |
+| T2 | abstain, 20 junk | abstain, 0 junk | abstain, 0 junk |
+| T3 | 7/9 | **9/9** | 0/9 (nothing works) |
+| T4 | fail 3/7 | fail 6/7 | fail 3/7 |
+| T5 / T6 / T7 | pass | pass | pass |
+
+- T1 7/9 is the new reachable max for these models; H fell to 4/9 with the larger context (more junk), so the fix helps larger models more.
+- granite4.2:8b: good at selection (T1, T2, T5, T7), bad at writing code (T3 0/9, T4 3/7).
+- Tool loop (`local_explorer_task`, SE-03 question): gemma4:12b answered correctly in 87 s with 2 tool calls, `Confidence: high`. granite4.2:8b also answered correctly (needs `num_ctx` 32768; at 16384 it hit `input_overflow` from byte accounting).
+- JSON schema output on a 60-line log count (single run): both parsed the schema; both miscounted (gemma got warnings right, granite neither). Plain `format: "json"` works for both. Do not trust either for counting.
+
+### Where to use what
+
+| Job | Model |
+|---|---|
+| Default, fast (scout, summaries, boilerplate) | H. 3–4x faster. |
+| Hard code tasks, `needs_review` retries, T2-style "is this absent?" | gemma4:12b via `model: "gemma-context:12b-24k"` |
+| `local_explorer_task` tool loop | gemma4:12b (new option beside qwen3.5:4b) |
+| Scout selection when gemma is too slow or busy | granite4.2:8b with `num_ctx` 32768 |
+| Code generation | Not granite. |
+
+Not changed: the default model. gemma4:12b is 3–4x slower on this 6 GB GPU, and the evidence is one run per cell.
+
 ## Web research (Haiku, 2026-10-10; unverified vendor claims)
 
 | Model | What it is | Best for | Do you need it? |
