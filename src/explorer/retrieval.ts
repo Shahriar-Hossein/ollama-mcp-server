@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { indexRepository, type RepositoryIndex, type SymbolRecord } from "./indexer.js";
 
 const RRF_K = 60;
+const MAX_DOCUMENT_RESULTS = 3;
 const RRF_WEIGHT: Record<RetrievalSource, number> = {
   lexical: 1,
   semantic: 1,
@@ -458,7 +459,7 @@ export async function hybridRetrieve(
         "pilot",
         "benchmark",
       ])
-        ? documentSearch(root, queryTerms(trimmedQuery))
+        ? documentSearch(root, queryTerms(trimmedQuery)).slice(0, MAX_DOCUMENT_RESULTS)
         : [],
     },
     {
