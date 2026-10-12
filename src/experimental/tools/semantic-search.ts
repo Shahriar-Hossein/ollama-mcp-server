@@ -20,7 +20,7 @@ export function registerSemanticSearch(server: McpServer) {
         .string()
         .optional()
         .describe(
-          "Local Ollama embedding model; defaults to SUPER_EXPLORER_EMBEDDING_MODEL or nomic-embed-text-v2-moe.",
+          "Local Ollama embedding model; defaults to SUPER_EXPLORER_EMBEDDING_MODEL or qwen3-embedding:0.6b.",
         ),
     },
     async ({ repository_root, query, limit, model }) => {

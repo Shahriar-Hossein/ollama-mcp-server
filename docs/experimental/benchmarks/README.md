@@ -37,6 +37,7 @@ numbers behind one specific series.
 | [2026-10-09-h-config-provenance.md](runs/2026-10-09-h-config-provenance.md) | Configuration initialization/injection context, checkpoint-before-audit runner and fresh source screen |
 | [2026-10-09-h-config-order.md](runs/2026-10-09-h-config-order.md) | Imported-constant/reader checks, loader-order review and fresh default-instance boundary screen |
 | [2026-10-09-h-config-instances.md](runs/2026-10-09-h-config-instances.md) | Default-instance context and module-token filtering development checks; fresh source screen pending |
+| [2026-10-12-embedding-models.md](runs/2026-10-12-embedding-models.md) | Hybrid retrieval with nomic, embeddinggemma:300m and qwen3-embedding 0.6b/4b on SE-01..12 |
 
 ## The rule for benchmark work
 

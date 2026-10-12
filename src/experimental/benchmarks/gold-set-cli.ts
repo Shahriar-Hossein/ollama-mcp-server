@@ -297,7 +297,7 @@ const GOLD_CHECKS: Record<string, { files: string[]; phrases: string[] }> = {
   "SE-33": { files: ["src/explorer/outline-file.ts"], phrases: ["forward slash", "split", "join"] },
   "SE-34": {
     files: ["src/experimental/explorer/semantic-search.ts"],
-    phrases: ["nomic-embed-text-v2-moe", "super_explorer_embedding_model"],
+    phrases: ["qwen3-embedding:0.6b", "super_explorer_embedding_model"],
   },
   "SE-35": {
     files: ["src/experimental/explorer/semantic-search.ts"],

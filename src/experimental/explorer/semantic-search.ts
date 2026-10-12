@@ -5,7 +5,7 @@ import { indexRepository, type SymbolRecord } from "../../explorer/indexer.js";
 
 const SEMANTIC_INDEX_VERSION = 2;
 const DEFAULT_EMBEDDING_MODEL =
-  process.env.SUPER_EXPLORER_EMBEDDING_MODEL || "nomic-embed-text-v2-moe";
+  process.env.SUPER_EXPLORER_EMBEDDING_MODEL || "qwen3-embedding:0.6b";
 const EMBEDDING_BATCH_SIZE = 128;
 const MAX_EMBEDDING_TEXT_CHARS = 1_600;
 

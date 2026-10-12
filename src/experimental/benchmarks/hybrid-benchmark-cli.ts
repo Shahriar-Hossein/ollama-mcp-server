@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { hybridRetrieve, type RetrievalMode } from "../../explorer/retrieval.js";
 
 const GOLD_COMMIT = "f1a75a19d1708e36f60bba0de76714acc2343492";
-const DEFAULT_MODEL = "nomic-embed-text-v2-moe";
+const DEFAULT_MODEL = "qwen3-embedding:0.6b";
 
 const questions = [
   [
