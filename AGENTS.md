@@ -58,7 +58,8 @@ This is the canonical instructions file for this repo — other agent configs
   Both accept an optional `format` (`"json"` or a JSON Schema) for exact shape.
 - `src/request-queue.ts` — serializes local-model generation across MCP processes (lock dir in tmp, stale-pid steal); cloud tags skip it. Queue wait counts against `timeout_ms`.
 - `src/ollama-client.ts` — shared Ollama HTTP calls (`generate`, `listModels`,
-  `embed`) and host/timeout config. `embed()` sends `keep_alive: "0"` so the
+  `embed`) and host/timeout config. `embed()` sets `num_ctx: 4096` so the
+  daemon's large default context doesn't spill big embedders to CPU. It sends `keep_alive: "0"` so the
   embedding model unloads right after each call — without it, Ollama kept the
   embedding model resident (its default 5min keep_alive) while the much
   larger generation model loaded next, and the two competed for GPU memory.

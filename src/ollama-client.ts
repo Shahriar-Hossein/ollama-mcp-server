@@ -336,6 +336,9 @@ export async function listModels() {
   return ((response.data.models || []) as any[]).map((m) => m.name as string);
 }
 
+// Inputs are short; the daemon's default context made qwen3-embedding:4b spill to CPU.
+const EMBED_NUM_CTX = 4096;
+
 /** Returns one vector per input using Ollama's local embedding API. Unloads
  * the embedding model immediately after (keep_alive: 0) so it doesn't sit
  * resident in GPU memory competing with the generation model that runs next. */
@@ -345,7 +348,7 @@ export async function embed(model: string, input: string[]): Promise<number[][]>
   try {
     response = await axios.post(
       `${OLLAMA_HOST}/api/embed`,
-      { model, input, keep_alive: "0" },
+      { model, input, keep_alive: "0", options: { num_ctx: EMBED_NUM_CTX } },
       { timeout: REQUEST_TIMEOUT_MS },
     );
   } catch (error: any) {
