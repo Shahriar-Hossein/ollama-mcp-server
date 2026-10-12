@@ -16,6 +16,7 @@ const questions = [
     "SE-02",
     "Which environment variables gate the autonomous tools, and which tool does each gate?",
     [
+      "src/config/features.ts",
       "src/index.ts",
       "src/experimental/workers/run-cloud-claude-task.ts",
       "src/experimental/workers/run-local-worker-task.ts",
@@ -70,7 +71,7 @@ const questions = [
   [
     "SE-11",
     "Which commit introduced the local explorer tool, and which source files did that introduction add or change?",
-    ["src/index.ts", "src/experimental/tools/local-explorer-task.ts"],
+    ["src/index.ts", "src/tools/local-explorer-task.ts"],
     "5b0f7d8edecfff3fe2304d8dffc43feff4606412",
   ],
   [
